@@ -16,6 +16,7 @@ import {
   buildInitialGathered,
   buildInitialTenantInfo,
   buildTenantInfoInitialReply,
+  buildConfirmProfileReply,
   stepTenantInfo,
 } from "../../src/lib/triage/state-machine";
 import { getFallbackSOP } from "../../src/lib/triage/sop-fallback";
@@ -323,10 +324,11 @@ export function testTriageChatBasic(): TestResult {
     const ti = buildInitialTenantInfo();
     if (
       ti.reported_address === null &&
+      ti.reported_unit_number === null &&
       ti.contact_phone === null &&
       ti.contact_email === null
     ) {
-      pass("buildInitialTenantInfo returns all nulls");
+      pass("buildInitialTenantInfo returns all nulls (4 fields)");
     } else {
       fail("buildInitialTenantInfo has non-null fields", ti);
     }
@@ -343,8 +345,8 @@ export function testTriageChatBasic(): TestResult {
     } else {
       fail("buildTenantInfoInitialReply missing address question", reply.slice(0, 200));
     }
-    if (reply.includes("don't have a unit on file")) {
-      pass("buildTenantInfoInitialReply explains no unit on file");
+    if (reply.includes("don't have your address on file")) {
+      pass("buildTenantInfoInitialReply explains no address on file");
     } else {
       fail("buildTenantInfoInitialReply missing explanation", reply.slice(0, 200));
     }
@@ -352,20 +354,35 @@ export function testTriageChatBasic(): TestResult {
     fail("buildTenantInfoInitialReply threw", e);
   }
 
-  // ── stepTenantInfo: full flow (3 turns → transitions to GATHER_INFO) ──
+  // ── stepTenantInfo: full flow (4 turns → transitions to GATHER_INFO) ──
 
   try {
     let info = buildInitialTenantInfo();
     let currentQ: string | null = "reported_address";
 
-    // Turn 1: address (with unit)
-    let r = stepTenantInfo(info, currentQ, "123 Main St, Unit 4B, Anytown");
+    // Turn 1: address
+    let r = stepTenantInfo(info, currentQ, "123 Main St, Anytown");
     info = r.tenant_info;
     currentQ = r.current_question;
-    if (info.reported_address === "123 Main St, Unit 4B, Anytown") {
+    if (info.reported_address === "123 Main St, Anytown") {
       pass("stepTenantInfo: collected address");
     } else {
       fail("stepTenantInfo: address", info.reported_address);
+    }
+    if (currentQ === "reported_unit_number") {
+      pass("stepTenantInfo: asks unit number next");
+    } else {
+      fail("stepTenantInfo: expected unit number next", currentQ);
+    }
+
+    // Turn 2: unit number
+    r = stepTenantInfo(info, currentQ, "Unit 4B");
+    info = r.tenant_info;
+    currentQ = r.current_question;
+    if (info.reported_unit_number === "Unit 4B") {
+      pass("stepTenantInfo: collected unit number");
+    } else {
+      fail("stepTenantInfo: unit number", info.reported_unit_number);
     }
     if (currentQ === "contact_phone") {
       pass("stepTenantInfo: asks phone next");
@@ -373,7 +390,7 @@ export function testTriageChatBasic(): TestResult {
       fail("stepTenantInfo: expected phone next", currentQ);
     }
 
-    // Turn 2: phone
+    // Turn 3: phone
     r = stepTenantInfo(info, currentQ, "555-123-4567");
     info = r.tenant_info;
     currentQ = r.current_question;
@@ -383,13 +400,13 @@ export function testTriageChatBasic(): TestResult {
       fail("stepTenantInfo: phone", info.contact_phone);
     }
 
-    // Turn 3: email → transitions to GATHER_INFO
+    // Turn 4: email → transitions to GATHER_INFO
     r = stepTenantInfo(info, currentQ, "jane@example.com");
     info = r.tenant_info;
     currentQ = r.current_question;
 
     if (r.next_state === "GATHER_INFO") {
-      pass("stepTenantInfo: transitions to GATHER_INFO after all 3 fields");
+      pass("stepTenantInfo: transitions to GATHER_INFO after all 4 fields");
     } else {
       fail("stepTenantInfo: expected GATHER_INFO", r.next_state);
     }
@@ -414,6 +431,7 @@ export function testTriageChatBasic(): TestResult {
   try {
     const info = buildInitialTenantInfo();
     info.reported_address = "123 Main St";
+    info.reported_unit_number = "Unit 4B";
 
     const r = stepTenantInfo(info, "contact_phone", "not-a-phone");
     if (r.next_state === "COLLECT_TENANT_INFO" && r.current_question === "contact_phone") {
@@ -441,6 +459,7 @@ export function testTriageChatBasic(): TestResult {
   try {
     const info = buildInitialTenantInfo();
     info.reported_address = "123 Main St";
+    info.reported_unit_number = "Unit 4B";
     info.contact_phone = "555-123-4567";
 
     const r = stepTenantInfo(info, "contact_email", "not-an-email");
@@ -463,6 +482,7 @@ export function testTriageChatBasic(): TestResult {
   try {
     const info = buildInitialTenantInfo();
     info.reported_address = "123 Main St";
+    info.reported_unit_number = "Unit 4B";
 
     const r = stepTenantInfo(info, "contact_phone", "+1 (555) 123-4567");
     if (r.tenant_info.contact_phone === "+1 (555) 123-4567") {
@@ -472,6 +492,51 @@ export function testTriageChatBasic(): TestResult {
     }
   } catch (e) {
     fail("stepTenantInfo international phone threw", e);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // buildConfirmProfileReply tests
+  // ══════════════════════════════════════════════════════
+
+  printSection("Triage State Machine — buildConfirmProfileReply");
+
+  // ── buildConfirmProfileReply includes phone and email ──
+
+  try {
+    const tenantInfo = {
+      reported_address: "456 Oak Ave",
+      reported_unit_number: "Apt 7",
+      contact_phone: "555-987-6543",
+      contact_email: "returning@example.com",
+    };
+    const reply = buildConfirmProfileReply(tenantInfo);
+    if (reply.includes("456 Oak Ave")) {
+      pass("buildConfirmProfileReply includes reported_address value");
+    } else {
+      fail("buildConfirmProfileReply missing address", reply);
+    }
+    if (reply.includes("Apt 7")) {
+      pass("buildConfirmProfileReply includes reported_unit_number value");
+    } else {
+      fail("buildConfirmProfileReply missing unit", reply);
+    }
+    if (reply.includes("555-987-6543")) {
+      pass("buildConfirmProfileReply includes contact_phone value");
+    } else {
+      fail("buildConfirmProfileReply missing phone", reply);
+    }
+    if (reply.includes("returning@example.com")) {
+      pass("buildConfirmProfileReply includes contact_email value");
+    } else {
+      fail("buildConfirmProfileReply missing email", reply);
+    }
+    if (reply.includes("Is this still correct?")) {
+      pass("buildConfirmProfileReply asks for confirmation");
+    } else {
+      fail("buildConfirmProfileReply missing confirmation question", reply);
+    }
+  } catch (e) {
+    fail("buildConfirmProfileReply threw", e);
   }
 
   return result;

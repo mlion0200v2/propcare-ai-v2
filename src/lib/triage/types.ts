@@ -5,7 +5,7 @@
  * in tickets.triage_state and gathered info in tickets.classification JSONB.
  */
 
-export type TriageStateName = "COLLECT_TENANT_INFO" | "GATHER_INFO" | "DONE";
+export type TriageStateName = "CONFIRM_PROFILE" | "COLLECT_TENANT_INFO" | "GATHER_INFO" | "DONE";
 
 export interface GatheredInfo {
   category: string | null;
@@ -37,6 +37,7 @@ export interface TroubleshootingStep {
 
 export interface TenantInfo {
   reported_address: string | null;
+  reported_unit_number: string | null;
   contact_phone: string | null;
   contact_email: string | null;
 }

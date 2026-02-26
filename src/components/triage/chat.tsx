@@ -18,6 +18,7 @@ export function TriageChat() {
   const [isComplete, setIsComplete] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
+  const [triageState, setTriageState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +65,7 @@ export function TriageChat() {
 
       // Hydrate state from server
       setTicketId(data.ticket_id);
+      setTriageState(data.triage_state ?? null);
       setIsComplete(data.is_complete);
       setMessages(
         (data.messages ?? []).map((m: { id: string; body: string; is_bot_reply: boolean }) => ({
@@ -117,6 +119,7 @@ export function TriageChat() {
       if (!ticketId) {
         setTicketId(data.ticket_id);
       }
+      setTriageState(data.triage_state ?? null);
 
       const botMsg: ChatMessage = {
         id: `bot-${Date.now()}`,
@@ -139,6 +142,54 @@ export function TriageChat() {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+  }
+
+  async function handleConfirmProfile(action: "yes" | "change") {
+    if (isLoading || isComplete || !ticketId) return;
+
+    setError(null);
+    setIsLoading(true);
+
+    // Show user's choice as a chat message
+    const userText = action === "yes" ? "Looks correct" : "I'd like to update my info";
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      body: userText,
+      is_bot_reply: false,
+    };
+    setMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const res = await fetch("/api/triage/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: action, ticket_id: ticketId, confirm_profile: action }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong");
+        return;
+      }
+
+      setTriageState(data.triage_state ?? null);
+
+      const botMsg: ChatMessage = {
+        id: `bot-${Date.now()}`,
+        body: data.reply,
+        is_bot_reply: true,
+      };
+      setMessages((prev) => [...prev, botMsg]);
+
+      if (data.is_complete) {
+        setIsComplete(true);
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -204,33 +255,47 @@ export function TriageChat() {
         </div>
       )}
 
-      {/* Input */}
-      <div className="border-t border-gray-200 p-4">
-        <div className="flex gap-2">
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              isComplete
-                ? "Triage complete"
-                : messages.length === 0
-                ? "Describe your maintenance issue..."
-                : "Type your reply..."
-            }
-            disabled={isComplete || isLoading}
-            rows={1}
-            className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
-          />
-          <Button
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading || isComplete}
-            size="md"
-          >
-            Send
+      {/* Confirm Profile buttons */}
+      {triageState === "CONFIRM_PROFILE" && !isComplete && !isLoading && (
+        <div className="border-t border-gray-200 p-4 flex gap-2">
+          <Button onClick={() => handleConfirmProfile("yes")} size="md">
+            Looks correct
+          </Button>
+          <Button onClick={() => handleConfirmProfile("change")} variant="secondary" size="md">
+            Update my info
           </Button>
         </div>
-      </div>
+      )}
+
+      {/* Input */}
+      {triageState !== "CONFIRM_PROFILE" && (
+        <div className="border-t border-gray-200 p-4">
+          <div className="flex gap-2">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                isComplete
+                  ? "Triage complete"
+                  : messages.length === 0
+                  ? "Describe your maintenance issue..."
+                  : "Type your reply..."
+              }
+              disabled={isComplete || isLoading}
+              rows={1}
+              className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+            />
+            <Button
+              onClick={handleSend}
+              disabled={!input.trim() || isLoading || isComplete}
+              size="md"
+            >
+              Send
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

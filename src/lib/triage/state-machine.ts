@@ -94,13 +94,16 @@ const EMERGENCY_KEYWORDS = [
 
 const TENANT_INFO_FIELD_ORDER = [
   "reported_address",
+  "reported_unit_number",
   "contact_phone",
   "contact_email",
 ] as const;
 
-const TENANT_INFO_QUESTIONS: Record<string, string> = {
+export const TENANT_INFO_QUESTIONS: Record<string, string> = {
   reported_address:
-    "What is your address? If you have a unit number, please include it. (e.g., 123 Main St, Unit 4B, Anytown)",
+    "What is your property address? (e.g., 123 Main St, Anytown, CA 90210)",
+  reported_unit_number:
+    "What is your unit or apartment number? If not applicable, reply \"none\". (e.g., Apt 4B, Unit 7)",
   contact_phone:
     "What is a good phone number to reach you? (e.g., 555-123-4567)",
   contact_email:
@@ -186,6 +189,7 @@ export function buildInitialGathered(): GatheredInfo {
 export function buildInitialTenantInfo(): TenantInfo {
   return {
     reported_address: null,
+    reported_unit_number: null,
     contact_phone: null,
     contact_email: null,
   };
@@ -196,11 +200,26 @@ export function buildInitialTenantInfo(): TenantInfo {
  */
 export function buildTenantInfoInitialReply(): string {
   return [
-    "Thanks for reporting this issue. It looks like we don't have a unit on file for your account yet.",
+    "Thanks for reporting this issue. It looks like we don't have your address on file yet.",
     "",
     "I'll need to collect a few details before we get started.",
     "",
     TENANT_INFO_QUESTIONS.reported_address,
+  ].join("\n");
+}
+
+/**
+ * Build the confirmation reply when a returning tenant has profile info on file.
+ */
+export function buildConfirmProfileReply(tenantInfo: TenantInfo): string {
+  return [
+    "I have your info on file:",
+    `  Address: ${tenantInfo.reported_address}`,
+    `  Unit: ${tenantInfo.reported_unit_number}`,
+    `  Phone: ${tenantInfo.contact_phone}`,
+    `  Email: ${tenantInfo.contact_email}`,
+    "",
+    "Is this still correct?",
   ].join("\n");
 }
 
@@ -215,7 +234,7 @@ export interface TenantInfoStepResult {
 
 /**
  * Advance the tenant-info collection by one turn.
- * Once all 4 fields are collected, transitions to GATHER_INFO.
+ * Once all fields are collected, transitions to GATHER_INFO.
  */
 export function stepTenantInfo(
   tenantInfo: TenantInfo,
@@ -280,6 +299,9 @@ function processTenantInfoAnswer(
     case "reported_address":
       tenantInfo.reported_address = value;
       return null;
+    case "reported_unit_number":
+      tenantInfo.reported_unit_number = value;
+      return null;
     case "contact_phone": {
       const result = tenantInfoPhoneSchema.safeParse(value);
       if (!result.success) {
@@ -301,7 +323,7 @@ function processTenantInfoAnswer(
   }
 }
 
-function getNextMissingTenantInfo(info: TenantInfo): string | null {
+export function getNextMissingTenantInfo(info: TenantInfo): string | null {
   for (const field of TENANT_INFO_FIELD_ORDER) {
     if (info[field] === null || info[field] === undefined) {
       return field;

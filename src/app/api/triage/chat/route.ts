@@ -23,7 +23,10 @@ import {
   buildInitialGathered,
   buildInitialTenantInfo,
   buildTenantInfoInitialReply,
+  buildConfirmProfileReply,
   stepTenantInfo,
+  getNextMissingTenantInfo,
+  TENANT_INFO_QUESTIONS,
 } from "@/lib/triage/state-machine";
 import { logTriageStep } from "@/lib/triage/logger";
 import type { TriageContext, TriageClassification } from "@/lib/triage/types";
@@ -121,7 +124,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Parse body ──
-    let body: { message?: string; ticket_id?: string };
+    let body: { message?: string; ticket_id?: string; confirm_profile?: string };
     try {
       body = await request.json();
     } catch {
@@ -129,7 +132,8 @@ export async function POST(request: NextRequest) {
     }
 
     const message = body.message?.trim();
-    if (!message) {
+    // message is required unless this is a confirm_profile action
+    if (!message && !body.confirm_profile) {
       return NextResponse.json(
         { error: "message is required" },
         { status: 400 }
@@ -138,11 +142,17 @@ export async function POST(request: NextRequest) {
 
     // ── First message — create ticket ──
     if (!body.ticket_id) {
+      if (!message) {
+        return NextResponse.json(
+          { error: "message is required" },
+          { status: 400 }
+        );
+      }
       return handleFirstMessage(supabase, user.id, message, start);
     }
 
     // ── Subsequent message — advance state machine ──
-    return handleFollowUp(supabase, user.id, body.ticket_id, message, start);
+    return handleFollowUp(supabase, user.id, body.ticket_id, message ?? "", body.confirm_profile, start);
   } catch (err: unknown) {
     console.error("triage/chat fatal", {
       err,
@@ -187,15 +197,42 @@ async function handleFirstMessage(
     triageState = "GATHER_INFO";
     reply = buildInitialReply();
   } else {
+    // Load profile to seed tenant info from previous tickets
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("phone, email, default_property_address, default_unit_number")
+      .eq("id", userId)
+      .single();
+
     const initialGathered = buildInitialGathered();
-    const tenantInfo = buildInitialTenantInfo();
-    classification = {
-      gathered: initialGathered,
-      current_question: "reported_address",
-      tenant_info: tenantInfo,
+    const tenantInfo = {
+      reported_address: profile?.default_property_address ?? null,
+      reported_unit_number: profile?.default_unit_number ?? null,
+      contact_phone: profile?.phone ?? null,
+      contact_email: profile?.email ?? null,
     };
-    triageState = "COLLECT_TENANT_INFO";
-    reply = buildTenantInfoInitialReply();
+
+    const firstMissing = getNextMissingTenantInfo(tenantInfo);
+
+    if (!firstMissing) {
+      // All fields present — returning tenant, confirm stored info
+      classification = {
+        gathered: initialGathered,
+        current_question: null,
+        tenant_info: tenantInfo,
+      };
+      triageState = "CONFIRM_PROFILE";
+      reply = buildConfirmProfileReply(tenantInfo);
+    } else {
+      // Some or all fields missing — collect the missing ones
+      classification = {
+        gathered: initialGathered,
+        current_question: firstMissing,
+        tenant_info: tenantInfo,
+      };
+      triageState = "COLLECT_TENANT_INFO";
+      reply = buildTenantInfoInitialReply();
+    }
   }
 
   // Create ticket (unit_id is null when tenant has no assigned unit)
@@ -282,6 +319,7 @@ async function handleFollowUp(
   userId: string,
   ticketId: string,
   message: string,
+  confirmProfile: string | undefined,
   start: number
 ) {
   // Load ticket
@@ -316,10 +354,128 @@ async function handleFollowUp(
 
   const stored = (ticket.classification ?? {}) as unknown as TriageClassification;
 
+  // ── CONFIRM_PROFILE branch ──
+  if (ticket.triage_state === "CONFIRM_PROFILE") {
+    const action = confirmProfile;
+    if (!action || !["yes", "change"].includes(action)) {
+      return NextResponse.json(
+        { error: "confirm_profile must be 'yes' or 'change'" },
+        { status: 400 }
+      );
+    }
+
+    let updatedClassification: TriageClassification;
+    let reply: string;
+    let newState: string;
+
+    if (action === "yes") {
+      // Keep stored tenant_info — use stepTenantInfo to determine next state
+      // If all fields filled → GATHER_INFO; if some missing → COLLECT_TENANT_INFO
+      const tiResult = stepTenantInfo(
+        stored.tenant_info ?? buildInitialTenantInfo(),
+        null,
+        ""
+      );
+      updatedClassification = {
+        gathered: tiResult.gathered ?? stored.gathered ?? buildInitialGathered(),
+        current_question: tiResult.current_question,
+        tenant_info: tiResult.tenant_info,
+      };
+      reply = tiResult.reply;
+      newState = tiResult.next_state;
+    } else {
+      // "change" — clear address/unit/phone, keep email (auth-canonical)
+      const clearedInfo = {
+        reported_address: null as string | null,
+        reported_unit_number: null as string | null,
+        contact_phone: null as string | null,
+        contact_email: stored.tenant_info?.contact_email ?? null,
+      };
+      const firstMissing = getNextMissingTenantInfo(clearedInfo);
+      updatedClassification = {
+        gathered: stored.gathered ?? buildInitialGathered(),
+        current_question: firstMissing ?? "reported_address",
+        tenant_info: clearedInfo,
+      };
+      reply = "No problem, let's update your info.\n\n" + TENANT_INFO_QUESTIONS[firstMissing ?? "reported_address"];
+      newState = "COLLECT_TENANT_INFO";
+    }
+
+    // Persist state
+    const { data: updatedTicket, error: updateErr } = await supabase
+      .from("tickets")
+      .update({
+        triage_state: newState,
+        classification: updatedClassification as unknown as Json,
+      })
+      .eq("id", ticket.id)
+      .select("id, triage_state, classification")
+      .single();
+
+    if (updateErr || !updatedTicket) {
+      console.error("triage/chat confirm_profile_update failed", {
+        message: updateErr?.message,
+        details: updateErr?.details,
+        hint: updateErr?.hint,
+        code: updateErr?.code,
+        ticketId: ticket.id,
+      });
+      return NextResponse.json(
+        { error: "Failed to update profile confirmation" },
+        { status: 500 }
+      );
+    }
+
+    // Insert user message (the action choice)
+    const userActionText = action === "yes" ? "Looks correct" : "I'd like to update my info";
+    const { error: cpUserMsgErr } = await supabase.from("messages").insert({
+      ticket_id: ticket.id,
+      sender_id: userId,
+      body: userActionText,
+      is_bot_reply: false,
+    });
+    if (cpUserMsgErr) {
+      console.error("triage/chat confirm_profile user_msg failed", {
+        message: cpUserMsgErr.message, code: cpUserMsgErr.code,
+      });
+    }
+
+    // Insert bot reply
+    const { error: cpBotMsgErr } = await supabase.from("messages").insert({
+      ticket_id: ticket.id,
+      sender_id: userId,
+      body: reply,
+      is_bot_reply: true,
+    });
+    if (cpBotMsgErr) {
+      console.error("triage/chat confirm_profile bot_msg failed", {
+        message: cpBotMsgErr.message, code: cpBotMsgErr.code,
+      });
+    }
+
+    logTriageStep({
+      trace_id: ticket.trace_id ?? ticket.id,
+      ticket_id: ticket.id,
+      triage_state: newState,
+      action: "confirm_profile",
+      latency_ms: Date.now() - start,
+      timestamp: new Date().toISOString(),
+      metadata: { confirm_action: action },
+    });
+
+    return NextResponse.json({
+      ticket_id: ticket.id,
+      reply,
+      triage_state: newState,
+      is_complete: false,
+    });
+  }
+
   // ── COLLECT_TENANT_INFO branch ──
   if (ticket.triage_state === "COLLECT_TENANT_INFO") {
     const tenantInfo = stored.tenant_info ?? {
       reported_address: null,
+      reported_unit_number: null,
       contact_phone: null,
       contact_email: null,
     };
@@ -359,6 +515,37 @@ async function handleFollowUp(
         { error: "Failed to save tenant info" },
         { status: 500 }
       );
+    }
+
+    // Persist tenant defaults to profile for next ticket
+    if (tiResult.next_state === "GATHER_INFO") {
+      const profileUpdate: Record<string, string | null> = {};
+      if (tiResult.tenant_info.contact_phone) {
+        profileUpdate.phone = tiResult.tenant_info.contact_phone;
+      }
+      if (tiResult.tenant_info.reported_address) {
+        profileUpdate.default_property_address = tiResult.tenant_info.reported_address;
+      }
+      if (tiResult.tenant_info.reported_unit_number) {
+        profileUpdate.default_unit_number = tiResult.tenant_info.reported_unit_number;
+      }
+      if (Object.keys(profileUpdate).length > 0) {
+        const { error: profileErr } = await supabase
+          .from("profiles")
+          .update(profileUpdate)
+          .eq("id", userId)
+          .select("id")
+          .single();
+        if (profileErr) {
+          console.error("triage/chat profile_defaults_update failed", {
+            message: profileErr.message,
+            code: profileErr.code,
+            userId,
+            fields: Object.keys(profileUpdate),
+          });
+          // Non-fatal: next ticket still works, just won't have CONFIRM_PROFILE
+        }
+      }
     }
 
     // Insert user message
