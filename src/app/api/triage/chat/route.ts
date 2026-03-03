@@ -29,6 +29,16 @@ import {
   TENANT_INFO_QUESTIONS,
 } from "@/lib/triage/state-machine";
 import { logTriageStep } from "@/lib/triage/logger";
+import {
+  isGatherComplete,
+  isExtendedField,
+  getNextExtendedQuestion,
+  getExtendedQuestionText,
+  processExtendedAnswer,
+} from "@/lib/triage/gather-issue";
+import { querySnippets } from "@/lib/retrieval/pinecone";
+import { generateGroundedSteps } from "@/lib/triage/grounding";
+import { generateTicketSummary } from "@/lib/triage/summary";
 import type { TriageContext, TriageClassification } from "@/lib/triage/types";
 import type { Json, Database } from "@/lib/supabase/database-generated";
 
@@ -597,55 +607,65 @@ async function handleFollowUp(
     });
   }
 
-  // ── GATHER_INFO branch (existing flow) ──
-  const context: TriageContext = {
-    triage_state: ticket.triage_state as "GATHER_INFO" | "DONE",
-    description: ticket.description,
-    gathered: stored.gathered ?? buildInitialGathered(),
-    current_question: stored.current_question ?? null,
-  };
+  // ── GATHER_INFO branch ──
+  const traceId = ticket.trace_id ?? ticket.id;
+  let gathered = stored.gathered ?? buildInitialGathered();
+  let currentQuestion = stored.current_question ?? null;
+  let stepReply: string | null = null;
 
-  // Run state machine
-  const result = step(context, message);
-
-  // Persist state BEFORE messages (so refresh always has latest state)
-  const updatedClassification: TriageClassification = {
-    gathered: result.gathered,
-    current_question: result.current_question,
-    tenant_info: stored.tenant_info,
-  };
-
-  if (result.next_state === "DONE") {
-    const gathered = result.gathered;
-    const { error: doneUpdateErr } = await supabase
-      .from("tickets")
-      .update({
-        triage_state: result.next_state,
-        classification: updatedClassification as unknown as Json,
-        category: (gathered.category ?? "general") as Database["public"]["Enums"]["ticket_category"],
-        priority: gathered.is_emergency ? "emergency" : "medium",
-        status: gathered.is_emergency ? "escalated" : "open",
-        safety_assessment: gathered.is_emergency
-          ? ({ flagged: true, reason: "emergency_detected" } as unknown as Json)
-          : null,
-        troubleshooting_steps: result.troubleshooting_steps
-          ? (result.troubleshooting_steps as unknown as Json)
-          : null,
-      })
-      .eq("id", ticket.id)
-      .select("id")
-      .single();
-    if (doneUpdateErr) {
-      console.error("triage/chat done_update failed", {
-        message: doneUpdateErr.message, details: doneUpdateErr.details,
-        hint: doneUpdateErr.hint, code: doneUpdateErr.code,
-      });
-    }
+  // 1. Process the user's answer
+  if (currentQuestion && isExtendedField(currentQuestion)) {
+    // Extended field — process directly
+    gathered = processExtendedAnswer(gathered, currentQuestion, message);
   } else {
+    // Base field — run state machine (but ignore its DONE transition;
+    // we use isGatherComplete() as the sole gate)
+    const context: TriageContext = {
+      triage_state: ticket.triage_state as "GATHER_INFO" | "DONE",
+      description: ticket.description,
+      gathered,
+      current_question: currentQuestion,
+    };
+    const result = step(context, message);
+    gathered = result.gathered;
+    // If step() returned a base field question, capture its reply
+    if (result.next_state === "GATHER_INFO") {
+      stepReply = result.reply;
+      currentQuestion = result.current_question;
+    } else {
+      // step() said DONE (base 4 complete) — but extended fields may remain
+      currentQuestion = null;
+    }
+  }
+
+  // 2. Check if ALL fields (base + extended) are complete
+  if (!isGatherComplete(gathered)) {
+    // Determine what to ask next
+    let nextQuestion: string | null;
+    let botReply: string;
+
+    if (stepReply && currentQuestion && !isExtendedField(currentQuestion)) {
+      // step() already produced a reply asking a base field question
+      nextQuestion = currentQuestion;
+      botReply = stepReply;
+    } else {
+      // Need an extended question
+      nextQuestion = getNextExtendedQuestion(gathered);
+      botReply = nextQuestion ? getExtendedQuestionText(nextQuestion) : "";
+    }
+
+    const updatedClassification: TriageClassification = {
+      gathered,
+      current_question: nextQuestion,
+      tenant_info: stored.tenant_info,
+      retrieval: stored.retrieval,
+      summary: stored.summary,
+    };
+
     const { error: gatherUpdateErr } = await supabase
       .from("tickets")
       .update({
-        triage_state: result.next_state,
+        triage_state: "GATHER_INFO",
         classification: updatedClassification as unknown as Json,
       })
       .eq("id", ticket.id)
@@ -657,6 +677,153 @@ async function handleFollowUp(
         hint: gatherUpdateErr.hint, code: gatherUpdateErr.code,
       });
     }
+
+    await supabase.from("messages").insert({
+      ticket_id: ticket.id,
+      sender_id: userId,
+      body: message,
+      is_bot_reply: false,
+    });
+    if (botReply) {
+      await supabase.from("messages").insert({
+        ticket_id: ticket.id,
+        sender_id: userId,
+        body: botReply,
+        is_bot_reply: true,
+      });
+    }
+
+    logTriageStep({
+      trace_id: traceId,
+      ticket_id: ticket.id,
+      triage_state: "GATHER_INFO",
+      action: "gather_info",
+      latency_ms: Date.now() - start,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        question: nextQuestion,
+        gathered_fields: Object.entries(gathered)
+          .filter(([, v]) => v !== null)
+          .map(([k]) => k),
+      },
+    });
+
+    return NextResponse.json({
+      ticket_id: ticket.id,
+      reply: botReply,
+      triage_state: "GATHER_INFO",
+      is_complete: false,
+    });
+  }
+
+  // ── All fields gathered — proceed to retrieval + grounding + summary ──
+  const isEmergency = gathered.is_emergency ?? false;
+
+  // Retrieval (with idempotency check)
+  let retrievalLog = stored.retrieval ?? null;
+  let snippets: import("@/lib/retrieval/types").RetrievalSnippet[] = [];
+  let lowConfidence = true;
+
+  if (!retrievalLog) {
+    try {
+      const result = await querySnippets(gathered, ticket.description, traceId);
+      retrievalLog = result.log;
+      snippets = result.snippets;
+      lowConfidence = result.log.low_confidence;
+    } catch (err) {
+      console.error("triage/chat retrieval failed, using fallback", {
+        error: err instanceof Error ? err.message : String(err),
+        ticketId: ticket.id,
+      });
+      // Retrieval failed — proceed with fallback (snippets stays empty)
+    }
+  } else {
+    // Already have retrieval — reconstruct snippets from log for grounding
+    snippets = retrievalLog.matches.map((m) => ({
+      id: m.id,
+      score: m.score,
+      title: String(m.metadata?.title ?? m.id),
+      content: String(m.metadata?.content ?? m.metadata?.text ?? ""),
+      metadata: m.metadata,
+    }));
+    lowConfidence = retrievalLog.low_confidence;
+  }
+
+  // Grounded steps
+  let groundedResult: import("@/lib/triage/grounding").GroundedResult;
+  try {
+    groundedResult = await generateGroundedSteps(
+      gathered,
+      snippets,
+      isEmergency,
+      lowConfidence
+    );
+  } catch (err) {
+    console.error("triage/chat grounding failed, using fallback", {
+      error: err instanceof Error ? err.message : String(err),
+      ticketId: ticket.id,
+    });
+    // Fall back to hardcoded SOP
+    const { getFallbackSOP } = await import("@/lib/triage/sop-fallback");
+    const sop = getFallbackSOP(gathered.category ?? "general", isEmergency);
+    groundedResult = {
+      reply: sop.display,
+      steps: sop.steps,
+      usedFallback: true,
+    };
+  }
+
+  // Summary (with idempotency check)
+  let summary = stored.summary ?? null;
+  if (!summary) {
+    // Count media for this ticket
+    const { count: mediaCount } = await supabase
+      .from("ticket_media")
+      .select("id", { count: "exact", head: true })
+      .eq("ticket_id", ticket.id);
+
+    summary = generateTicketSummary({
+      ticketId: ticket.id,
+      traceId,
+      description: ticket.description,
+      gathered,
+      tenantInfo: stored.tenant_info,
+      steps: groundedResult.steps,
+      mediaCount: mediaCount ?? 0,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
+  // Persist DONE state with all enrichments
+  const doneClassification: TriageClassification = {
+    gathered,
+    current_question: null,
+    tenant_info: stored.tenant_info,
+    retrieval: retrievalLog ?? undefined,
+    summary,
+  };
+
+  const { error: doneUpdateErr } = await supabase
+    .from("tickets")
+    .update({
+      triage_state: "DONE",
+      classification: doneClassification as unknown as Json,
+      category: (gathered.category ?? "general") as Database["public"]["Enums"]["ticket_category"],
+      priority: isEmergency ? "emergency" : "medium",
+      status: isEmergency ? "escalated" : "open",
+      safety_assessment: isEmergency
+        ? ({ flagged: true, reason: "emergency_detected" } as unknown as Json)
+        : null,
+      troubleshooting_steps: groundedResult.steps as unknown as Json,
+    })
+    .eq("id", ticket.id)
+    .select("id")
+    .single();
+  if (doneUpdateErr) {
+    console.error("triage/chat done_update failed", {
+      message: doneUpdateErr.message, details: doneUpdateErr.details,
+      hint: doneUpdateErr.hint, code: doneUpdateErr.code,
+    });
   }
 
   // Insert messages AFTER state is persisted
@@ -669,29 +836,31 @@ async function handleFollowUp(
   await supabase.from("messages").insert({
     ticket_id: ticket.id,
     sender_id: userId,
-    body: result.reply,
+    body: groundedResult.reply,
     is_bot_reply: true,
   });
 
   logTriageStep({
-    trace_id: ticket.trace_id ?? ticket.id,
+    trace_id: traceId,
     ticket_id: ticket.id,
-    triage_state: result.next_state,
-    action: result.next_state === "DONE" ? "triage_complete" : "gather_info",
+    triage_state: "DONE",
+    action: "triage_complete",
     latency_ms: Date.now() - start,
     timestamp: new Date().toISOString(),
     metadata: {
-      question: result.current_question,
-      gathered_fields: Object.entries(result.gathered)
+      gathered_fields: Object.entries(gathered)
         .filter(([, v]) => v !== null)
         .map(([k]) => k),
+      retrieval_matches: retrievalLog?.matches.length ?? 0,
+      used_fallback: groundedResult.usedFallback,
+      has_summary: !!summary,
     },
   });
 
   return NextResponse.json({
     ticket_id: ticket.id,
-    reply: result.reply,
-    triage_state: result.next_state,
-    is_complete: result.next_state === "DONE",
+    reply: groundedResult.reply,
+    triage_state: "DONE",
+    is_complete: true,
   });
 }
