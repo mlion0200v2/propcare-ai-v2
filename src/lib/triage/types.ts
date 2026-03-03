@@ -12,6 +12,8 @@ export interface GatheredInfo {
   location_in_unit: string | null;
   started_when: string | null;
   is_emergency: boolean | null;
+  current_status: string | null;
+  brand_model: string | null;
 }
 
 export interface TriageContext {
@@ -47,4 +49,22 @@ export interface TriageClassification {
   gathered: GatheredInfo;
   current_question: string | null;
   tenant_info?: TenantInfo;
+  retrieval?: RetrievalLog;
+  summary?: string;
+}
+
+export interface RetrievalLog {
+  query_text: string;
+  embedding_model: string;
+  pinecone_index: string;
+  pinecone_namespace: string;
+  filters: Record<string, string>;
+  top_k: number;
+  min_score: number;
+  matches: Array<{ id: string; score: number; metadata: Record<string, unknown> }>;
+  highest_score: number;
+  average_score: number;
+  low_confidence: boolean;
+  timestamp: string;
+  trace_id: string;
 }

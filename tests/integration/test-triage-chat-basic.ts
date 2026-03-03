@@ -47,9 +47,11 @@ export function testTriageChatBasic(): TestResult {
       g.category === null &&
       g.location_in_unit === null &&
       g.started_when === null &&
-      g.is_emergency === null
+      g.is_emergency === null &&
+      g.current_status === null &&
+      g.brand_model === null
     ) {
-      pass("buildInitialGathered returns all nulls");
+      pass("buildInitialGathered returns all nulls (6 fields)");
     } else {
       fail("buildInitialGathered has non-null fields", g);
     }
@@ -248,6 +250,8 @@ export function testTriageChatBasic(): TestResult {
         location_in_unit: "Kitchen",
         started_when: "Just now",
         is_emergency: null,
+        current_status: null,
+        brand_model: null,
       },
       current_question: "is_emergency",
     };

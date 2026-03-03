@@ -178,6 +178,8 @@ export function buildInitialGathered(): GatheredInfo {
     location_in_unit: null,
     started_when: null,
     is_emergency: null,
+    current_status: null,
+    brand_model: null,
   };
 }
 
