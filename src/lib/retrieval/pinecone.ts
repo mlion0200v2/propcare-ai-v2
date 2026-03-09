@@ -14,7 +14,7 @@ import type { RetrievalQuery, RetrievalResult, RetrievalSnippet } from "./types"
 // ── Defaults (overridable via env) ──
 
 const DEFAULT_TOP_K = 5;
-const DEFAULT_MIN_SCORE = 0.75;
+const DEFAULT_MIN_SCORE = 0.40;
 const DEFAULT_MAX_CHARS = 1200;
 const DEFAULT_NAMESPACE = "sop";
 
@@ -61,6 +61,18 @@ export async function querySnippets(
   const config = getConfig();
   const queryText = buildQueryText(gathered, description);
 
+  console.log("[retrieval] config:", {
+    indexName: config.indexName,
+    namespace: config.namespace,
+    topK: config.topK,
+    minScore: config.minScore,
+    maxChars: config.maxChars,
+    hasPineconeKey: !!process.env.PINECONE_API_KEY,
+    hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+  });
+  console.log("[retrieval] queryText:", queryText);
+  console.log("[retrieval] filter:", { category: gathered.category ?? "general" });
+
   const query: RetrievalQuery = {
     query_text: queryText,
     category: gathered.category ?? "general",
@@ -72,6 +84,7 @@ export async function querySnippets(
 
   // Embed
   const { vector, model } = await embedForRetrieval(queryText);
+  console.log("[retrieval] embedding done, model:", model, "dims:", vector.length);
 
   // Query Pinecone
   const index = getIndex();
@@ -84,11 +97,16 @@ export async function querySnippets(
   });
 
   const rawMatches = results.matches ?? [];
+  console.log("[retrieval] raw matches from Pinecone:", rawMatches.length);
+  for (const m of rawMatches) {
+    console.log("[retrieval]   match:", m.id, "score:", m.score, "title:", m.metadata?.title);
+  }
 
   // Filter by min score
   const filteredMatches = rawMatches.filter(
     (m) => (m.score ?? 0) >= config.minScore
   );
+  console.log("[retrieval] after min_score filter:", filteredMatches.length);
 
   // Cap total snippet characters
   const snippets: RetrievalSnippet[] = [];
@@ -116,7 +134,13 @@ export async function querySnippets(
   const highestScore = scores.length > 0 ? Math.max(...scores) : 0;
   const averageScore =
     scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
-  const lowConfidence = averageScore < config.minScore + 0.05;
+  // Low confidence = no snippets passed, or the best match is still below min_score
+  const lowConfidence = snippets.length === 0 || highestScore < config.minScore;
+
+  console.log("[retrieval] final snippets:", snippets.length,
+    "highestScore:", highestScore.toFixed(3),
+    "avgScore:", averageScore.toFixed(3),
+    "lowConfidence:", lowConfidence);
 
   const log: RetrievalLog = {
     query_text: queryText,

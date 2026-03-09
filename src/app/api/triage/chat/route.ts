@@ -39,7 +39,9 @@ import {
 import { querySnippets } from "@/lib/retrieval/pinecone";
 import { generateGroundedSteps } from "@/lib/triage/grounding";
 import { generateTicketSummary } from "@/lib/triage/summary";
-import type { TriageContext, TriageClassification } from "@/lib/triage/types";
+import { validateGroundedResult } from "@/lib/triage/validate";
+import { getFallbackSOP } from "@/lib/triage/sop-fallback";
+import type { TriageContext, TriageClassification, ValidationResult } from "@/lib/triage/types";
 import type { Json, Database } from "@/lib/supabase/database-generated";
 
 // ── GET — Resume an in-progress triage ──
@@ -719,6 +721,13 @@ async function handleFollowUp(
   // ── All fields gathered — proceed to retrieval + grounding + summary ──
   const isEmergency = gathered.is_emergency ?? false;
 
+  console.log("[triage] GATHER_INFO complete — entering retrieval pipeline", {
+    ticketId: ticket.id,
+    category: gathered.category,
+    isEmergency,
+    hasStoredRetrieval: !!stored.retrieval,
+  });
+
   // Retrieval (with idempotency check)
   let retrievalLog = stored.retrieval ?? null;
   let snippets: import("@/lib/retrieval/types").RetrievalSnippet[] = [];
@@ -730,9 +739,16 @@ async function handleFollowUp(
       retrievalLog = result.log;
       snippets = result.snippets;
       lowConfidence = result.log.low_confidence;
+      console.log("[triage] retrieval completed", {
+        ticketId: ticket.id,
+        snippetCount: snippets.length,
+        lowConfidence,
+        highestScore: result.log.highest_score,
+      });
     } catch (err) {
-      console.error("triage/chat retrieval failed, using fallback", {
+      console.error("[triage] retrieval FAILED, using fallback", {
         error: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
         ticketId: ticket.id,
       });
       // Retrieval failed — proceed with fallback (snippets stays empty)
@@ -747,9 +763,21 @@ async function handleFollowUp(
       metadata: m.metadata,
     }));
     lowConfidence = retrievalLog.low_confidence;
+    console.log("[triage] using stored retrieval", {
+      ticketId: ticket.id,
+      snippetCount: snippets.length,
+      lowConfidence,
+    });
   }
 
   // Grounded steps
+  console.log("[triage] entering grounding", {
+    ticketId: ticket.id,
+    snippetCount: snippets.length,
+    lowConfidence,
+    willUseFallback: snippets.length === 0 || lowConfidence,
+  });
+
   let groundedResult: import("@/lib/triage/grounding").GroundedResult;
   try {
     groundedResult = await generateGroundedSteps(
@@ -758,19 +786,109 @@ async function handleFollowUp(
       isEmergency,
       lowConfidence
     );
+    console.log("[triage] grounding completed", {
+      ticketId: ticket.id,
+      usedFallback: groundedResult.usedFallback,
+      stepCount: groundedResult.steps.length,
+    });
   } catch (err) {
-    console.error("triage/chat grounding failed, using fallback", {
+    console.error("[triage] grounding FAILED, using fallback", {
       error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
       ticketId: ticket.id,
     });
     // Fall back to hardcoded SOP
-    const { getFallbackSOP } = await import("@/lib/triage/sop-fallback");
     const sop = getFallbackSOP(gathered.category ?? "general", isEmergency);
     groundedResult = {
       reply: sop.display,
       steps: sop.steps,
       usedFallback: true,
     };
+  }
+
+  // ── Validation loop ──
+  const rHighest = retrievalLog?.highest_score ?? 0;
+  const rAverage = retrievalLog?.average_score ?? 0;
+
+  let validation: ValidationResult = validateGroundedResult(
+    groundedResult,
+    snippets,
+    gathered,
+    rHighest,
+    rAverage
+  );
+
+  console.log("[triage] validation result", {
+    ticketId: ticket.id,
+    isValid: validation.is_valid,
+    reasons: validation.reasons,
+  });
+
+  // Deterministic correction based on validation outcome
+  if (!validation.is_valid) {
+    if (validation.missing_safety_guidance) {
+      // Auto-prepend emergency safety lines, keep existing steps
+      const EMERGENCY_SAFETY_BLOCK = [
+        "**SAFETY ALERT**: Your issue has been flagged as a potential emergency.",
+        "",
+        "**If you are in immediate danger, call 911.**",
+        "",
+        "**IMMEDIATE ACTIONS:**",
+        "1. If you smell gas, leave the unit immediately and call 911.",
+        "2. If there's flooding, turn off the water main if you can safely reach it.",
+        "3. If there's a fire or smoke, evacuate and call 911.",
+        "4. Do NOT re-enter the unit until cleared by emergency services.",
+        "",
+        "Your ticket has been escalated to your property manager for urgent review.",
+        "",
+        "---",
+        "",
+      ].join("\n");
+
+      groundedResult = {
+        reply: EMERGENCY_SAFETY_BLOCK + groundedResult.reply,
+        steps: groundedResult.steps,
+        usedFallback: groundedResult.usedFallback,
+      };
+      validation = { ...validation, action_taken: "prepend_safety", missing_safety_guidance: false };
+
+      // Re-validate after correction (safety is now present)
+      const recheck = validateGroundedResult(
+        groundedResult,
+        snippets,
+        gathered,
+        rHighest,
+        rAverage
+      );
+      // Preserve action_taken from our correction
+      validation = { ...recheck, action_taken: "prepend_safety" };
+    }
+
+    // After possible safety fix, check remaining failures
+    if (validation.missing_citations) {
+      // Snippets existed but LLM didn't cite them — use fallback SOP
+      const sop = getFallbackSOP(gathered.category ?? "general", isEmergency);
+      groundedResult = {
+        reply: sop.display,
+        steps: sop.steps,
+        usedFallback: true,
+      };
+      validation = { ...validation, action_taken: "fallback_sop" };
+    } else if (validation.low_confidence) {
+      // Scores too low to trust grounded output — use fallback with disclaimer
+      const sop = getFallbackSOP(gathered.category ?? "general", isEmergency);
+      const disclaimer =
+        "Note: We could not find a high-confidence match in our knowledge base for your specific issue. " +
+        "Here are general troubleshooting steps for this category:\n\n";
+      groundedResult = {
+        reply: disclaimer + sop.display,
+        steps: sop.steps,
+        usedFallback: true,
+      };
+      validation = { ...validation, action_taken: "fallback_sop_with_disclaimer" };
+    }
+  } else {
+    validation = { ...validation, action_taken: "none" };
   }
 
   // Summary (with idempotency check)
@@ -800,6 +918,7 @@ async function handleFollowUp(
     current_question: null,
     tenant_info: stored.tenant_info,
     retrieval: retrievalLog ?? undefined,
+    validation,
     summary,
   };
 
@@ -854,6 +973,8 @@ async function handleFollowUp(
       retrieval_matches: retrievalLog?.matches.length ?? 0,
       used_fallback: groundedResult.usedFallback,
       has_summary: !!summary,
+      validation_valid: validation.is_valid,
+      validation_action: validation.action_taken,
     },
   });
 

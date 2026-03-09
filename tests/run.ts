@@ -18,6 +18,7 @@ import { testTriageChatBasic } from "./integration/test-triage-chat-basic";
 import { testTriageNoUnit } from "./integration/test-triage-no-unit";
 import { testRetrieval } from "./integration/test-retrieval";
 import { testPhase2B } from "./integration/test-phase2b";
+import { testValidateGroundedResult } from "./integration/test-validate";
 
 import { testSupabaseConnection, testTableSchema } from "./integration/test-supabase";
 import { testEnums } from "./integration/test-enums";
@@ -55,6 +56,7 @@ async function main() {
   merge(await testTriageNoUnit());
   merge(testRetrieval());
   merge(testPhase2B());
+  merge(testValidateGroundedResult());
 
   // ── Phase B: Integration tests (Supabase) ──
   console.log("\n\x1b[1m-- Phase B: Integration Tests (Supabase) --\x1b[0m");

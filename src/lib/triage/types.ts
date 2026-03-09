@@ -50,7 +50,19 @@ export interface TriageClassification {
   current_question: string | null;
   tenant_info?: TenantInfo;
   retrieval?: RetrievalLog;
+  validation?: ValidationResult;
   summary?: string;
+}
+
+export interface ValidationResult {
+  is_valid: boolean;
+  low_confidence: boolean;
+  missing_citations: boolean;
+  missing_safety_guidance: boolean;
+  reasons: string[];
+  highest_score: number;
+  average_score: number;
+  action_taken: "none" | "fallback_sop" | "prepend_safety" | "fallback_sop_with_disclaimer";
 }
 
 export interface RetrievalLog {
