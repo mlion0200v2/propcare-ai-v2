@@ -32,8 +32,11 @@ function getConfig() {
  * Build the query text from gathered issue info.
  */
 export function buildQueryText(gathered: GatheredInfo, description: string): string {
+  const categoryPart = gathered.subcategory
+    ? `${gathered.category ?? "general"} ${gathered.subcategory} issue`
+    : `${gathered.category ?? "general"} issue`;
   const parts = [
-    `${gathered.category ?? "general"} issue`,
+    categoryPart,
     gathered.location_in_unit ? `in ${gathered.location_in_unit}` : null,
     description ? `: ${description}` : null,
     gathered.current_status ? `. Status: ${gathered.current_status}` : null,

@@ -5,10 +5,11 @@
  * No LLM calls. Drives a "missing info checklist" one question per turn.
  *
  * Required fields (in order):
- *   1. category       — pick from list
- *   2. location_in_unit — free text
- *   3. started_when   — free text
- *   4. is_emergency   — yes/no (also auto-detected via keyword scan)
+ *   1. location_in_unit — free text
+ *   2. started_when   — free text
+ *
+ * Category is auto-classified before step() is called.
+ * Safety (is_emergency) is detected after all fields are gathered.
  *
  * Once all fields gathered → transitions to DONE with fallback SOP.
  */
@@ -44,29 +45,18 @@ const CATEGORY_OPTIONS = [
   "other",
 ] as const;
 
-// ── Question templates ──
+// ── Conversational question templates ──
 
-const QUESTIONS: Record<string, string> = {
-  category: [
-    "What type of issue is this? Reply with a number:",
-    ...CATEGORY_OPTIONS.map(
-      (c, i) =>
-        `  ${i + 1}. ${c.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())}`
-    ),
-  ].join("\n"),
+export const QUESTIONS: Record<string, string> = {
   location_in_unit:
-    "Where in your unit is the issue? (e.g., kitchen, bathroom, bedroom, living room)",
+    "Where in your unit is the issue? (e.g., kitchen, bathroom, bedroom)",
   started_when:
     "When did this start? (e.g., today, yesterday, a few days ago)",
-  is_emergency:
-    "Are there any safety concerns? (e.g., gas smell, flooding, exposed wires, no heat in winter)\n\nReply **YES** or **NO**.",
 };
 
 const FIELD_ORDER = [
-  "category",
   "location_in_unit",
   "started_when",
-  "is_emergency",
 ] as const;
 
 // ── Emergency keywords (auto-detect in any message) ──
@@ -75,19 +65,16 @@ const EMERGENCY_KEYWORDS = [
   "gas leak",
   "gas smell",
   "smell gas",
-  "flooding",
-  "flooded",
   "fire",
   "smoke",
   "carbon monoxide",
   "exposed wire",
   "sparking",
-  "no heat",
-  "no hot water",
   "sewage",
   "collapse",
   "ceiling fell",
-  "mold",
+  // NOTE: "mold", "flooding", "flooded", "no heat", "no hot water" removed —
+  // these are category+severity dependent, not automatic emergencies.
 ];
 
 // ── Tenant info collection (no-unit flow) ──
@@ -115,6 +102,9 @@ export const TENANT_INFO_QUESTIONS: Record<string, string> = {
 /**
  * Advance the triage state machine by one turn.
  * Pure function — no side effects, no DB or LLM calls.
+ *
+ * Category should be pre-set in gathered before calling step().
+ * Safety detection is handled separately after all fields are gathered.
  */
 export function step(context: TriageContext, userMessage: string): StepResult {
   const { current_question } = context;
@@ -131,7 +121,7 @@ export function step(context: TriageContext, userMessage: string): StepResult {
   }
 
   // 3. Find next missing field
-  const nextField = getNextMissing(updated);
+  const nextField = getNextMissingField(updated);
 
   if (nextField) {
     return {
@@ -142,10 +132,10 @@ export function step(context: TriageContext, userMessage: string): StepResult {
     };
   }
 
-  // 4. All fields gathered → DONE
+  // 4. All base fields gathered → DONE
   const category = updated.category ?? "general";
   const isEmergency = updated.is_emergency ?? false;
-  const sop = getFallbackSOP(category, isEmergency);
+  const sop = getFallbackSOP(category, isEmergency, updated.subcategory);
 
   return {
     next_state: "DONE",
@@ -158,14 +148,27 @@ export function step(context: TriageContext, userMessage: string): StepResult {
 
 /**
  * Build the bot's first reply after the tenant's initial description.
+ * Uses acknowledgement + the next question to ask.
  */
-export function buildInitialReply(): string {
+export function buildInitialReply(
+  acknowledgement: string,
+  nextQuestionText: string
+): string {
+  return [acknowledgement, "", nextQuestionText].join("\n");
+}
+
+/**
+ * Build the initial reply with a clarifying category question.
+ * Used when classification confidence is low.
+ */
+export function buildInitialReplyWithClarification(
+  acknowledgement: string,
+  clarifyingQuestion: string
+): string {
   return [
-    "Thanks for reporting this issue. I'll help you get it resolved.",
+    acknowledgement,
     "",
-    "Let me gather a few details first.",
-    "",
-    QUESTIONS.category,
+    clarifyingQuestion,
   ].join("\n");
 }
 
@@ -180,7 +183,41 @@ export function buildInitialGathered(): GatheredInfo {
     is_emergency: null,
     current_status: null,
     brand_model: null,
+    subcategory: null,
+    entry_point: null,
   };
+}
+
+// ── Tenant info validation ──
+
+const INVALID_UNIT_PATTERN = /^(non|n|x|test|null|undefined)\s*$/i;
+const VALID_NO_UNIT_MARKERS = ["none", "n/a", "not applicable", "na"];
+
+/**
+ * Validate tenant info fields. Returns list of invalid field names.
+ *
+ * Rules:
+ * - Unit number: reject clearly invalid values; accept "none"/"n/a" as valid no-unit markers
+ * - Address: reject if length < 5
+ */
+export function validateTenantInfo(tenantInfo: TenantInfo): string[] {
+  const invalid: string[] = [];
+
+  const unit = tenantInfo.reported_unit_number;
+  if (unit !== null) {
+    const trimmed = unit.trim();
+    const isNoUnit = VALID_NO_UNIT_MARKERS.includes(trimmed.toLowerCase());
+    if (!isNoUnit && (trimmed.length < 1 || INVALID_UNIT_PATTERN.test(trimmed))) {
+      invalid.push("reported_unit_number");
+    }
+  }
+
+  const address = tenantInfo.reported_address;
+  if (address !== null && address.trim().length < 5) {
+    invalid.push("reported_address");
+  }
+
+  return invalid;
 }
 
 // ── Tenant info (no-unit) flow ──
@@ -214,10 +251,18 @@ export function buildTenantInfoInitialReply(): string {
  * Build the confirmation reply when a returning tenant has profile info on file.
  */
 export function buildConfirmProfileReply(tenantInfo: TenantInfo): string {
+  const invalidFields = validateTenantInfo(tenantInfo);
+  const displayUnit = invalidFields.includes("reported_unit_number")
+    ? "Not on file"
+    : tenantInfo.reported_unit_number;
+  const displayAddress = invalidFields.includes("reported_address")
+    ? "Not on file"
+    : tenantInfo.reported_address;
+
   return [
     "I have your info on file:",
-    `  Address: ${tenantInfo.reported_address}`,
-    `  Unit: ${tenantInfo.reported_unit_number}`,
+    `  Address: ${displayAddress}`,
+    `  Unit: ${displayUnit}`,
     `  Phone: ${tenantInfo.contact_phone}`,
     `  Email: ${tenantInfo.contact_email}`,
     "",
@@ -237,6 +282,10 @@ export interface TenantInfoStepResult {
 /**
  * Advance the tenant-info collection by one turn.
  * Once all fields are collected, transitions to GATHER_INFO.
+ *
+ * When transitioning to GATHER_INFO, the reply now asks the first
+ * conversational question (location) instead of a category menu.
+ * Category should be set by the caller using classify-issue.
  */
 export function stepTenantInfo(
   tenantInfo: TenantInfo,
@@ -273,7 +322,9 @@ export function stepTenantInfo(
   }
 
   // 3. All tenant info collected → transition to GATHER_INFO
+  //    Ask the first gather question; the caller may override if location was pre-extracted
   const gathered = buildInitialGathered();
+  const firstField = getNextMissingField(gathered) ?? "location_in_unit";
   return {
     next_state: "GATHER_INFO",
     reply: [
@@ -281,10 +332,10 @@ export function stepTenantInfo(
       "",
       "Now let's get your issue sorted out.",
       "",
-      QUESTIONS.category,
+      QUESTIONS[firstField],
     ].join("\n"),
     tenant_info: updated,
-    current_question: "category",
+    current_question: firstField,
     gathered,
   };
 }
@@ -345,6 +396,7 @@ function processAnswer(
 
   switch (field) {
     case "category": {
+      // Legacy support: still process if category is the current question
       const num = parseInt(trimmed, 10);
       if (num >= 1 && num <= CATEGORY_OPTIONS.length) {
         gathered.category = CATEGORY_OPTIONS[num - 1];
@@ -371,7 +423,7 @@ function processAnswer(
   }
 }
 
-function getNextMissing(gathered: GatheredInfo): string | null {
+export function getNextMissingField(gathered: GatheredInfo): string | null {
   for (const field of FIELD_ORDER) {
     if (gathered[field] === null || gathered[field] === undefined) {
       return field;
@@ -380,7 +432,7 @@ function getNextMissing(gathered: GatheredInfo): string | null {
   return null;
 }
 
-function hasEmergencyKeywords(text: string): boolean {
+export function hasEmergencyKeywords(text: string): boolean {
   const lower = text.toLowerCase();
   return EMERGENCY_KEYWORDS.some((k) => lower.includes(k));
 }
@@ -393,9 +445,13 @@ function formatCompletionReply(
     return [
       "**SAFETY ALERT**: Your issue has been flagged as a potential emergency.",
       "",
-      "**If you are in immediate danger, call 911.**",
+      "**IMMEDIATE ACTIONS:**",
+      "1. If you smell gas, leave the unit immediately and contact the FortisBC gas emergency line.",
+      "2. If there's flooding, turn off the main water valve if it is safe to do so.",
+      "3. If there's a fire or smoke, evacuate and call 911.",
+      "4. Do NOT re-enter the unit until cleared by emergency services or your property manager.",
       "",
-      "Your ticket has been escalated to your property manager for urgent review.",
+      "Your ticket has been escalated to your property manager for urgent review. The property manager should contact you within 2 hours.",
       "",
       "---",
       "",
@@ -411,3 +467,5 @@ function formatCompletionReply(
     "Your ticket has been submitted. Your property manager will follow up.",
   ].join("\n");
 }
+
+export { CATEGORY_OPTIONS };

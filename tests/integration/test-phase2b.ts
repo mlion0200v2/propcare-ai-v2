@@ -70,7 +70,7 @@ export function testPhase2B(): TestResult {
     fail("isGatherComplete all nulls threw", e);
   }
 
-  // ── Base 4 filled, no extended → incomplete ──
+  // ── Base fields filled, no extended → incomplete ──
   try {
     const g: GatheredInfo = {
       category: "plumbing",
@@ -81,12 +81,12 @@ export function testPhase2B(): TestResult {
       brand_model: null,
     };
     if (!isGatherComplete(g)) {
-      pass("isGatherComplete: base 4 only → false (missing current_status)");
+      pass("isGatherComplete: base fields only → false (missing current_status)");
     } else {
-      fail("isGatherComplete: base 4 only should be false");
+      fail("isGatherComplete: base fields only should be false");
     }
   } catch (e) {
-    fail("isGatherComplete base 4 only threw", e);
+    fail("isGatherComplete base fields only threw", e);
   }
 
   // ── Non-appliance/hvac complete (no brand_model needed) ──
@@ -106,6 +106,26 @@ export function testPhase2B(): TestResult {
     }
   } catch (e) {
     fail("isGatherComplete plumbing threw", e);
+  }
+
+  // ── is_emergency=null should NOT block gather completion ──
+  // (safety detection runs AFTER gather, so is_emergency may be null)
+  try {
+    const g: GatheredInfo = {
+      category: "plumbing",
+      location_in_unit: "kitchen",
+      started_when: "today",
+      is_emergency: null,
+      current_status: "still leaking",
+      brand_model: null,
+    };
+    if (isGatherComplete(g)) {
+      pass("isGatherComplete: is_emergency=null → still true (safety is post-gather)");
+    } else {
+      fail("isGatherComplete: is_emergency=null should not block completion");
+    }
+  } catch (e) {
+    fail("isGatherComplete is_emergency=null threw", e);
   }
 
   // ── Appliance without brand_model → incomplete ──
@@ -412,6 +432,8 @@ export function testPhase2B(): TestResult {
         is_emergency: false,
         current_status: "still dripping",
         brand_model: null,
+        subcategory: null,
+        entry_point: null,
       },
       tenantInfo: {
         reported_address: "123 Main St",
@@ -464,10 +486,15 @@ export function testPhase2B(): TestResult {
     } else {
       fail("Summary: missing current_status");
     }
-    if (summary.includes("N/A")) {
-      pass("Summary: shows N/A for null brand_model");
+    if (!summary.includes("Equipment:")) {
+      pass("Summary: omits Equipment when brand_model is null");
     } else {
-      fail("Summary: missing N/A for brand_model");
+      fail("Summary: should omit Equipment when brand_model is null");
+    }
+    if (summary.includes("Recommended Next Steps")) {
+      pass("Summary: includes PM recommendations section");
+    } else {
+      fail("Summary: missing recommendations section");
     }
     if (summary.includes("Emergency: No")) {
       pass("Summary: includes emergency status");
@@ -516,6 +543,8 @@ export function testPhase2B(): TestResult {
         is_emergency: true,
         current_status: "ongoing",
         brand_model: null,
+        subcategory: null,
+        entry_point: null,
       },
       tenantInfo: null,
       steps: [],
@@ -540,6 +569,109 @@ export function testPhase2B(): TestResult {
     }
   } catch (e) {
     fail("Summary emergency threw", e);
+  }
+
+  // ── Summary with guided troubleshooting log ──
+  try {
+    const guidedState = {
+      steps: [
+        { index: 0, description: "Clean up crumbs and spills", citation: null, step_kind: "action" as const, depends_on: null, stop_if_unsure: false, escalation_if_failed: false, request_media_after: false },
+        { index: 1, description: "Place bait traps near activity", citation: null, step_kind: "action" as const, depends_on: null, stop_if_unsure: false, escalation_if_failed: false, request_media_after: false },
+        { index: 2, description: "Note any entry points", citation: null, step_kind: "observation" as const, depends_on: null, stop_if_unsure: false, escalation_if_failed: false, request_media_after: false },
+        { index: 3, description: "Seal gaps around baseboards", citation: null, step_kind: "terminal" as const, depends_on: null, stop_if_unsure: false, escalation_if_failed: false, request_media_after: false },
+      ],
+      current_step_index: 2,
+      log: [
+        { step_index: 0, presented_at: "2024-01-15T12:00:00Z", responded_at: "2024-01-15T12:01:00Z", raw_response: "we wiped everything", result: "completed" as const, note: undefined, interpretation_source: "regex" as const },
+        { step_index: 1, presented_at: "2024-01-15T12:01:00Z", responded_at: "2024-01-15T12:02:00Z", raw_response: "i placed several across the living room", result: "completed" as const, note: undefined, interpretation_source: "regex" as const },
+        { step_index: 2, presented_at: "2024-01-15T12:02:00Z", responded_at: "2024-01-15T12:03:00Z", raw_response: "ants are coming from a hole under the railing", result: "completed" as const, note: "Ants entering from hole under the railing", interpretation_source: "llm" as const },
+      ],
+      outcome: "all_steps_done" as const,
+    };
+
+    const summary = generateTicketSummary({
+      ticketId: "ticket-ant",
+      traceId: "trace-ant",
+      description: "Ants in living room",
+      gathered: {
+        category: "pest_control",
+        location_in_unit: "living room",
+        started_when: "last week",
+        is_emergency: false,
+        current_status: "getting worse",
+        brand_model: null,
+        subcategory: "ants",
+        entry_point: "hole under the railing",
+      },
+      tenantInfo: {
+        reported_address: "456 Oak Ave",
+        reported_unit_number: "Unit 2A",
+        contact_phone: null,
+        contact_email: null,
+      },
+      steps: [],
+      mediaCount: 1,
+      guidedState,
+      timestamp: "2024-01-15T12:00:00.000Z",
+    });
+
+    if (summary.includes("Subcategory: ants")) {
+      pass("Summary guided: includes subcategory");
+    } else {
+      fail("Summary guided: missing subcategory", summary.slice(0, 300));
+    }
+    if (summary.includes("Entry point: hole under the railing")) {
+      pass("Summary guided: includes entry point");
+    } else {
+      fail("Summary guided: missing entry point");
+    }
+    if (summary.includes("Tenant note: Ants entering from hole under the railing")) {
+      pass("Summary guided: includes extracted note from guided log");
+    } else {
+      fail("Summary guided: missing extracted note");
+    }
+    if (summary.includes("we wiped everything") || summary.includes("i placed several")) {
+      pass("Summary guided: includes tenant raw responses");
+    } else {
+      fail("Summary guided: missing tenant responses");
+    }
+    if (summary.includes("Seal gaps around baseboards")) {
+      pass("Summary guided: includes terminal steps in management notes");
+    } else {
+      fail("Summary guided: missing terminal management notes");
+    }
+    if (summary.includes("Management Notes")) {
+      pass("Summary guided: has Management Notes section");
+    } else {
+      fail("Summary guided: missing Management Notes section");
+    }
+    if (summary.includes("Recommended Next Steps")) {
+      pass("Summary guided: has recommendations section");
+    } else {
+      fail("Summary guided: missing recommendations");
+    }
+    if (summary.includes("Seal or repair entry point")) {
+      pass("Summary guided: recommends sealing entry point");
+    } else {
+      fail("Summary guided: should recommend sealing entry point");
+    }
+    if (summary.includes("pest control")) {
+      pass("Summary guided: recommends pest control evaluation");
+    } else {
+      fail("Summary guided: should mention pest control");
+    }
+    if (summary.includes("1 file(s) uploaded")) {
+      pass("Summary guided: shows media count");
+    } else {
+      fail("Summary guided: missing media count");
+    }
+    if (summary.includes("Outcome: all_steps_done")) {
+      pass("Summary guided: shows guided outcome");
+    } else {
+      fail("Summary guided: missing outcome");
+    }
+  } catch (e) {
+    fail("Summary guided threw", e);
   }
 
   return result;

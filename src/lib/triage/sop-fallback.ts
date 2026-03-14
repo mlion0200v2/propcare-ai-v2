@@ -53,9 +53,23 @@ const SOP_STEPS: Record<string, string[]> = {
   pest_control: [
     "Note what type of pest you've seen and where (location, time of day).",
     "Store food in sealed containers and keep counters clean.",
-    "Seal any visible gaps around pipes, doors, or windows with temporary caulk.",
+    "Note any visible gaps or openings where pests may be entering — your property manager will arrange sealing.",
     "Do NOT use foggers/bug bombs in apartments — they spread pests to neighbors.",
     "Take photos if possible to help identify the pest.",
+  ],
+  pest_insects: [
+    "Keep counters, sinks, and floors clean — even small crumbs attract insects.",
+    "Store all food (including pet food) in sealed containers.",
+    "Place bait traps near areas where you've seen activity (corners, under sinks).",
+    "Note any visible gaps around pipes, baseboards, or doorframes where insects may be entering — your property manager will arrange sealing.",
+    "Take photos of the insects and where you've seen them to help identify the species.",
+  ],
+  pest_rodents: [
+    "Check for droppings, gnaw marks, or nesting material near walls, cabinets, and food storage.",
+    "Store all food (including pet food) in sealed hard containers — rodents can chew through bags.",
+    "Place snap traps along walls where you've noticed activity (NOT glue traps — they're inhumane and ineffective for larger rodents).",
+    "Note any visible holes or gaps larger than a quarter-inch — your property manager will arrange professional sealing.",
+    "Take photos of any droppings, damage, or entry points you find.",
   ],
   locksmith: [
     "If locked out, contact your property management before calling a locksmith.",
@@ -100,19 +114,31 @@ const SOP_STEPS: Record<string, string[]> = {
 };
 
 const EMERGENCY_PREFIX_STEPS: string[] = [
-  "If you smell gas, leave the unit immediately and call 911.",
-  "If there's flooding, turn off the water main if you can safely reach it.",
+  "If you smell gas, leave the unit immediately and contact the FortisBC gas emergency line.",
+  "If there's flooding, turn off the main water valve if it is safe to do so.",
   "If there's a fire or smoke, evacuate and call 911.",
-  "Do NOT re-enter the unit until cleared by emergency services.",
+  "Do NOT re-enter the unit until cleared by emergency services or your property manager.",
 ];
 
 // ── Public API ──
 
+const INSECT_SPECIES = ["ants", "cockroaches", "bedbugs", "termites"];
+const RODENT_SPECIES = ["rats", "mice"];
+
 export function getFallbackSOP(
   category: string,
-  isEmergency: boolean
+  isEmergency: boolean,
+  subcategory?: string | null
 ): SOPResult {
-  const categorySteps = SOP_STEPS[category] ?? SOP_STEPS.general;
+  let lookupKey = category;
+  if (category === "pest_control" && subcategory) {
+    if (INSECT_SPECIES.includes(subcategory)) {
+      lookupKey = "pest_insects";
+    } else if (RODENT_SPECIES.includes(subcategory)) {
+      lookupKey = "pest_rodents";
+    }
+  }
+  const categorySteps = SOP_STEPS[lookupKey] ?? SOP_STEPS.general;
   const allDescriptions = isEmergency
     ? [...EMERGENCY_PREFIX_STEPS, "---", ...categorySteps]
     : categorySteps;

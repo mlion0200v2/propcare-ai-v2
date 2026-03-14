@@ -84,17 +84,14 @@ export async function testTriageNoUnit(): Promise<TestResult> {
     }
 
     // Full flow through GATHER_INFO → DONE
+    // Pre-set category and is_emergency (as the route handler does via auto-classification)
     let gathered = tiResult.gathered ?? buildInitialGathered();
+    gathered.category = "plumbing";
+    gathered.is_emergency = false;
     currentQuestion = tiResult.current_question;
 
+    // currentQuestion is now "location_in_unit" (not "category")
     let stepResult = step(
-      { triage_state: "GATHER_INFO", description: "Sink leaking", gathered, current_question: currentQuestion },
-      "1"
-    );
-    gathered = stepResult.gathered;
-    currentQuestion = stepResult.current_question;
-
-    stepResult = step(
       { triage_state: "GATHER_INFO", description: "Sink leaking", gathered, current_question: currentQuestion },
       "Kitchen"
     );
@@ -104,13 +101,6 @@ export async function testTriageNoUnit(): Promise<TestResult> {
     stepResult = step(
       { triage_state: "GATHER_INFO", description: "Sink leaking", gathered, current_question: currentQuestion },
       "Yesterday"
-    );
-    gathered = stepResult.gathered;
-    currentQuestion = stepResult.current_question;
-
-    stepResult = step(
-      { triage_state: "GATHER_INFO", description: "Sink leaking", gathered, current_question: currentQuestion },
-      "no"
     );
 
     if (stepResult.next_state === "DONE") {
@@ -152,8 +142,8 @@ export async function testTriageNoUnit(): Promise<TestResult> {
     } else {
       fail("pure: expected GATHER_INFO for pre-filled", r.next_state);
     }
-    if (r.current_question === "category") {
-      pass("pure: pre-filled transition asks category");
+    if (r.current_question === "location_in_unit") {
+      pass("pure: pre-filled transition asks location_in_unit");
     } else {
       fail("pure: pre-filled transition wrong question", r.current_question);
     }
@@ -591,8 +581,8 @@ export async function testTriageNoUnit(): Promise<TestResult> {
         fail("CONFIRM_PROFILE yes: expected GATHER_INFO", yesResult.next_state);
       }
 
-      if (yesResult.current_question === "category") {
-        pass("CONFIRM_PROFILE yes: next question is category");
+      if (yesResult.current_question === "location_in_unit") {
+        pass("CONFIRM_PROFILE yes: next question is location_in_unit");
       } else {
         fail("CONFIRM_PROFILE yes: wrong next question", yesResult.current_question);
       }

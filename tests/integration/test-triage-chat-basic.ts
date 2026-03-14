@@ -3,6 +3,11 @@
  *
  * Pure tests — no Supabase, no network calls.
  * Tests the deterministic state machine step() function.
+ *
+ * Updated for conversational triage refactor:
+ * - Category is now pre-set by classifier (not via numbered list in step())
+ * - Safety is detected separately (not via generic YES/NO in step())
+ * - step() now handles: location_in_unit, started_when
  */
 
 import {
@@ -18,8 +23,10 @@ import {
   buildTenantInfoInitialReply,
   buildConfirmProfileReply,
   stepTenantInfo,
+  QUESTIONS,
 } from "../../src/lib/triage/state-machine";
 import { getFallbackSOP } from "../../src/lib/triage/sop-fallback";
+import { buildAcknowledgement } from "../../src/lib/triage/acknowledgement";
 import type { TriageContext } from "../../src/lib/triage/types";
 
 export function testTriageChatBasic(): TestResult {
@@ -29,11 +36,17 @@ export function testTriageChatBasic(): TestResult {
   // ── buildInitialReply ──
 
   try {
-    const reply = buildInitialReply();
-    if (reply.includes("What type of issue")) {
-      pass("buildInitialReply includes category question");
+    const ack = buildAcknowledgement("my faucet is leaking");
+    const reply = buildInitialReply(ack, QUESTIONS.location_in_unit);
+    if (reply.includes("Where in your unit")) {
+      pass("buildInitialReply includes location question");
     } else {
-      fail("buildInitialReply missing category question", reply.slice(0, 100));
+      fail("buildInitialReply missing location question", reply.slice(0, 200));
+    }
+    if (!reply.includes("Reply with a number")) {
+      pass("buildInitialReply does NOT include numbered category menu");
+    } else {
+      fail("buildInitialReply still has category menu", reply.slice(0, 200));
     }
   } catch (e) {
     fail("buildInitialReply threw", e);
@@ -59,31 +72,34 @@ export function testTriageChatBasic(): TestResult {
     fail("buildInitialGathered threw", e);
   }
 
-  // ── step: category by number ──
+  // ── step: location then started_when (with category pre-set) ──
 
   try {
+    const gathered = buildInitialGathered();
+    gathered.category = "plumbing"; // Pre-set by classifier
+
     const ctx: TriageContext = {
       triage_state: "GATHER_INFO",
       description: "My sink is leaking",
-      gathered: buildInitialGathered(),
-      current_question: "category",
+      gathered,
+      current_question: "location_in_unit",
     };
-    const r = step(ctx, "1");
-    if (r.gathered.category === "plumbing") {
-      pass("step: category=1 maps to plumbing");
+    const r = step(ctx, "Kitchen");
+    if (r.gathered.location_in_unit === "Kitchen") {
+      pass("step: location_in_unit = Kitchen collected");
     } else {
-      fail("step: category=1 expected plumbing", r.gathered.category);
+      fail("step: location not collected", r.gathered.location_in_unit);
     }
-    if (r.current_question === "location_in_unit") {
-      pass("step: after category, asks location_in_unit");
+    if (r.current_question === "started_when") {
+      pass("step: after location, asks started_when");
     } else {
-      fail("step: expected location_in_unit next", r.current_question);
+      fail("step: expected started_when next", r.current_question);
     }
   } catch (e) {
-    fail("step: category by number threw", e);
+    fail("step: location collection threw", e);
   }
 
-  // ── step: category by name ──
+  // ── step: category still works if passed as current_question (legacy support) ──
 
   try {
     const ctx: TriageContext = {
@@ -94,7 +110,7 @@ export function testTriageChatBasic(): TestResult {
     };
     const r = step(ctx, "hvac");
     if (r.gathered.category === "hvac") {
-      pass("step: category by name 'hvac' works");
+      pass("step: category by name 'hvac' still works (legacy)");
     } else {
       fail("step: category by name expected hvac", r.gathered.category);
     }
@@ -102,56 +118,22 @@ export function testTriageChatBasic(): TestResult {
     fail("step: category by name threw", e);
   }
 
-  // ── step: category with space ──
+  // ── step: full flow with pre-set category + is_emergency (2 turns → DONE) ──
 
   try {
-    const ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "Ants",
-      gathered: buildInitialGathered(),
-      current_question: "category",
-    };
-    const r = step(ctx, "pest control");
-    if (r.gathered.category === "pest_control") {
-      pass("step: 'pest control' maps to pest_control");
-    } else {
-      fail("step: 'pest control' expected pest_control", r.gathered.category);
-    }
-  } catch (e) {
-    fail("step: category with space threw", e);
-  }
+    const gathered = buildInitialGathered();
+    gathered.category = "plumbing";
+    gathered.is_emergency = false;
 
-  // ── step: invalid category defaults to general ──
-
-  try {
-    const ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "Something",
-      gathered: buildInitialGathered(),
-      current_question: "category",
-    };
-    const r = step(ctx, "banana");
-    if (r.gathered.category === "general") {
-      pass("step: invalid category defaults to general");
-    } else {
-      fail("step: invalid category expected general", r.gathered.category);
-    }
-  } catch (e) {
-    fail("step: invalid category threw", e);
-  }
-
-  // ── step: full flow (4 turns → DONE) ──
-
-  try {
     let ctx: TriageContext = {
       triage_state: "GATHER_INFO",
       description: "Leaking faucet",
-      gathered: buildInitialGathered(),
-      current_question: "category",
+      gathered,
+      current_question: "location_in_unit",
     };
 
-    // Turn 1: category
-    let r = step(ctx, "1");
+    // Turn 1: location
+    let r = step(ctx, "Kitchen");
     ctx = {
       triage_state: r.next_state,
       description: ctx.description,
@@ -159,29 +141,11 @@ export function testTriageChatBasic(): TestResult {
       current_question: r.current_question,
     };
 
-    // Turn 2: location
-    r = step(ctx, "Kitchen");
-    ctx = {
-      triage_state: r.next_state,
-      description: ctx.description,
-      gathered: r.gathered,
-      current_question: r.current_question,
-    };
-
-    // Turn 3: started_when
+    // Turn 2: started_when → DONE
     r = step(ctx, "Yesterday");
-    ctx = {
-      triage_state: r.next_state,
-      description: ctx.description,
-      gathered: r.gathered,
-      current_question: r.current_question,
-    };
-
-    // Turn 4: is_emergency
-    r = step(ctx, "no");
 
     if (r.next_state === "DONE") {
-      pass("step: full flow ends in DONE after 4 turns");
+      pass("step: full flow ends in DONE after 2 turns (with pre-set fields)");
     } else {
       fail("step: full flow expected DONE", r.next_state);
     }
@@ -222,14 +186,17 @@ export function testTriageChatBasic(): TestResult {
   // ── step: emergency keyword auto-detection ──
 
   try {
+    const gathered = buildInitialGathered();
+    gathered.category = "plumbing";
+
     const ctx: TriageContext = {
       triage_state: "GATHER_INFO",
       description: "I smell gas in my kitchen",
-      gathered: buildInitialGathered(),
-      current_question: "category",
+      gathered,
+      current_question: "location_in_unit",
     };
-    // User says "gas leak" while answering category
-    const r = step(ctx, "I think there's a gas leak, maybe plumbing?");
+    // User mentions gas leak while answering location
+    const r = step(ctx, "Kitchen — I think there's a gas leak");
     if (r.gathered.is_emergency === true) {
       pass("step: emergency keyword 'gas leak' auto-detected");
     } else {
@@ -242,20 +209,18 @@ export function testTriageChatBasic(): TestResult {
   // ── step: emergency flow reaches DONE with escalation ──
 
   try {
-    let ctx: TriageContext = {
+    const gathered = buildInitialGathered();
+    gathered.category = "plumbing";
+    gathered.location_in_unit = "Kitchen";
+    gathered.is_emergency = true; // Pre-detected
+
+    const ctx: TriageContext = {
       triage_state: "GATHER_INFO",
       description: "Gas smell",
-      gathered: {
-        category: "plumbing",
-        location_in_unit: "Kitchen",
-        started_when: "Just now",
-        is_emergency: null,
-        current_status: null,
-        brand_model: null,
-      },
-      current_question: "is_emergency",
+      gathered,
+      current_question: "started_when",
     };
-    const r = step(ctx, "YES");
+    const r = step(ctx, "Just now");
 
     if (r.next_state === "DONE") {
       pass("step: emergency flow ends in DONE");
@@ -415,10 +380,11 @@ export function testTriageChatBasic(): TestResult {
       fail("stepTenantInfo: expected GATHER_INFO", r.next_state);
     }
 
-    if (r.reply.includes("What type of issue")) {
-      pass("stepTenantInfo: transition reply includes category question");
+    // Updated: transition reply now asks location, not category menu
+    if (r.reply.includes("Where in your unit") || r.current_question === "location_in_unit") {
+      pass("stepTenantInfo: transition asks location (not category menu)");
     } else {
-      fail("stepTenantInfo: transition reply missing category question", r.reply.slice(0, 100));
+      fail("stepTenantInfo: transition reply unexpected", r.reply.slice(0, 100));
     }
 
     if (r.gathered) {

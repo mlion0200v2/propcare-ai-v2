@@ -18,9 +18,11 @@ export function TriageChat() {
   const [isComplete, setIsComplete] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [triageState, setTriageState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -193,22 +195,157 @@ export function TriageChat() {
     }
   }
 
+  async function handleMediaAction(action: "skip") {
+    if (isLoading || isComplete || !ticketId) return;
+
+    setError(null);
+    setIsLoading(true);
+
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      body: "Skip",
+      is_bot_reply: false,
+    };
+    setMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const res = await fetch("/api/triage/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: action, ticket_id: ticketId, media_action: action }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong");
+        return;
+      }
+
+      setTriageState(data.triage_state ?? null);
+
+      const botMsg: ChatMessage = {
+        id: `bot-${Date.now()}`,
+        body: data.reply,
+        is_bot_reply: true,
+      };
+      setMessages((prev) => [...prev, botMsg]);
+
+      if (data.is_complete) {
+        setIsComplete(true);
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !ticketId || isUploading) return;
+
+    setError(null);
+    setIsUploading(true);
+
+    // Show upload message
+    const fileType = file.type.startsWith("video/") ? "video" : "photo";
+    const uploadMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      body: `Uploading ${fileType}...`,
+      is_bot_reply: false,
+    };
+    setMessages((prev) => [...prev, uploadMsg]);
+
+    try {
+      // 1. Upload file
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("ticket_id", ticketId);
+
+      const uploadRes = await fetch("/api/triage/media", {
+        method: "POST",
+        body: formData,
+      });
+
+      const uploadData = await uploadRes.json();
+
+      if (!uploadRes.ok) {
+        setError(uploadData.error ?? "Upload failed");
+        // Update the upload message to show failure
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === uploadMsg.id
+              ? { ...m, body: `${fileType} upload failed` }
+              : m
+          )
+        );
+        return;
+      }
+
+      // Update the upload message to show success
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === uploadMsg.id
+            ? { ...m, body: `${fileType.charAt(0).toUpperCase() + fileType.slice(1)} uploaded` }
+            : m
+        )
+      );
+
+      // Show success + give option to upload more or continue
+      const successMsg: ChatMessage = {
+        id: `bot-${Date.now()}`,
+        body: "Got it, thanks! You can upload another file or skip to continue.",
+        is_bot_reply: true,
+      };
+      setMessages((prev) => [...prev, successMsg]);
+
+    } catch {
+      setError("Upload failed. Please try again.");
+    } finally {
+      setIsUploading(false);
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  }
+
+  function triggerFileUpload(accept: string) {
+    if (fileInputRef.current) {
+      fileInputRef.current.accept = accept;
+      fileInputRef.current.click();
+    }
+  }
+
   // Show loading skeleton while resuming
   if (isResuming) {
     return (
       <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-gray-500">Resuming your conversation...</p>
+        <p className="text-sm text-gray-600">Resuming your conversation...</p>
       </div>
     );
   }
 
+  const showMediaControls =
+    triageState === "AWAITING_MEDIA" && !isComplete && !isLoading && !isUploading;
+
   return (
     <div className="flex h-full flex-col">
+      {/* Hidden file input for uploads */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handleFileUpload}
+        accept="image/*,video/*"
+      />
+
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
-          <div className="text-center text-gray-500 mt-8">
-            <p className="text-lg font-medium">Report a Maintenance Issue</p>
+          <div className="text-center text-gray-600 mt-8">
+            <p className="text-lg font-medium text-gray-900">Report a Maintenance Issue</p>
             <p className="mt-1 text-sm">
               Describe your issue below and we&apos;ll help you get it resolved.
             </p>
@@ -232,10 +369,10 @@ export function TriageChat() {
           </div>
         ))}
 
-        {isLoading && (
+        {(isLoading || isUploading) && (
           <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-2xl px-4 py-2.5 text-sm text-gray-500">
-              Typing...
+            <div className="bg-gray-100 rounded-2xl px-4 py-2.5 text-sm text-gray-600">
+              {isUploading ? "Uploading..." : "Typing..."}
             </div>
           </div>
         )}
@@ -267,8 +404,37 @@ export function TriageChat() {
         </div>
       )}
 
+      {/* Media upload controls */}
+      {showMediaControls && (
+        <div className="border-t border-gray-200 p-4">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => triggerFileUpload("image/jpeg,image/png,image/webp,image/heic")}
+              size="md"
+              variant="secondary"
+            >
+              Upload Photo
+            </Button>
+            <Button
+              onClick={() => triggerFileUpload("video/mp4,video/quicktime,video/webm")}
+              size="md"
+              variant="secondary"
+            >
+              Upload Video
+            </Button>
+            <Button
+              onClick={() => handleMediaAction("skip")}
+              size="md"
+              variant="ghost"
+            >
+              Skip
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Input */}
-      {triageState !== "CONFIRM_PROFILE" && (
+      {triageState !== "CONFIRM_PROFILE" && triageState !== "AWAITING_MEDIA" && (
         <div className="border-t border-gray-200 p-4">
           <div className="flex gap-2">
             <textarea
@@ -284,7 +450,7 @@ export function TriageChat() {
               }
               disabled={isComplete || isLoading}
               rows={1}
-              className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+              className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
             />
             <Button
               onClick={handleSend}

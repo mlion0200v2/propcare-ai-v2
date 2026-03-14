@@ -35,17 +35,19 @@ export function isExtendedField(field: string): boolean {
  * Single source of truth: are ALL required issue fields collected?
  *
  * Checks:
- * - 4 base fields: category, location_in_unit, started_when, is_emergency (non-null)
+ * - category, location_in_unit, started_when (non-null)
  * - current_status (non-null)
  * - brand_model (non-null only if category is appliance or hvac)
+ *
+ * NOTE: is_emergency is NOT checked here — it is set by the safety
+ * detection module AFTER gather is complete (see detect-safety.ts).
  */
 export function isGatherComplete(gathered: GatheredInfo): boolean {
-  // Base 4 fields
+  // Core gather fields (is_emergency handled separately by safety detection)
   if (
     gathered.category === null ||
     gathered.location_in_unit === null ||
-    gathered.started_when === null ||
-    gathered.is_emergency === null
+    gathered.started_when === null
   ) {
     return false;
   }
