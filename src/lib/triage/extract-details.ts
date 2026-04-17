@@ -229,3 +229,234 @@ export function extractEntryPoint(text: string): string | null {
   }
   return null;
 }
+
+// ── Equipment extraction ──
+
+// Sorted longest-first so "range hood" matches before "range", etc.
+const EQUIPMENT_KEYWORDS = [
+  "washing machine",
+  "range hood",
+  "hood fan",
+  "vent hood",
+  "exhaust hood",
+  "stove hood",
+  "oven hood",
+  "garbage disposal",
+  "refrigerator",
+  "dishwasher",
+  "microwave",
+  "freezer",
+  "fridge",
+  "furnace",
+  "washer",
+  "dryer",
+  "stove",
+  "range",
+  "oven",
+] as const;
+
+/**
+ * Extract an equipment type from free text, or null if none found.
+ *
+ * Uses word-boundary-aware matching (same pattern as extractLocation).
+ * Normalizes aliases to canonical names (e.g., "fridge" → "refrigerator").
+ */
+export function extractEquipment(text: string): string | null {
+  const lower = text.toLowerCase();
+
+  for (const kw of EQUIPMENT_KEYWORDS) {
+    const idx = lower.indexOf(kw);
+    if (idx === -1) continue;
+
+    const before = idx === 0 || /[\s,.'"\-!(]/.test(lower[idx - 1]);
+    const afterIdx = idx + kw.length;
+    const after =
+      afterIdx >= lower.length || /[\s,.'"\-!)?]/.test(lower[afterIdx]);
+
+    if (before && after) {
+      return normalizeEquipment(kw);
+    }
+  }
+
+  return null;
+}
+
+// ── Equipment alias normalization ──
+
+const EQUIPMENT_ALIASES: Record<string, string> = {
+  "hood fan": "range hood",
+  "vent hood": "range hood",
+  "exhaust hood": "range hood",
+  "stove hood": "range hood",
+  "oven hood": "range hood",
+  "fridge": "refrigerator",
+  "washing machine": "washer",
+};
+
+function normalizeEquipment(raw: string): string {
+  return EQUIPMENT_ALIASES[raw] ?? raw;
+}
+
+// ── Equipment alias groups (for step filtering) ──
+
+export const EQUIPMENT_ALIAS_GROUPS: Record<string, string[]> = {
+  "range hood": ["range hood", "hood fan", "vent hood", "exhaust hood", "stove hood", "oven hood"],
+  "refrigerator": ["refrigerator", "fridge", "freezer"],
+  "dishwasher": ["dishwasher"],
+  "oven": ["oven", "stove", "range"],
+  "microwave": ["microwave"],
+  "washer": ["washer", "washing machine"],
+  "dryer": ["dryer"],
+  "garbage disposal": ["garbage disposal"],
+  "furnace": ["furnace"],
+};
+
+// All known appliance names (flattened from alias groups)
+export const ALL_APPLIANCE_NAMES: string[] = Object.values(EQUIPMENT_ALIAS_GROUPS).flat();
+
+/**
+ * Resolve an equipment name to its canonical (EQUIPMENT_ALIAS_GROUPS key) form.
+ * e.g. "stove" → "oven", "fridge" → "refrigerator", "oven" → "oven"
+ * Returns the input unchanged if not found in any alias group.
+ */
+export function getCanonicalEquipment(equipment: string): string {
+  if (EQUIPMENT_ALIAS_GROUPS[equipment]) return equipment;
+  for (const [canonical, aliases] of Object.entries(EQUIPMENT_ALIAS_GROUPS)) {
+    if (aliases.includes(equipment)) return canonical;
+  }
+  return equipment;
+}
+
+/**
+ * Get the alias pattern (array of names) for a given equipment type.
+ * Returns null if equipment is not a known appliance.
+ */
+export function getEquipmentAliases(equipment: string): string[] | null {
+  // Direct match
+  if (EQUIPMENT_ALIAS_GROUPS[equipment]) {
+    return EQUIPMENT_ALIAS_GROUPS[equipment];
+  }
+  // Reverse lookup: find which group contains this equipment
+  for (const [canonical, aliases] of Object.entries(EQUIPMENT_ALIAS_GROUPS)) {
+    if (aliases.includes(equipment)) {
+      return EQUIPMENT_ALIAS_GROUPS[canonical];
+    }
+  }
+  return null;
+}
+
+// ── Equipment correction detection ──
+
+const NEGATION_PATTERNS = [
+  /\b(?:it'?s\s+)?not\s+(?:a\s+|the\s+)?(\w[\w\s]*?\w)\b/i,
+  /\bthis\s+isn'?t\s+(?:a\s+|the\s+|about\s+the\s+)?(\w[\w\s]*?\w)\b/i,
+  /\bnot\s+(?:a\s+|the\s+)?(\w[\w\s]*?\w)\s*[,;.!-]/i,
+];
+
+/**
+ * Detect if the user is correcting the equipment type during guided troubleshooting.
+ *
+ * Matches patterns like:
+ * - "it's not a refrigerator, it's a range hood"
+ * - "this isn't about the oven"
+ * - "not a dishwasher"
+ *
+ * Returns the corrected equipment if found in the rest of the message.
+ */
+export function detectEquipmentCorrection(
+  message: string,
+  currentEquipment: string | null
+): { detected: boolean; equipment: string | null } {
+  const lower = message.toLowerCase();
+
+  // Check if message contains a negation of an appliance name
+  let hasNegation = false;
+  for (const pattern of NEGATION_PATTERNS) {
+    const match = lower.match(pattern);
+    if (match) {
+      const negatedThing = match[1].trim();
+      // Check if the negated thing is an appliance name
+      if (ALL_APPLIANCE_NAMES.some((name) => negatedThing.includes(name))) {
+        hasNegation = true;
+        break;
+      }
+    }
+  }
+
+  if (!hasNegation) {
+    return { detected: false, equipment: null };
+  }
+
+  // Try to extract the correct equipment from the full message
+  // The user typically says "it's not X, it's Y" — extract Y
+  const correctedEquipment = extractEquipment(
+    // Remove the negation part to avoid re-matching the negated appliance
+    lower.replace(/\b(?:it'?s\s+)?not\s+(?:a\s+|the\s+)?[\w\s]+?(?=[,;.!-]|$)/i, "")
+  );
+
+  if (correctedEquipment && correctedEquipment !== currentEquipment) {
+    return { detected: true, equipment: correctedEquipment };
+  }
+
+  // Fallback: try full message — the correct equipment might still be extractable
+  const fullExtract = extractEquipment(message);
+  if (fullExtract && fullExtract !== currentEquipment) {
+    return { detected: true, equipment: fullExtract };
+  }
+
+  return { detected: true, equipment: null };
+}
+
+// ── Appliance → Location inference ──
+
+// Sorted longest-first so "washing machine" matches before "washer", etc.
+const EQUIPMENT_LOCATION_MAP: Array<{ keywords: string[]; location: string }> = [
+  {
+    keywords: [
+      "range hood", "garbage disposal", "stove", "oven", "range",
+      "refrigerator", "fridge", "freezer", "dishwasher", "microwave",
+    ],
+    location: "kitchen",
+  },
+  {
+    keywords: ["bathtub", "shower", "toilet"],
+    location: "bathroom",
+  },
+  {
+    keywords: ["washing machine", "washer", "dryer"],
+    location: "laundry room",
+  },
+  {
+    keywords: ["furnace"],
+    location: "basement",
+  },
+];
+
+// Pre-sorted longest-first for correct matching
+const EQUIPMENT_LOCATION_ENTRIES: Array<{ keyword: string; location: string }> =
+  EQUIPMENT_LOCATION_MAP.flatMap(({ keywords, location }) =>
+    keywords.map((keyword) => ({ keyword, location }))
+  ).sort((a, b) => b.keyword.length - a.keyword.length);
+
+/**
+ * Infer a location from appliance/fixture keywords in text.
+ * e.g. "stove is not working" → "kitchen", "toilet handle is broken" → "bathroom"
+ * Returns null if no appliance implies a location.
+ */
+export function inferLocationFromEquipment(text: string): string | null {
+  const lower = text.toLowerCase();
+
+  for (const { keyword, location } of EQUIPMENT_LOCATION_ENTRIES) {
+    const idx = lower.indexOf(keyword);
+    if (idx === -1) continue;
+
+    const before = idx === 0 || /[\s,.'"\-!(]/.test(lower[idx - 1]);
+    const afterIdx = idx + keyword.length;
+    const after =
+      afterIdx >= lower.length || /[\s,.'"\-!)?]/.test(lower[afterIdx]);
+
+    if (before && after) return location;
+  }
+
+  return null;
+}

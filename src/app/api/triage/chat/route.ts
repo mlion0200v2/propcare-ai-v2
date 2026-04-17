@@ -33,8 +33,9 @@ import {
   TENANT_INFO_QUESTIONS,
   QUESTIONS,
 } from "@/lib/triage/state-machine";
-import { extractLocation, extractTiming, extractCurrentStatus, extractEntryPoint } from "@/lib/triage/extract-details";
-import { logTriageStep } from "@/lib/triage/logger";
+import { extractLocation, extractTiming, extractCurrentStatus, extractEntryPoint, extractEquipment, detectEquipmentCorrection, inferLocationFromEquipment } from "@/lib/triage/extract-details";
+import { logTriageStep, logError, logWarn } from "@/lib/triage/logger";
+import { sendTicketSummaryEmail, getManagerEmailForTicket } from "@/lib/email/send-ticket-email";
 import {
   isGatherComplete,
   isExtendedField,
@@ -46,6 +47,9 @@ import { buildAcknowledgement } from "@/lib/triage/acknowledgement";
 import {
   classifyIssue,
   classifyPest,
+  classifyMold,
+  classifyPlumbing,
+  classifyStructural,
   parseClarifyingResponse,
   buildClarifyingCategoryQuestion,
 } from "@/lib/triage/classify-issue";
@@ -55,7 +59,7 @@ import {
   checkPestEscalation,
 } from "@/lib/triage/detect-safety";
 import { querySnippets } from "@/lib/retrieval/pinecone";
-import { generateGroundedSteps, convertToGuidedSteps, shouldUseGuidedTroubleshooting } from "@/lib/triage/grounding";
+import { generateGroundedSteps, convertToGuidedSteps, shouldUseGuidedTroubleshooting, filterStepsByEquipment } from "@/lib/triage/grounding";
 import { generateTicketSummary } from "@/lib/triage/summary";
 import { validateGroundedResult } from "@/lib/triage/validate";
 import { getFallbackSOP } from "@/lib/triage/sop-fallback";
@@ -66,8 +70,10 @@ import {
   buildStepMessage,
   buildFeedbackReply,
   buildClarifyReply,
+  buildHelpReply,
 } from "@/lib/triage/step-feedback";
 import { classifyStepHybrid } from "@/lib/triage/interpret-step-response";
+import { generateStepHelp } from "@/lib/triage/step-help";
 import type {
   TriageContext,
   TriageClassification,
@@ -110,11 +116,7 @@ export async function GET(request: NextRequest) {
       .single();
 
     if (ticketErr || !ticket) {
-      console.error("triage/chat GET ticket_load failed", {
-        message: ticketErr?.message,
-        code: ticketErr?.code,
-        ticketId,
-      });
+      logError("chat_get_ticket_load", ticketErr, { ticketId });
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
     }
 
@@ -126,10 +128,33 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: true });
 
     if (msgErr) {
-      console.error("triage/chat GET messages_load failed", {
-        message: msgErr.message,
-        code: msgErr.code,
-      });
+      logError("chat_get_messages_load", msgErr);
+    }
+
+    // Load uploaded media and generate signed URLs for display
+    const { data: mediaRecords } = await supabase
+      .from("ticket_media")
+      .select("id, file_path, file_type, mime_type, created_at")
+      .eq("ticket_id", ticketId)
+      .order("created_at", { ascending: true });
+
+    let media: Array<{ id: string; file_type: string; mime_type: string; signed_url: string; created_at: string }> = [];
+    if (mediaRecords && mediaRecords.length > 0) {
+      const urls = await Promise.all(
+        mediaRecords.map(async (m) => {
+          const { data } = await supabase.storage
+            .from("ticket-media")
+            .createSignedUrl(m.file_path, 3600);
+          return {
+            id: m.id,
+            file_type: m.file_type,
+            mime_type: m.mime_type,
+            signed_url: data?.signedUrl ?? "",
+            created_at: m.created_at,
+          };
+        })
+      );
+      media = urls.filter((m) => m.signed_url);
     }
 
     const classification = ticket.classification as unknown as TriageClassification | null;
@@ -140,13 +165,11 @@ export async function GET(request: NextRequest) {
       is_complete: ticket.triage_state === "DONE",
       is_guided: ticket.triage_state === "GUIDED_TROUBLESHOOTING",
       messages: messages ?? [],
+      media,
       classification: classification ?? null,
     });
   } catch (err: unknown) {
-    console.error("triage/chat GET fatal", {
-      err,
-      stack: err instanceof Error ? err.stack : undefined,
-    });
+    logError("chat_get_fatal", err);
     return NextResponse.json(
       { error: "triage_chat_resume_failed", details: String(err) },
       { status: 500 }
@@ -215,10 +238,7 @@ export async function POST(request: NextRequest) {
       start
     );
   } catch (err: unknown) {
-    console.error("triage/chat fatal", {
-      err,
-      stack: err instanceof Error ? err.stack : undefined,
-    });
+    logError("chat_post_fatal", err);
     return NextResponse.json(
       { error: "triage_chat_failed", details: String(err) },
       { status: 500 }
@@ -274,14 +294,30 @@ async function handleFirstMessage(
   const emergencyDetected = hasEmergencyKeywords(message);
 
   // ── Extract structured details from initial description ──
-  const extractedLocation = extractLocation(message);
+  const extractedLocation = extractLocation(message) ?? inferLocationFromEquipment(message);
   const extractedTiming = extractTiming(message);
   const extractedStatus = extractCurrentStatus(message);
   const extractedEntryPoint = extractEntryPoint(message);
+  const extractedEquipment = extractEquipment(message);
 
   // ── Pest subcategory ──
   const pestResult = classification_result.category === "pest_control"
     ? classifyPest(message)
+    : null;
+
+  // ── Mold subcategory ──
+  const moldResult = classification_result.category === "structural"
+    ? classifyMold(message)
+    : null;
+
+  // ── Plumbing subcategory ──
+  const plumbingResult = classification_result.category === "plumbing"
+    ? classifyPlumbing(message)
+    : null;
+
+  // ── Structural subcategory (window/screen) ──
+  const structuralResult = classification_result.category === "structural"
+    ? classifyStructural(message)
     : null;
 
   // ── Build acknowledgement ──
@@ -321,8 +357,20 @@ async function handleFirstMessage(
     if (pestResult) {
       initialGathered.subcategory = pestResult.species;
     }
+    if (moldResult) {
+      initialGathered.subcategory = moldResult;
+    }
+    if (plumbingResult) {
+      initialGathered.subcategory = plumbingResult;
+    }
+    if (structuralResult) {
+      initialGathered.subcategory = structuralResult;
+    }
     if (extractedEntryPoint) {
       initialGathered.entry_point = extractedEntryPoint;
+    }
+    if (extractedEquipment) {
+      initialGathered.equipment = extractedEquipment;
     }
 
     if (classification_result.confidence === "low") {
@@ -385,8 +433,20 @@ async function handleFirstMessage(
     if (pestResult) {
       initialGathered.subcategory = pestResult.species;
     }
+    if (moldResult) {
+      initialGathered.subcategory = moldResult;
+    }
+    if (plumbingResult) {
+      initialGathered.subcategory = plumbingResult;
+    }
+    if (structuralResult) {
+      initialGathered.subcategory = structuralResult;
+    }
     if (extractedEntryPoint) {
       initialGathered.entry_point = extractedEntryPoint;
+    }
+    if (extractedEquipment) {
+      initialGathered.equipment = extractedEquipment;
     }
 
     const tenantInfo = {
@@ -438,12 +498,9 @@ async function handleFirstMessage(
     .single();
 
   if (ticketError || !ticket) {
-    console.error("triage/chat ticket_insert failed", {
-      message: ticketError?.message,
-      details: ticketError?.details,
-      hint: ticketError?.hint,
+    logError("chat_ticket_insert", ticketError, {
       code: ticketError?.code,
-      payload: { ...insertPayload, classification: "[omitted]" },
+      hint: ticketError?.hint,
     });
     return NextResponse.json(
       { error: "Failed to create ticket" },
@@ -459,12 +516,7 @@ async function handleFirstMessage(
     is_bot_reply: false,
   });
   if (userMsgErr) {
-    console.error("triage/chat user_message_insert failed", {
-      message: userMsgErr.message,
-      details: userMsgErr.details,
-      hint: userMsgErr.hint,
-      code: userMsgErr.code,
-    });
+    logError("chat_user_message_insert", userMsgErr);
   }
 
   // Insert bot reply
@@ -475,12 +527,7 @@ async function handleFirstMessage(
     is_bot_reply: true,
   });
   if (botMsgErr) {
-    console.error("triage/chat bot_message_insert failed", {
-      message: botMsgErr.message,
-      details: botMsgErr.details,
-      hint: botMsgErr.hint,
-      code: botMsgErr.code,
-    });
+    logError("chat_bot_message_insert", botMsgErr);
   }
 
   logTriageStep({
@@ -520,19 +567,13 @@ async function handleFollowUp(
   // Load ticket
   const { data: ticket, error: ticketError } = await supabase
     .from("tickets")
-    .select("id, trace_id, description, triage_state, classification")
+    .select("id, trace_id, description, triage_state, classification, unit_id")
     .eq("id", ticketId)
     .eq("tenant_id", userId)
     .single();
 
   if (ticketError || !ticket) {
-    console.error("triage/chat ticket_load failed", {
-      message: ticketError?.message,
-      details: ticketError?.details,
-      hint: ticketError?.hint,
-      code: ticketError?.code,
-      ticketId,
-    });
+    logError("chat_ticket_load", ticketError, { ticketId });
     return NextResponse.json(
       { error: "Ticket not found" },
       { status: 404 }
@@ -614,6 +655,9 @@ async function handleFollowUp(
       if (stored.gathered?.entry_point) {
         gatheredWithCategory.entry_point = stored.gathered.entry_point;
       }
+      if (stored.gathered?.equipment) {
+        gatheredWithCategory.equipment = stored.gathered.equipment;
+      }
 
       // If fields were pre-extracted, find the actual next question (base or extended)
       let currentQuestion = tiResult.current_question;
@@ -679,13 +723,7 @@ async function handleFollowUp(
       .single();
 
     if (updateErr || !updatedTicket) {
-      console.error("triage/chat confirm_profile_update failed", {
-        message: updateErr?.message,
-        details: updateErr?.details,
-        hint: updateErr?.hint,
-        code: updateErr?.code,
-        ticketId: ticket.id,
-      });
+      logError("chat_confirm_profile_update", updateErr, { ticketId: ticket.id });
       return NextResponse.json(
         { error: "Failed to update profile confirmation" },
         { status: 500 }
@@ -701,9 +739,7 @@ async function handleFollowUp(
       is_bot_reply: false,
     });
     if (cpUserMsgErr) {
-      console.error("triage/chat confirm_profile user_msg failed", {
-        message: cpUserMsgErr.message, code: cpUserMsgErr.code,
-      });
+      logError("chat_confirm_profile_user_msg", cpUserMsgErr);
     }
 
     // Insert bot reply
@@ -714,9 +750,7 @@ async function handleFollowUp(
       is_bot_reply: true,
     });
     if (cpBotMsgErr) {
-      console.error("triage/chat confirm_profile bot_msg failed", {
-        message: cpBotMsgErr.message, code: cpBotMsgErr.code,
-      });
+      logError("chat_confirm_profile_bot_msg", cpBotMsgErr);
     }
 
     logTriageStep({
@@ -820,13 +854,7 @@ async function handleFollowUp(
       .single();
 
     if (updateErr || !updatedTicket) {
-      console.error("triage/chat tenant_info_update failed", {
-        message: updateErr?.message,
-        details: updateErr?.details,
-        hint: updateErr?.hint,
-        code: updateErr?.code,
-        ticketId: ticket.id,
-      });
+      logError("chat_tenant_info_update", updateErr, { ticketId: ticket.id });
       return NextResponse.json(
         { error: "Failed to save tenant info" },
         { status: 500 }
@@ -853,9 +881,7 @@ async function handleFollowUp(
           .select("id")
           .single();
         if (profileErr) {
-          console.error("triage/chat profile_defaults_update failed", {
-            message: profileErr.message,
-            code: profileErr.code,
+          logError("chat_profile_defaults_update", profileErr, {
             userId,
             fields: Object.keys(profileUpdate),
           });
@@ -871,9 +897,7 @@ async function handleFollowUp(
       is_bot_reply: false,
     });
     if (tiUserMsgErr) {
-      console.error("triage/chat tenant_info user_msg failed", {
-        message: tiUserMsgErr.message, code: tiUserMsgErr.code,
-      });
+      logError("chat_tenant_info_user_msg", tiUserMsgErr);
     }
 
     // Insert bot reply
@@ -884,9 +908,7 @@ async function handleFollowUp(
       is_bot_reply: true,
     });
     if (tiBotMsgErr) {
-      console.error("triage/chat tenant_info bot_msg failed", {
-        message: tiBotMsgErr.message, code: tiBotMsgErr.code,
-      });
+      logError("chat_tenant_info_bot_msg", tiBotMsgErr);
     }
 
     logTriageStep({
@@ -940,7 +962,7 @@ async function handleFollowUp(
   if (ticket.triage_state === "GUIDED_TROUBLESHOOTING") {
     const guidedState = stored.guided_troubleshooting;
     if (!guidedState) {
-      console.error("[triage] GUIDED_TROUBLESHOOTING but no guided state", { ticketId: ticket.id });
+      logError("chat_guided_no_state", new Error("GUIDED_TROUBLESHOOTING but no guided state"), { ticketId: ticket.id });
       return NextResponse.json(
         { error: "Missing guided troubleshooting state" },
         { status: 500 }
@@ -949,7 +971,7 @@ async function handleFollowUp(
 
     const currentStep = guidedState.steps[guidedState.current_step_index];
     if (!currentStep) {
-      console.error("[triage] GUIDED_TROUBLESHOOTING but no current step", {
+      logError("chat_guided_no_current_step", new Error("GUIDED_TROUBLESHOOTING but no current step"), {
         ticketId: ticket.id,
         index: guidedState.current_step_index,
         totalSteps: guidedState.steps.length,
@@ -967,6 +989,38 @@ async function handleFollowUp(
       body: message,
       is_bot_reply: false,
     });
+
+    // ── Equipment correction detection ──
+    // If the tenant says "it's not a refrigerator, it's a range hood", we
+    // re-enter the retrieval pipeline with the corrected equipment so the
+    // guided steps match the actual appliance.
+    const gatheredEarly = stored.gathered ?? buildInitialGathered();
+    const correction = detectEquipmentCorrection(message, gatheredEarly.equipment);
+    if (correction.detected && correction.equipment) {
+      const correctedGathered = { ...gatheredEarly, equipment: correction.equipment };
+      const updatedStored: TriageClassification = {
+        ...stored,
+        gathered: correctedGathered,
+        retrieval: undefined,
+        guided_troubleshooting: undefined,
+        validation: undefined,
+      };
+
+      logTriageStep({
+        trace_id: ticket.trace_id ?? ticket.id,
+        ticket_id: ticket.id,
+        triage_state: "GUIDED_TROUBLESHOOTING",
+        action: "equipment_correction",
+        latency_ms: Date.now() - start,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          previous_equipment: gatheredEarly.equipment,
+          corrected_equipment: correction.equipment,
+        },
+      });
+
+      return handleRetrievalAndCompletion(supabase, userId, ticket, updatedStored, start);
+    }
 
     // Check for newly reported entry point during guided troubleshooting
     const gathered = stored.gathered ?? buildInitialGathered();
@@ -1071,9 +1125,7 @@ async function handleFollowUp(
         .select("id")
         .single();
       if (clarifyUpdateErr) {
-        console.error("triage/chat guided_clarify_update failed", {
-          message: clarifyUpdateErr.message,
-        });
+        logError("chat_guided_clarify_update", clarifyUpdateErr, { ticketId: ticket.id });
       }
 
       await supabase.from("messages").insert({
@@ -1088,6 +1140,67 @@ async function handleFollowUp(
         ticket_id: ticket.id,
         triage_state: "GUIDED_TROUBLESHOOTING",
         action: "guided_clarify",
+        latency_ms: Date.now() - start,
+        timestamp: new Date().toISOString(),
+        metadata: {
+          step_index: guidedState.current_step_index,
+          feedback,
+          interpretation_source: interpretationSource,
+        },
+      });
+
+      return NextResponse.json({
+        ticket_id: ticket.id,
+        reply,
+        triage_state: "GUIDED_TROUBLESHOOTING",
+        is_complete: false,
+      });
+    }
+
+    // ── Provide help: generate contextual explanation, stay on same step ──
+    if (action.type === "provide_help") {
+      const helpText = await generateStepHelp(
+        currentStep,
+        gathered.equipment ?? null,
+        gathered.category ?? "general"
+      );
+      const reply = buildHelpReply(helpText, currentStep);
+
+      const helpGuidedState: GuidedTroubleshootingState = {
+        ...guidedState,
+        log: updatedLog,
+      };
+
+      const helpClassification: TriageClassification = {
+        ...stored,
+        guided_troubleshooting: helpGuidedState,
+      };
+
+      const { error: helpUpdateErr } = await supabase
+        .from("tickets")
+        .update({
+          triage_state: "GUIDED_TROUBLESHOOTING",
+          classification: helpClassification as unknown as Json,
+        })
+        .eq("id", ticket.id)
+        .select("id")
+        .single();
+      if (helpUpdateErr) {
+        logError("chat_guided_help_update", helpUpdateErr, { ticketId: ticket.id });
+      }
+
+      await supabase.from("messages").insert({
+        ticket_id: ticket.id,
+        sender_id: userId,
+        body: reply,
+        is_bot_reply: true,
+      });
+
+      logTriageStep({
+        trace_id: traceId,
+        ticket_id: ticket.id,
+        triage_state: "GUIDED_TROUBLESHOOTING",
+        action: "guided_help",
         latency_ms: Date.now() - start,
         timestamp: new Date().toISOString(),
         metadata: {
@@ -1199,9 +1312,7 @@ async function handleFollowUp(
       .select("id")
       .single();
     if (guidedUpdateErr) {
-      console.error("triage/chat guided_step_update failed", {
-        message: guidedUpdateErr.message,
-      });
+      logError("chat_guided_step_update", guidedUpdateErr, { ticketId: ticket.id });
     }
 
     // Insert bot reply
@@ -1309,10 +1420,34 @@ async function handleFollowUp(
     if (ep) gathered.entry_point = ep;
   }
 
+  // 2b2. Extract equipment from every GATHER_INFO message
+  if (!gathered.equipment) {
+    const eq = extractEquipment(message);
+    if (eq) gathered.equipment = eq;
+  }
+
   // 2c. Classify pest subcategory if pest_control and not yet classified
   if (gathered.category === "pest_control" && !gathered.subcategory) {
     const pest = classifyPest(message);
     if (pest) gathered.subcategory = pest.species;
+  }
+
+  // 2d. Classify mold subcategory if structural and not yet classified
+  if (gathered.category === "structural" && !gathered.subcategory) {
+    const mold = classifyMold(message);
+    if (mold) gathered.subcategory = mold;
+  }
+
+  // 2e. Classify plumbing subcategory if plumbing and not yet classified
+  if (gathered.category === "plumbing" && !gathered.subcategory) {
+    const plumbing = classifyPlumbing(message);
+    if (plumbing) gathered.subcategory = plumbing;
+  }
+
+  // 2f. Classify structural subcategory (window/screen) if structural and not yet classified
+  if (gathered.category === "structural" && !gathered.subcategory) {
+    const structural = classifyStructural(message);
+    if (structural) gathered.subcategory = structural;
   }
 
   // 3. Check if ALL fields (base + extended) are complete
@@ -1334,7 +1469,7 @@ async function handleFollowUp(
     // Safety guard: if no next question exists, force gather complete to
     // prevent empty-reply deadlock (no question to ask but gather says incomplete)
     if (!nextQuestion && !botReply) {
-      console.warn("[triage] safety guard triggered — no next question but gather incomplete", {
+      logWarn("chat_safety_guard", "No next question but gather incomplete", {
         ticketId: ticket.id,
         gathered_fields: Object.entries(gathered)
           .filter(([, v]) => v !== null)
@@ -1366,10 +1501,7 @@ async function handleFollowUp(
         .select("id")
         .single();
       if (gatherUpdateErr) {
-        console.error("triage/chat gather_update failed", {
-          message: gatherUpdateErr.message, details: gatherUpdateErr.details,
-          hint: gatherUpdateErr.hint, code: gatherUpdateErr.code,
-        });
+        logError("chat_gather_update", gatherUpdateErr, { ticketId: ticket.id });
       }
 
       await supabase.from("messages").insert({
@@ -1445,9 +1577,7 @@ async function handleFollowUp(
         .select("id")
         .single();
       if (safetyUpdateErr) {
-        console.error("triage/chat safety_update failed", {
-          message: safetyUpdateErr.message,
-        });
+        logError("chat_safety_update", safetyUpdateErr, { ticketId: ticket.id });
       }
 
       await supabase.from("messages").insert({
@@ -1513,9 +1643,7 @@ async function handleFollowUp(
     .select("id")
     .single();
   if (mediaUpdateErr) {
-    console.error("triage/chat media_update failed", {
-      message: mediaUpdateErr.message,
-    });
+    logError("chat_media_update", mediaUpdateErr, { ticketId: ticket.id });
   }
 
   await supabase.from("messages").insert({
@@ -1553,7 +1681,7 @@ async function handleFollowUp(
 async function handleRetrievalAndCompletion(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-  ticket: { id: string; trace_id: string | null; description: string; triage_state: string; classification: Json | null },
+  ticket: { id: string; trace_id: string | null; description: string; triage_state: string; classification: Json | null; unit_id: string | null },
   stored: TriageClassification,
   start: number
 ) {
@@ -1564,6 +1692,8 @@ async function handleRetrievalAndCompletion(
   console.log("[triage] GATHER_INFO complete — entering retrieval pipeline", {
     ticketId: ticket.id,
     category: gathered.category,
+    subcategory: gathered.subcategory,
+    equipment: gathered.equipment,
     isEmergency,
     hasStoredRetrieval: !!stored.retrieval,
   });
@@ -1586,11 +1716,7 @@ async function handleRetrievalAndCompletion(
         highestScore: result.log.highest_score,
       });
     } catch (err) {
-      console.error("[triage] retrieval FAILED, using fallback", {
-        error: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined,
-        ticketId: ticket.id,
-      });
+      logError("chat_retrieval", err, { ticketId: ticket.id });
     }
   } else {
     snippets = retrievalLog.matches.map((m) => ({
@@ -1646,9 +1772,7 @@ async function handleRetrievalAndCompletion(
       .select("id")
       .single();
     if (escalateErr) {
-      console.error("triage/chat pest_escalation_update failed", {
-        message: escalateErr.message,
-      });
+      logError("chat_pest_escalation_update", escalateErr, { ticketId: ticket.id });
     }
 
     await supabase.from("messages").insert({
@@ -1672,6 +1796,22 @@ async function handleRetrievalAndCompletion(
       },
     });
 
+    // Email PM (awaited so serverless doesn't terminate before send completes)
+    const pestPmEmail = await getManagerEmailForTicket(ticket.id, ticket.unit_id, stored.tenant_info?.reported_address);
+    if (pestPmEmail) {
+      const emailResult = await sendTicketSummaryEmail({
+        to: pestPmEmail,
+        ticketId: ticket.id,
+        ticketTitle: ticket.description?.slice(0, 80) ?? ticket.id,
+        summary: escalationClassification.summary ?? "",
+        isEmergency: true,
+        category: gathered.category ?? "pest_control",
+      });
+      if (!emailResult.success) {
+        logError("email_send_failed", emailResult.error, { ticketId: ticket.id });
+      }
+    }
+
     return NextResponse.json({
       ticket_id: ticket.id,
       reply: escalationReply,
@@ -1690,17 +1830,43 @@ async function handleRetrievalAndCompletion(
       lowConfidence
     );
   } catch (err) {
-    console.error("[triage] grounding FAILED, using fallback", {
-      error: err instanceof Error ? err.message : String(err),
-      stack: err instanceof Error ? err.stack : undefined,
-      ticketId: ticket.id,
-    });
-    const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory);
+    logError("chat_grounding", err, { ticketId: ticket.id });
+    const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment);
     groundedResult = {
       reply: sop.display,
       steps: sop.steps,
       usedFallback: true,
     };
+  }
+
+  console.log("[triage] grounding result", {
+    ticketId: ticket.id,
+    usedFallback: groundedResult.usedFallback,
+    usedWebSearch: groundedResult.usedWebSearch ?? false,
+    stepCount: groundedResult.steps.length,
+    steps: groundedResult.steps.map((s) => s.description.slice(0, 80)),
+    equipment: gathered.equipment,
+  });
+
+  // ── Equipment-aware step filtering ──
+  // Remove steps that mention unrelated appliances (e.g., "refrigerator" when
+  // the actual equipment is a "range hood"). Applies to both grounded and fallback steps.
+  const preFilterCount = groundedResult.steps.length;
+  groundedResult = filterStepsByEquipment(
+    groundedResult,
+    gathered.equipment,
+    gathered.category ?? "general",
+    isEmergency,
+    gathered.subcategory
+  );
+  if (preFilterCount !== groundedResult.steps.length) {
+    console.log("[triage] equipment filter applied", {
+      ticketId: ticket.id,
+      equipment: gathered.equipment,
+      before: preFilterCount,
+      after: groundedResult.steps.length,
+      usedFallbackAfterFilter: groundedResult.usedFallback,
+    });
   }
 
   // ── Validation loop ──
@@ -1750,7 +1916,20 @@ async function handleRetrievalAndCompletion(
     }
 
     if (validation.missing_citations) {
-      const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory);
+      const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment);
+      groundedResult = {
+        reply: sop.display,
+        steps: sop.steps,
+        usedFallback: true,
+      };
+      validation = { ...validation, action_taken: "fallback_sop" };
+    } else if (validation.domain_mismatch) {
+      logWarn("chat_domain_mismatch", "Domain mismatch detected — falling back to category SOP", {
+        ticketId: ticket.id,
+        category: gathered.category,
+        reasons: validation.reasons.filter((r: string) => r.startsWith("domain_mismatch")),
+      });
+      const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment);
       groundedResult = {
         reply: sop.display,
         steps: sop.steps,
@@ -1758,7 +1937,7 @@ async function handleRetrievalAndCompletion(
       };
       validation = { ...validation, action_taken: "fallback_sop" };
     } else if (validation.low_confidence) {
-      const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory);
+      const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment);
       const disclaimer =
         "Note: We could not find a high-confidence match in our knowledge base for your specific issue. " +
         "Here are general troubleshooting steps for this category:\n\n";
@@ -1821,9 +2000,7 @@ async function handleRetrievalAndCompletion(
       .select("id")
       .single();
     if (guidedUpdateErr) {
-      console.error("triage/chat guided_init_update failed", {
-        message: guidedUpdateErr.message,
-      });
+      logError("chat_guided_init_update", guidedUpdateErr, { ticketId: ticket.id });
     }
 
     // Insert bot reply with first step
@@ -1844,6 +2021,7 @@ async function handleRetrievalAndCompletion(
       metadata: {
         total_steps: guidedSteps.length,
         used_fallback: groundedResult.usedFallback,
+        used_web_search: groundedResult.usedWebSearch ?? false,
         retrieval_matches: retrievalLog?.matches.length ?? 0,
       },
     });
@@ -1907,10 +2085,7 @@ async function handleRetrievalAndCompletion(
     .select("id")
     .single();
   if (doneUpdateErr) {
-    console.error("triage/chat done_update failed", {
-      message: doneUpdateErr.message, details: doneUpdateErr.details,
-      hint: doneUpdateErr.hint, code: doneUpdateErr.code,
-    });
+    logError("chat_done_update", doneUpdateErr, { ticketId: ticket.id });
   }
 
   // Insert bot reply AFTER state is persisted
@@ -1934,11 +2109,28 @@ async function handleRetrievalAndCompletion(
         .map(([k]) => k),
       retrieval_matches: retrievalLog?.matches.length ?? 0,
       used_fallback: groundedResult.usedFallback,
+      used_web_search: groundedResult.usedWebSearch ?? false,
       has_summary: !!summary,
       validation_valid: validation.is_valid,
       validation_action: validation.action_taken,
     },
   });
+
+  // Email PM (awaited so serverless doesn't terminate before send completes)
+  const pmEmail = await getManagerEmailForTicket(ticket.id, ticket.unit_id, stored.tenant_info?.reported_address);
+  if (pmEmail) {
+    const emailResult = await sendTicketSummaryEmail({
+      to: pmEmail,
+      ticketId: ticket.id,
+      ticketTitle: ticket.description?.slice(0, 80) ?? ticket.id,
+      summary: summary ?? doneClassification.summary ?? "",
+      isEmergency,
+      category: gathered.category ?? "general",
+    });
+    if (!emailResult.success) {
+      logError("email_send_failed", emailResult.error, { ticketId: ticket.id });
+    }
+  }
 
   return NextResponse.json({
     ticket_id: ticket.id,
@@ -1953,7 +2145,7 @@ async function handleRetrievalAndCompletion(
 async function handleGuidedComplete(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
-  ticket: { id: string; trace_id: string | null; description: string; triage_state: string; classification: Json | null },
+  ticket: { id: string; trace_id: string | null; description: string; triage_state: string; classification: Json | null; unit_id: string | null },
   stored: TriageClassification,
   guidedState: GuidedTroubleshootingState,
   reply: string,
@@ -2030,9 +2222,7 @@ async function handleGuidedComplete(
     .select("id")
     .single();
   if (doneUpdateErr) {
-    console.error("triage/chat guided_complete_update failed", {
-      message: doneUpdateErr.message,
-    });
+    logError("chat_guided_complete_update", doneUpdateErr, { ticketId: ticket.id });
   }
 
   // Insert bot reply
@@ -2057,6 +2247,22 @@ async function handleGuidedComplete(
       is_escalated: isEscalated,
     },
   });
+
+  // Email PM (awaited so serverless doesn't terminate before send completes)
+  const guidedPmEmail = await getManagerEmailForTicket(ticket.id, ticket.unit_id, stored.tenant_info?.reported_address);
+  if (guidedPmEmail) {
+    const emailResult = await sendTicketSummaryEmail({
+      to: guidedPmEmail,
+      ticketId: ticket.id,
+      ticketTitle: ticket.description?.slice(0, 80) ?? ticket.id,
+      summary: summary ?? doneClassification.summary ?? "",
+      isEmergency: isEmergency || isEscalated,
+      category: gathered.category ?? "general",
+    });
+    if (!emailResult.success) {
+      logError("email_send_failed", emailResult.error, { ticketId: ticket.id });
+    }
+  }
 
   return NextResponse.json({
     ticket_id: ticket.id,

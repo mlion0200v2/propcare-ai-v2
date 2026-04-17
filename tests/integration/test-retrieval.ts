@@ -27,6 +27,9 @@ export function testRetrieval(): TestResult {
       is_emergency: false,
       current_status: "still leaking",
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     const qt = buildQueryText(gathered, "Faucet dripping constantly");
     if (qt.includes("plumbing issue")) {
@@ -62,6 +65,9 @@ export function testRetrieval(): TestResult {
       is_emergency: false,
       current_status: "not running",
       brand_model: "GE Profile dishwasher",
+      subcategory: null,
+      entry_point: null,
+      equipment: "dishwasher",
     };
     const qt = buildQueryText(gathered, "Dishwasher won't start");
     if (qt.includes("GE Profile dishwasher")) {
@@ -82,6 +88,9 @@ export function testRetrieval(): TestResult {
       is_emergency: false,
       current_status: "no heat",
       brand_model: "unknown",
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     const qt = buildQueryText(gathered, "Heater not working");
     if (!qt.includes("unknown")) {
@@ -102,6 +111,9 @@ export function testRetrieval(): TestResult {
       is_emergency: null,
       current_status: null,
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     const qt = buildQueryText(gathered, "");
     if (qt.includes("general issue")) {

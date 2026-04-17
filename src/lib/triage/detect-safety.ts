@@ -198,7 +198,7 @@ export function detectSafety(
   }
 
   // 3. For high-risk categories, always ask a targeted question
-  const HIGH_RISK_CATEGORIES = ["electrical", "hvac", "structural"];
+  const HIGH_RISK_CATEGORIES = ["electrical", "hvac"];
   if (HIGH_RISK_CATEGORIES.includes(category)) {
     return {
       detected: false,
@@ -326,14 +326,14 @@ export function parseSafetyResponse(response: string): boolean {
     return true;
   }
 
-  // Descriptive safety concerns
-  if (/\b(sparks?|smoke|smoking|burning|gas smell|smell gas|flooding|flooded|spreading|getting worse|unstable|exposed)\b/i.test(lower)) {
-    return true;
+  // Negative indicators (checked BEFORE descriptive patterns so "not getting worse" → false)
+  if (/\b(no|nope|nah|not|not really|doesn't seem|don't think|none|nothing|isn't|doesn't)\b/i.test(lower)) {
+    return false;
   }
 
-  // Negative indicators
-  if (/\b(no|nope|nah|not really|doesn't seem|don't think|none|nothing)\b/i.test(lower)) {
-    return false;
+  // Descriptive safety concerns (only reached if no negation detected above)
+  if (/\b(sparks?|smoke|smoking|burning|gas smell|smell gas|flooding|flooded|spreading|getting worse|unstable|exposed)\b/i.test(lower)) {
+    return true;
   }
 
   // Default: no safety concern if unclear

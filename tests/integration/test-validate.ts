@@ -30,6 +30,9 @@ function makeGathered(overrides: Partial<GatheredInfo> = {}): GatheredInfo {
     is_emergency: false,
     current_status: "still leaking",
     brand_model: null,
+    subcategory: null,
+    entry_point: null,
+    equipment: null,
     ...overrides,
   };
 }

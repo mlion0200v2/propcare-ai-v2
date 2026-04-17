@@ -185,6 +185,7 @@ export function buildInitialGathered(): GatheredInfo {
     brand_model: null,
     subcategory: null,
     entry_point: null,
+    equipment: null,
   };
 }
 

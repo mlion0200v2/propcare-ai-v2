@@ -16,6 +16,9 @@ export default function ManagerLayout({
               <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">
                 Dashboard
               </Link>
+              <Link href="/tenants" className="text-gray-600 hover:text-gray-900">
+                Tenants
+              </Link>
             </nav>
           </div>
           <form action={signOut}>

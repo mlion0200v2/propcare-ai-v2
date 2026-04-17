@@ -98,6 +98,28 @@ export function validateGroundedResult(
     );
   }
 
+  // ── E. Domain mismatch: steps contain terms from a different domain ──
+  const DOMAIN_MISMATCH_TERMS: Record<string, RegExp[]> = {
+    appliance: [/\b(shut-?off valve|water main|drain cleaner|pipe wrench|plunger)\b/i],
+    electrical: [/\b(shut-?off valve|drain cleaner|water main)\b/i],
+    pest_control: [/\b(shut-?off valve|drain cleaner|breaker|circuit)\b/i],
+  };
+
+  const category = gathered.category ?? "";
+  const mismatchPatterns = DOMAIN_MISMATCH_TERMS[category] ?? [];
+  const domainMismatch =
+    mismatchPatterns.length > 0 &&
+    !groundedResult.usedFallback &&
+    groundedResult.steps.some((s) =>
+      mismatchPatterns.some((p) => p.test(s.description))
+    );
+
+  if (domainMismatch) {
+    reasons.push(
+      `domain_mismatch: steps contain terms inconsistent with category "${category}"`
+    );
+  }
+
   // ── D. Completeness: basic context consistency ──
   if (
     !groundedResult.usedFallback &&
@@ -108,13 +130,14 @@ export function validateGroundedResult(
   }
 
   // ── Verdict ──
-  const isValid = !missingCitations && !missingSafetyGuidance && !lowConfidence && reasons.length === 0;
+  const isValid = !missingCitations && !missingSafetyGuidance && !lowConfidence && !domainMismatch && reasons.length === 0;
 
   return {
     is_valid: isValid,
     low_confidence: lowConfidence,
     missing_citations: missingCitations,
     missing_safety_guidance: missingSafetyGuidance,
+    domain_mismatch: domainMismatch,
     reasons,
     highest_score: retrievalHighestScore,
     average_score: retrievalAverageScore,

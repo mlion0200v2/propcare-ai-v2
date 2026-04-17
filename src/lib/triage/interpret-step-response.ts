@@ -32,6 +32,7 @@ const RESULT_MAP: Record<InterpretedResult, TroubleshootingStepResult> = {
   helped: "helped",
   partially_helped: "partial",
   did_not_help: "did_not_help",
+  asking_how: "asking_how",
   unable_to_access: "unable_to_access",
   cannot_assess: "unable_to_access",
   did_not_try: "did_not_try",
@@ -100,7 +101,7 @@ Your job is to interpret the tenant's reply in the context of the specific step 
 
 Respond with ONLY valid JSON matching this exact schema:
 {
-  "result": "completed" | "helped" | "partially_helped" | "did_not_help" | "unable_to_access" | "cannot_assess" | "did_not_try" | "skip" | "unknown",
+  "result": "completed" | "helped" | "partially_helped" | "did_not_help" | "asking_how" | "unable_to_access" | "cannot_assess" | "did_not_try" | "skip" | "unknown",
   "confidence": "high" | "medium" | "low",
   "extracted_note": "<string or null>",
   "mentioned_safety_issue": <boolean>,
@@ -112,6 +113,7 @@ Definitions:
 - "helped" = tenant says the step fixed or resolved the issue
 - "partially_helped" = tenant says the step improved things but didn't fully fix
 - "did_not_help" = tenant tried the step but it didn't work or change anything
+- "asking_how" = tenant is asking for instructions, explanation, or guidance on how to perform the step
 - "unable_to_access" = tenant can't physically access, reach, find, or get to what's needed
 - "cannot_assess" = tenant can't determine the answer to an observation/check question
 - "did_not_try" = tenant explicitly chose not to attempt the step

@@ -27,6 +27,7 @@ export default async function DashboardPage() {
       triage_state,
       created_at,
       unit_id,
+      classification,
       units!inner(
         unit_number,
         properties!inner(
@@ -49,7 +50,8 @@ export default async function DashboardPage() {
       status,
       triage_state,
       created_at,
-      unit_id
+      unit_id,
+      classification
     `)
     .is("unit_id", null)
     .order("created_at", { ascending: false })
@@ -96,6 +98,12 @@ export default async function DashboardPage() {
                 <CardContent className="flex items-center justify-between py-4">
                   <div className="space-y-1">
                     <p className="font-medium text-gray-900">{ticket.title}</p>
+                    {(() => {
+                      const summary = (ticket.classification as { summary?: string } | null)?.summary;
+                      if (!summary) return null;
+                      const preview = summary.length > 120 ? summary.slice(0, 120) + "..." : summary;
+                      return <p className="text-xs text-gray-500 line-clamp-2">{preview}</p>;
+                    })()}
                     <div className="flex gap-2 text-xs">
                       <span className={`rounded-full px-2 py-0.5 font-medium ${priorityColors[ticket.priority] ?? "bg-gray-100"}`}>
                         {ticket.priority}

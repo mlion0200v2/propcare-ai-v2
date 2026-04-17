@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { GatheredInfo, TenantInfo } from "@/lib/triage/types";
 
@@ -31,9 +31,37 @@ export default async function TicketDetailPage({
     .eq("ticket_id", id)
     .order("created_at", { ascending: true });
 
-  const classification = ticket.classification as { gathered?: GatheredInfo; tenant_info?: TenantInfo } | null;
+  // Load uploaded media — use service client to bypass storage RLS (folder = tenant uid)
+  const serviceClient = await createServiceClient();
+  const { data: mediaRecords } = await serviceClient
+    .from("ticket_media")
+    .select("id, file_path, file_type, mime_type, created_at")
+    .eq("ticket_id", id)
+    .order("created_at", { ascending: true });
+
+  let media: Array<{ id: string; file_type: string; mime_type: string; signed_url: string; created_at: string }> = [];
+  if (mediaRecords && mediaRecords.length > 0) {
+    const urls = await Promise.all(
+      mediaRecords.map(async (m) => {
+        const { data } = await serviceClient.storage
+          .from("ticket-media")
+          .createSignedUrl(m.file_path, 3600);
+        return {
+          id: m.id,
+          file_type: m.file_type,
+          mime_type: m.mime_type,
+          signed_url: data?.signedUrl ?? "",
+          created_at: m.created_at,
+        };
+      })
+    );
+    media = urls.filter((m) => m.signed_url);
+  }
+
+  const classification = ticket.classification as { gathered?: GatheredInfo; tenant_info?: TenantInfo; summary?: string } | null;
   const gathered = classification?.gathered;
   const tenantInfo = classification?.tenant_info;
+  const summary = classification?.summary;
 
   const priorityColors: Record<string, string> = {
     emergency: "bg-red-100 text-red-800",
@@ -75,27 +103,27 @@ export default async function TicketDetailPage({
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <h4 className="text-sm font-medium text-gray-700">Description</h4>
-            <p className="mt-1 text-sm text-gray-600">{ticket.description}</p>
+            <h4 className="text-sm font-semibold text-gray-900">Description</h4>
+            <p className="mt-1 text-sm text-gray-700">{ticket.description}</p>
           </div>
 
           {gathered && (
             <div className="grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-4">
               <div>
-                <p className="text-xs font-medium text-gray-500">Category</p>
-                <p className="text-sm">{gathered.category ?? "—"}</p>
+                <p className="text-xs font-medium text-gray-600">Category</p>
+                <p className="text-sm font-medium text-gray-900">{gathered.category ?? "—"}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-500">Location</p>
-                <p className="text-sm">{gathered.location_in_unit ?? "—"}</p>
+                <p className="text-xs font-medium text-gray-600">Location</p>
+                <p className="text-sm font-medium text-gray-900">{gathered.location_in_unit ?? "—"}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-500">Started when</p>
-                <p className="text-sm">{gathered.started_when ?? "—"}</p>
+                <p className="text-xs font-medium text-gray-600">Started when</p>
+                <p className="text-sm font-medium text-gray-900">{gathered.started_when ?? "—"}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-500">Emergency</p>
-                <p className="text-sm">
+                <p className="text-xs font-medium text-gray-600">Emergency</p>
+                <p className="text-sm font-medium text-gray-900">
                   {gathered.is_emergency === null
                     ? "—"
                     : gathered.is_emergency
@@ -108,19 +136,19 @@ export default async function TicketDetailPage({
 
           {tenantInfo && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <h4 className="text-sm font-medium text-amber-800">Reported Tenant Info (no unit on file)</h4>
+              <h4 className="text-sm font-semibold text-gray-900">Reported Tenant Info (no unit on file)</h4>
               <div className="mt-2 grid grid-cols-3 gap-4">
                 <div>
-                  <p className="text-xs font-medium text-gray-500">Address</p>
-                  <p className="text-sm">{tenantInfo.reported_address ?? "—"}</p>
+                  <p className="text-xs font-medium text-gray-600">Address</p>
+                  <p className="text-sm font-medium text-gray-900">{tenantInfo.reported_address ?? "—"}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500">Phone</p>
-                  <p className="text-sm">{tenantInfo.contact_phone ?? "—"}</p>
+                  <p className="text-xs font-medium text-gray-600">Phone</p>
+                  <p className="text-sm font-medium text-gray-900">{tenantInfo.contact_phone ?? "—"}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-medium text-gray-500">Email</p>
-                  <p className="text-sm">{tenantInfo.contact_email ?? "—"}</p>
+                  <p className="text-xs font-medium text-gray-600">Email</p>
+                  <p className="text-sm font-medium text-gray-900">{tenantInfo.contact_email ?? "—"}</p>
                 </div>
               </div>
             </div>
@@ -128,11 +156,11 @@ export default async function TicketDetailPage({
 
           {ticket.troubleshooting_steps && (
             <div>
-              <h4 className="text-sm font-medium text-gray-700">Troubleshooting Steps</h4>
+              <h4 className="text-sm font-semibold text-gray-900">Troubleshooting Steps</h4>
               <ul className="mt-2 space-y-1">
                 {(ticket.troubleshooting_steps as Array<{ step: number; description: string }>).map(
                   (s) => (
-                    <li key={s.step} className="text-sm text-gray-600">
+                    <li key={s.step} className="text-sm text-gray-700">
                       {s.step}. {s.description}
                     </li>
                   )
@@ -142,6 +170,64 @@ export default async function TicketDetailPage({
           )}
         </CardContent>
       </Card>
+
+      {/* Property Manager Summary */}
+      {summary && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Property Manager Summary</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">{summary}</pre>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Uploaded Media */}
+      {media.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Uploaded Media ({media.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+              {media.map((m) => (
+                <div key={m.id} className="space-y-1">
+                  {m.file_type === "photo" ? (
+                    <a href={m.signed_url} target="_blank" rel="noopener noreferrer">
+                      <img
+                        src={m.signed_url}
+                        alt="Uploaded photo"
+                        className="h-40 w-full rounded-lg border object-cover transition-opacity hover:opacity-80"
+                      />
+                    </a>
+                  ) : (
+                    <video
+                      controls
+                      className="h-40 w-full rounded-lg border object-cover"
+                      preload="metadata"
+                    >
+                      <source src={m.signed_url} type={m.mime_type} />
+                    </video>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      m.file_type === "photo"
+                        ? "bg-blue-100 text-blue-800"
+                        : "bg-purple-100 text-purple-800"
+                    }`}>
+                      {m.file_type}
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      {new Date(m.created_at).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Conversation */}
       <Card>
@@ -159,7 +245,7 @@ export default async function TicketDetailPage({
                     : "bg-blue-50 text-blue-900"
                 }`}
               >
-                <p className="mb-1 text-xs font-medium text-gray-400">
+                <p className="mb-1 text-xs font-medium text-gray-500">
                   {msg.is_bot_reply ? "Bot" : "Tenant"} &middot;{" "}
                   {new Date(msg.created_at).toLocaleTimeString()}
                 </p>

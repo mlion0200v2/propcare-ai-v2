@@ -40,8 +40,9 @@ export function buildQueryText(gathered: GatheredInfo, description: string): str
     gathered.location_in_unit ? `in ${gathered.location_in_unit}` : null,
     description ? `: ${description}` : null,
     gathered.current_status ? `. Status: ${gathered.current_status}` : null,
+    gathered.equipment ? `. Equipment type: ${gathered.equipment}` : null,
     gathered.brand_model && gathered.brand_model !== "unknown"
-      ? `. Equipment: ${gathered.brand_model}`
+      ? `. Brand/model: ${gathered.brand_model}`
       : null,
   ].filter(Boolean);
   return parts.join("");

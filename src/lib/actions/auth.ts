@@ -74,19 +74,40 @@ export async function signUp(
     return { error: "Sign-up failed. Please try again." };
   }
 
-  // Create profile via service client (no INSERT RLS policy on profiles)
+  // Create profile via service client (no INSERT RLS policy on profiles).
+  // Use upsert so duplicate signups (same auth user) don't fail on the
+  // unique PK constraint — the profile is simply updated to match.
   const serviceClient = await createServiceClient();
   const { error: profileError } = await serviceClient
     .from("profiles")
-    .insert({
-      id: authData.user.id,
-      email: parsed.data.email,
-      full_name: parsed.data.full_name,
-      role: parsed.data.role as "tenant" | "manager",
-    });
+    .upsert(
+      {
+        id: authData.user.id,
+        email: parsed.data.email,
+        full_name: parsed.data.full_name,
+        role: parsed.data.role as "tenant" | "manager",
+      },
+      { onConflict: "id" }
+    );
 
   if (profileError) {
-    return { error: "Account created but profile setup failed. Contact support." };
+    console.error("Profile upsert failed:", {
+      message: profileError.message,
+      code: profileError.code,
+      details: profileError.details,
+      hint: profileError.hint,
+    });
+
+    if (profileError.code === "23505") {
+      if (profileError.message?.includes("profiles_email_key")) {
+        return { error: "An account with this email already exists. Please sign in or reset your password." };
+      }
+      if (profileError.message?.includes("profiles_pkey")) {
+        return { error: "This account is already registered. Please sign in." };
+      }
+    }
+
+    return { error: "Account created but profile setup failed. Please contact support." };
   }
 
   redirect(parsed.data.role === "manager" ? "/dashboard" : "/submit");

@@ -9,6 +9,8 @@ interface ChatMessage {
   id: string;
   body: string;
   is_bot_reply: boolean;
+  mediaUrl?: string;
+  mediaType?: "photo" | "video";
 }
 
 export function TriageChat() {
@@ -69,13 +71,54 @@ export function TriageChat() {
       setTicketId(data.ticket_id);
       setTriageState(data.triage_state ?? null);
       setIsComplete(data.is_complete);
-      setMessages(
-        (data.messages ?? []).map((m: { id: string; body: string; is_bot_reply: boolean }) => ({
+
+      // Build message list from server messages
+      const chatMessages: ChatMessage[] = (data.messages ?? []).map(
+        (m: { id: string; body: string; is_bot_reply: boolean }) => ({
           id: m.id,
           body: m.body,
           is_bot_reply: m.is_bot_reply,
-        }))
+        })
       );
+
+      // Inject media records as synthetic user messages positioned by timestamp
+      if (data.media && data.media.length > 0) {
+        for (const m of data.media as Array<{
+          id: string;
+          file_type: string;
+          mime_type: string;
+          signed_url: string;
+          created_at: string;
+        }>) {
+          const mediaType = m.file_type === "video" ? "video" : "photo";
+          const label = mediaType === "video" ? "Video uploaded" : "Photo uploaded";
+          const mediaMsg: ChatMessage = {
+            id: `media-${m.id}`,
+            body: label,
+            is_bot_reply: false,
+            mediaUrl: m.signed_url,
+            mediaType,
+          };
+
+          // Insert before the first message whose created_at comes after this media
+          const insertIdx = chatMessages.findIndex(
+            (cm) => {
+              // Server messages have the full object with created_at in data.messages
+              const serverMsg = (data.messages ?? []).find(
+                (sm: { id: string; created_at: string }) => sm.id === cm.id
+              );
+              return serverMsg && serverMsg.created_at > m.created_at;
+            }
+          );
+          if (insertIdx >= 0) {
+            chatMessages.splice(insertIdx, 0, mediaMsg);
+          } else {
+            chatMessages.push(mediaMsg);
+          }
+        }
+      }
+
+      setMessages(chatMessages);
     } catch {
       // Network error on resume — clear stale draft
       localStorage.removeItem(DRAFT_TICKET_KEY);
@@ -283,11 +326,17 @@ export function TriageChat() {
         return;
       }
 
-      // Update the upload message to show success
+      // Update the upload message to show success + media preview
+      const blobUrl = URL.createObjectURL(file);
       setMessages((prev) =>
         prev.map((m) =>
           m.id === uploadMsg.id
-            ? { ...m, body: `${fileType.charAt(0).toUpperCase() + fileType.slice(1)} uploaded` }
+            ? {
+                ...m,
+                body: `${fileType.charAt(0).toUpperCase() + fileType.slice(1)} uploaded`,
+                mediaUrl: blobUrl,
+                mediaType: fileType as "photo" | "video",
+              }
             : m
         )
       );
@@ -365,6 +414,20 @@ export function TriageChat() {
               }`}
             >
               {msg.body}
+              {msg.mediaUrl && msg.mediaType === "photo" && (
+                <img
+                  src={msg.mediaUrl}
+                  alt="Uploaded photo"
+                  className="mt-2 max-w-full rounded-lg"
+                />
+              )}
+              {msg.mediaUrl && msg.mediaType === "video" && (
+                <video
+                  src={msg.mediaUrl}
+                  controls
+                  className="mt-2 max-w-full rounded-lg"
+                />
+              )}
             </div>
           </div>
         ))}

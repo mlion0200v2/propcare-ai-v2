@@ -24,3 +24,40 @@ export function logTriageStep(entry: TriageLogEntry): void {
     })
   );
 }
+
+export function logError(
+  context: string,
+  error: unknown,
+  metadata?: Record<string, unknown>
+): void {
+  const message = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : undefined;
+  console.error(
+    JSON.stringify({
+      level: "error",
+      service: "triage",
+      context,
+      message,
+      ...(stack ? { stack } : {}),
+      ...metadata,
+      timestamp: new Date().toISOString(),
+    })
+  );
+}
+
+export function logWarn(
+  context: string,
+  message: string,
+  metadata?: Record<string, unknown>
+): void {
+  console.warn(
+    JSON.stringify({
+      level: "warn",
+      service: "triage",
+      context,
+      message,
+      ...metadata,
+      timestamp: new Date().toISOString(),
+    })
+  );
+}

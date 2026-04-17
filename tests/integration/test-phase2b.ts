@@ -18,6 +18,8 @@ import {
   processExtendedAnswer,
 } from "../../src/lib/triage/gather-issue";
 import { generateTicketSummary } from "../../src/lib/triage/summary";
+import { validateGroundedResult } from "../../src/lib/triage/validate";
+import { filterStepsByEquipment, type GroundedResult } from "../../src/lib/triage/grounding";
 import type { GatheredInfo, TroubleshootingStep } from "../../src/lib/triage/types";
 import { buildInitialGathered } from "../../src/lib/triage/state-machine";
 
@@ -79,6 +81,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: null,
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     if (!isGatherComplete(g)) {
       pass("isGatherComplete: base fields only → false (missing current_status)");
@@ -98,6 +103,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: "still leaking",
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     if (isGatherComplete(g)) {
       pass("isGatherComplete: plumbing + current_status → true (no brand_model needed)");
@@ -118,6 +126,9 @@ export function testPhase2B(): TestResult {
       is_emergency: null,
       current_status: "still leaking",
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     if (isGatherComplete(g)) {
       pass("isGatherComplete: is_emergency=null → still true (safety is post-gather)");
@@ -137,6 +148,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: "not running",
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     if (!isGatherComplete(g)) {
       pass("isGatherComplete: appliance without brand_model → false");
@@ -156,6 +170,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: "not running",
       brand_model: "GE Profile",
+      subcategory: null,
+      entry_point: null,
+      equipment: "refrigerator",
     };
     if (isGatherComplete(g)) {
       pass("isGatherComplete: appliance with brand_model → true");
@@ -175,6 +192,9 @@ export function testPhase2B(): TestResult {
       is_emergency: true,
       current_status: "no heat",
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     if (!isGatherComplete(g)) {
       pass("isGatherComplete: hvac without brand_model → false");
@@ -194,6 +214,9 @@ export function testPhase2B(): TestResult {
       is_emergency: true,
       current_status: "no heat",
       brand_model: "Carrier AC",
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     if (isGatherComplete(g)) {
       pass("isGatherComplete: hvac with brand_model → true");
@@ -216,6 +239,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: null,
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     const next = getNextExtendedQuestion(g);
     if (next === "current_status") {
@@ -235,6 +261,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: "not working",
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     const next = getNextExtendedQuestion(g);
     if (next === "brand_model") {
@@ -254,6 +283,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: "still leaking",
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     const next = getNextExtendedQuestion(g);
     if (next === null) {
@@ -303,6 +335,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: null,
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     const updated = processExtendedAnswer(g, "current_status", "  still dripping  ");
     if (updated.current_status === "still dripping") {
@@ -328,6 +363,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: "broken",
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     const updated = processExtendedAnswer(g, "brand_model", "Unknown");
     if (updated.brand_model === "unknown") {
@@ -347,6 +385,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: "broken",
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
     const updated = processExtendedAnswer(g, "brand_model", "GE Profile dishwasher");
     if (updated.brand_model === "GE Profile dishwasher") {
@@ -371,6 +412,9 @@ export function testPhase2B(): TestResult {
       is_emergency: false,
       current_status: null,
       brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
     };
 
     // Step 1: should ask current_status
@@ -434,6 +478,7 @@ export function testPhase2B(): TestResult {
         brand_model: null,
         subcategory: null,
         entry_point: null,
+        equipment: null,
       },
       tenantInfo: {
         reported_address: "123 Main St",
@@ -545,6 +590,7 @@ export function testPhase2B(): TestResult {
         brand_model: null,
         subcategory: null,
         entry_point: null,
+        equipment: null,
       },
       tenantInfo: null,
       steps: [],
@@ -569,6 +615,120 @@ export function testPhase2B(): TestResult {
     }
   } catch (e) {
     fail("Summary emergency threw", e);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // Domain-mismatch validation
+  // ══════════════════════════════════════════════════════
+
+  printSection("Phase 2B — Domain-Mismatch Validation");
+
+  // ── Plumbing steps for appliance ticket → domain_mismatch ──
+  try {
+    const gathered: GatheredInfo = {
+      category: "appliance",
+      location_in_unit: "kitchen",
+      started_when: "today",
+      is_emergency: false,
+      current_status: "dripping oil",
+      brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
+    };
+    const groundedResult = {
+      reply: "Here are some steps to try:",
+      steps: [
+        { step: 1, description: "Locate the shut-off valve under the sink and turn it clockwise", completed: false },
+        { step: 2, description: "Use a pipe wrench to tighten the fitting", completed: false },
+      ],
+      usedFallback: false,
+    };
+    const snippets = [
+      { id: "sop-1", score: 0.55, title: "Plumbing SOP", content: "shut-off valve instructions", metadata: {} },
+    ];
+    const result = validateGroundedResult(groundedResult, snippets, gathered, 0.55, 0.50);
+    if (result.domain_mismatch === true) {
+      pass("domain_mismatch: plumbing steps for appliance ticket → true");
+    } else {
+      fail("domain_mismatch: expected true for plumbing steps on appliance ticket", result);
+    }
+    if (!result.is_valid) {
+      pass("domain_mismatch: validation is_valid → false");
+    } else {
+      fail("domain_mismatch: expected is_valid=false", result);
+    }
+    if (result.reasons.some((r: string) => r.includes("domain_mismatch"))) {
+      pass("domain_mismatch: reason includes domain_mismatch");
+    } else {
+      fail("domain_mismatch: reason should mention domain_mismatch", result.reasons);
+    }
+  } catch (e) {
+    fail("domain_mismatch validation threw", e);
+  }
+
+  // ── Correct-domain steps → no mismatch ──
+  try {
+    const gathered: GatheredInfo = {
+      category: "appliance",
+      location_in_unit: "kitchen",
+      started_when: "today",
+      is_emergency: false,
+      current_status: "dripping oil",
+      brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
+    };
+    const groundedResult = {
+      reply: "Here are some steps to try: [SOP-1]",
+      steps: [
+        { step: 1, description: "Clean the range hood filters with degreaser", completed: false },
+        { step: 2, description: "Check the grease trap and empty if full", completed: false },
+      ],
+      usedFallback: false,
+    };
+    const snippets = [
+      { id: "sop-1", score: 0.55, title: "Appliance SOP", content: "range hood maintenance", metadata: {} },
+    ];
+    const result = validateGroundedResult(groundedResult, snippets, gathered, 0.55, 0.50);
+    if (result.domain_mismatch === false) {
+      pass("domain_mismatch: correct-domain steps → false");
+    } else {
+      fail("domain_mismatch: expected false for correct-domain steps", result);
+    }
+  } catch (e) {
+    fail("domain_mismatch correct-domain threw", e);
+  }
+
+  // ── Fallback steps → skip mismatch check ──
+  try {
+    const gathered: GatheredInfo = {
+      category: "appliance",
+      location_in_unit: "kitchen",
+      started_when: "today",
+      is_emergency: false,
+      current_status: "dripping oil",
+      brand_model: null,
+      subcategory: null,
+      entry_point: null,
+      equipment: null,
+    };
+    const groundedResult = {
+      reply: "Here are some steps to try:",
+      steps: [
+        { step: 1, description: "Locate the shut-off valve", completed: false },
+      ],
+      usedFallback: true,
+    };
+    const result = validateGroundedResult(groundedResult, [], gathered, 0, 0);
+    if (result.domain_mismatch === false) {
+      pass("domain_mismatch: fallback steps → false (skipped)");
+    } else {
+      fail("domain_mismatch: fallback should skip mismatch check", result);
+    }
+  } catch (e) {
+    fail("domain_mismatch fallback threw", e);
   }
 
   // ── Summary with guided troubleshooting log ──
@@ -602,6 +762,7 @@ export function testPhase2B(): TestResult {
         brand_model: null,
         subcategory: "ants",
         entry_point: "hole under the railing",
+        equipment: null,
       },
       tenantInfo: {
         reported_address: "456 Oak Ave",
@@ -672,6 +833,197 @@ export function testPhase2B(): TestResult {
     }
   } catch (e) {
     fail("Summary guided threw", e);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // Equipment-Aware Step Filtering — filterStepsByEquipment
+  // ══════════════════════════════════════════════════════
+
+  printSection("Phase 2B — Equipment-Aware Step Filtering");
+
+  // ── Range hood equipment removes refrigerator/dishwasher steps ──
+  try {
+    const input: GroundedResult = {
+      reply: "Here are some steps:",
+      steps: [
+        { step: 1, description: "Clean the range hood filters with degreaser [SOP-1]", completed: false },
+        { step: 2, description: "Check the refrigerator seals for damage [SOP-2]", completed: false },
+        { step: 3, description: "Inspect the dishwasher drain hose [SOP-3]", completed: false },
+        { step: 4, description: "Wipe the area around the hood fan [SOP-4]", completed: false },
+      ],
+      usedFallback: false,
+    };
+    const filtered = filterStepsByEquipment(input, "range hood", "appliance", false, null);
+    if (filtered.steps.length === 2) {
+      pass("filterStepsByEquipment: range hood keeps 2 relevant steps");
+    } else {
+      fail("filterStepsByEquipment: expected 2 steps", filtered.steps.map((s) => s.description));
+    }
+    const descriptions = filtered.steps.map((s) => s.description).join(" | ");
+    if (!/refrigerator/i.test(descriptions)) {
+      pass("filterStepsByEquipment: refrigerator step removed");
+    } else {
+      fail("filterStepsByEquipment: refrigerator still present", descriptions);
+    }
+    if (!/dishwasher/i.test(descriptions)) {
+      pass("filterStepsByEquipment: dishwasher step removed");
+    } else {
+      fail("filterStepsByEquipment: dishwasher still present", descriptions);
+    }
+    if (/range hood/i.test(descriptions) && /hood fan/i.test(descriptions)) {
+      pass("filterStepsByEquipment: range hood and hood fan aliases kept");
+    } else {
+      fail("filterStepsByEquipment: missing relevant equipment steps", descriptions);
+    }
+    if (filtered.steps[0].step === 1 && filtered.steps[1].step === 2) {
+      pass("filterStepsByEquipment: renumbered remaining steps");
+    } else {
+      fail("filterStepsByEquipment: expected steps renumbered 1,2", filtered.steps);
+    }
+    if (!filtered.usedFallback) {
+      pass("filterStepsByEquipment: usedFallback still false");
+    } else {
+      fail("filterStepsByEquipment: should not fallback when steps remain");
+    }
+  } catch (e) {
+    fail("filterStepsByEquipment range hood threw", e);
+  }
+
+  // ── Generic steps (no appliance mentioned) are kept ──
+  try {
+    const input: GroundedResult = {
+      reply: "Here are some steps:",
+      steps: [
+        { step: 1, description: "Turn off the power at the breaker [SOP-1]", completed: false },
+        { step: 2, description: "Take a photo of the issue [SOP-2]", completed: false },
+        { step: 3, description: "Wait for the technician [SOP-3]", completed: false },
+      ],
+      usedFallback: false,
+    };
+    const filtered = filterStepsByEquipment(input, "range hood", "appliance", false, null);
+    if (filtered.steps.length === 3) {
+      pass("filterStepsByEquipment: generic steps all kept");
+    } else {
+      fail("filterStepsByEquipment: expected all 3 generic steps", filtered.steps.length);
+    }
+  } catch (e) {
+    fail("filterStepsByEquipment generic steps threw", e);
+  }
+
+  // ── All steps filtered out → falls back to equipment-specific SOP ──
+  try {
+    const input: GroundedResult = {
+      reply: "Here are some steps:",
+      steps: [
+        { step: 1, description: "Check the refrigerator temperature [SOP-1]", completed: false },
+        { step: 2, description: "Reset the dishwasher cycle [SOP-2]", completed: false },
+      ],
+      usedFallback: false,
+    };
+    const filtered = filterStepsByEquipment(input, "range hood", "appliance", false, null);
+    if (filtered.usedFallback) {
+      pass("filterStepsByEquipment: falls back when all steps filtered out");
+    } else {
+      fail("filterStepsByEquipment: expected usedFallback=true", filtered);
+    }
+    if (filtered.steps.length > 0) {
+      pass("filterStepsByEquipment: fallback provides steps");
+    } else {
+      fail("filterStepsByEquipment: fallback should provide steps");
+    }
+    // Verify fallback used equipment-specific steps, not generic appliance
+    const noFridge = !filtered.steps.some((s) => /refrigerator/i.test(s.description));
+    const noWasher = !filtered.steps.some((s) => /dishwasher|washer/i.test(s.description));
+    if (noFridge && noWasher) {
+      pass("filterStepsByEquipment: equipment fallback has no cross-appliance steps");
+    } else {
+      fail("filterStepsByEquipment: equipment fallback should not have cross-appliance steps", filtered.steps.map((s) => s.description));
+    }
+    const hasGrease = filtered.steps.some((s) => /grease|oil|hood|filter/i.test(s.description));
+    if (hasGrease) {
+      pass("filterStepsByEquipment: equipment fallback has range hood content");
+    } else {
+      fail("filterStepsByEquipment: expected range hood content in fallback", filtered.steps.map((s) => s.description));
+    }
+  } catch (e) {
+    fail("filterStepsByEquipment all-filtered threw", e);
+  }
+
+  // ── Null equipment → no-op (returns unchanged) ──
+  try {
+    const input: GroundedResult = {
+      reply: "Here are some steps:",
+      steps: [
+        { step: 1, description: "Check the refrigerator seals [SOP-1]", completed: false },
+        { step: 2, description: "Inspect the dishwasher [SOP-2]", completed: false },
+      ],
+      usedFallback: false,
+    };
+    const filtered = filterStepsByEquipment(input, null, "appliance", false, null);
+    if (filtered.steps.length === 2 && filtered === input) {
+      pass("filterStepsByEquipment: null equipment is no-op");
+    } else if (filtered.steps.length === 2) {
+      pass("filterStepsByEquipment: null equipment keeps all steps");
+    } else {
+      fail("filterStepsByEquipment: null equipment should not filter", filtered.steps);
+    }
+  } catch (e) {
+    fail("filterStepsByEquipment null equipment threw", e);
+  }
+
+  // ── usedFallback=true → still filtered when equipment is known ──
+  try {
+    const input: GroundedResult = {
+      reply: "Fallback steps:",
+      steps: [
+        { step: 1, description: "Check the refrigerator [SOP-1]", completed: false },
+        { step: 2, description: "Inspect the dishwasher [SOP-2]", completed: false },
+      ],
+      usedFallback: true,
+    };
+    const filtered = filterStepsByEquipment(input, "range hood", "appliance", false, null);
+    // Both steps mention unrelated appliances → all filtered → equipment-specific fallback
+    if (filtered.usedFallback) {
+      pass("filterStepsByEquipment: usedFallback=true still filtered when equipment known");
+    } else {
+      fail("filterStepsByEquipment: expected fallback after filtering", filtered.steps);
+    }
+    // Fallback should produce range-hood-specific steps (from equipment SOP)
+    const hasRangeHoodStep = filtered.steps.some((s) => /grease|hood|filter|vent|oil/i.test(s.description));
+    if (hasRangeHoodStep) {
+      pass("filterStepsByEquipment: equipment-specific fallback has range hood steps");
+    } else {
+      fail("filterStepsByEquipment: expected range hood fallback steps", filtered.steps.map((s) => s.description));
+    }
+  } catch (e) {
+    fail("filterStepsByEquipment usedFallback threw", e);
+  }
+
+  // ── Refrigerator equipment keeps fridge alias, removes range hood ──
+  try {
+    const input: GroundedResult = {
+      reply: "Steps:",
+      steps: [
+        { step: 1, description: "Check the fridge temperature setting [SOP-1]", completed: false },
+        { step: 2, description: "Inspect freezer coils [SOP-2]", completed: false },
+        { step: 3, description: "Clean the range hood filters [SOP-3]", completed: false },
+      ],
+      usedFallback: false,
+    };
+    const filtered = filterStepsByEquipment(input, "refrigerator", "appliance", false, null);
+    if (filtered.steps.length === 2) {
+      pass("filterStepsByEquipment: refrigerator keeps fridge+freezer aliases");
+    } else {
+      fail("filterStepsByEquipment: expected 2 steps for refrigerator", filtered.steps.map((s) => s.description));
+    }
+    const descs = filtered.steps.map((s) => s.description).join(" | ");
+    if (!/range hood/i.test(descs)) {
+      pass("filterStepsByEquipment: range hood removed for refrigerator ticket");
+    } else {
+      fail("filterStepsByEquipment: range hood should be removed", descs);
+    }
+  } catch (e) {
+    fail("filterStepsByEquipment refrigerator threw", e);
   }
 
   return result;

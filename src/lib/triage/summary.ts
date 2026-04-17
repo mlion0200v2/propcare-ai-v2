@@ -31,6 +31,7 @@ const RESULT_LABELS: Record<TroubleshootingStepResult, string> = {
   helped: "Helped — issue resolved",
   partial: "Partially helped",
   did_not_help: "Did not help",
+  asking_how: "Asked for help",
   unable_to_access: "Unable to access / assess",
   did_not_try: "Skipped",
   completed: "Completed",

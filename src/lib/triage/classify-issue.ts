@@ -62,14 +62,23 @@ const KEYWORD_RULES: KeywordRule[] = [
   { category: "hvac", weight: 9, patterns: [/\b(thermostat|temperature|too hot|too cold|no heat|no cooling)\b/i] },
   { category: "hvac", weight: 8, patterns: [/\b(vent|vents|ductwork|ducts|air filter)\b/i] },
 
-  // Appliance
-  { category: "appliance", weight: 10, patterns: [/\b(refrigerator|fridge|freezer|dishwasher|oven|stove|range|microwave|washer|dryer|washing machine)\b/i] },
+  // Appliance — compound rules (must outweigh generic symptom rules)
+  { category: "appliance", weight: 12, patterns: [
+    /\b(range hood|hood fan|vent hood|exhaust hood|stove hood|oven hood)\b/i,
+  ]},
+  { category: "appliance", weight: 11, patterns: [
+    /\b(refrigerator|fridge|freezer|dishwasher|oven|stove|range|microwave|washer|dryer|washing machine|range hood)\b/i,
+    /\b(leak|leaking|drip|dripping|oil|grease|water|noise|smell|smoke)\b/i,
+  ]},
+  // Appliance — noun-only rules
+  { category: "appliance", weight: 10, patterns: [/\b(refrigerator|fridge|freezer|dishwasher|oven|stove|range|microwave|washer|dryer|washing machine|range hood)\b/i] },
   { category: "appliance", weight: 8, patterns: [/\b(appliance|appliances)\b/i] },
 
   // Structural
+  { category: "structural", weight: 9, patterns: [/\b(mold|mildew|mouldy|moldy|moisture|damp|humid|fungus|musty)\b/i] },
   { category: "structural", weight: 10, patterns: [/\b(crack|cracks|cracking|foundation|settling)\b/i] },
   { category: "structural", weight: 9, patterns: [/\b(wall|walls|ceiling|floor)\b/i, /\b(damage|damaged|hole|sagging|bowing|buckling)\b/i] },
-  { category: "structural", weight: 8, patterns: [/\b(window|windows|door|doors)\b/i, /\b(broken|stuck|won't close|won't open|jammed)\b/i] },
+  { category: "structural", weight: 8, patterns: [/\b(window|windows|screen|screens|door|doors)\b/i, /\b(broken|stuck|won't close|won't open|jammed|loose|detached|falling|off track|coming off|torn|ripped)\b/i] },
   { category: "structural", weight: 7, patterns: [/\b(stair|stairs|railing|balcony|deck|porch)\b/i] },
 
   // Pest control
@@ -247,6 +256,61 @@ export function classifyPest(text: string): PestClassification | null {
       return { group, species };
     }
   }
+  return null;
+}
+
+// ── Mold subcategory classification ──
+
+/**
+ * Classify mold subcategory from text.
+ * Returns null if no mold-related term is found.
+ */
+export function classifyMold(text: string): string | null {
+  if (/\b(mold|moldy|mouldy|mildew)\b/i.test(text)) return "mold";
+  if (/\b(fungus|fungi)\b/i.test(text)) return "fungus";
+  if (/\b(musty)\b/i.test(text)) return "musty";
+  return null;
+}
+
+// ── Plumbing subcategory classification ──
+
+/**
+ * Classify plumbing problem type from text.
+ * Returns null if no specific problem type identified.
+ *
+ * Order matters — specific compound patterns first, then general problem
+ * types, with broken_fixture last as catch-all for fixture issues.
+ */
+export function classifyPlumbing(text: string): string | null {
+  // running_toilet: compound — "toilet" + running/flushing indicator
+  if (/\b(toilet)\b/i.test(text) && /\b(running|runs|ghost\s+flush(?:ing)?|keeps?\s+flushing|won't stop|flushing\s+(?:by\s+itself|on\s+its\s+own))\b/i.test(text)) return "running_toilet";
+  // no_hot_water: hot water problems, water heater, cold-only, lukewarm
+  if (/\b(no hot water|water heater|cold water only|lukewarm)\b/i.test(text)) return "no_hot_water";
+  if (/\b(hot water)\b/i.test(text) && /\b(isn't|not|won't|stopped|doesn't|runs?\s+out)\b/i.test(text)) return "no_hot_water";
+  if (/\b(only|just|nothing but)\b/i.test(text) && /\b(cold water)\b/i.test(text)) return "no_hot_water";
+  // water_pressure: pressure/flow problems
+  if (/\b(low\s+(?:water\s+)?pressure|no pressure|weak\s+(?:water\s+)?flow|no water|barely\s+(?:any\s+)?(?:water|flow|comes?\s+out|trickle))\b/i.test(text)) return "water_pressure";
+  if (/\b(water pressure)\b/i.test(text) && /\b(low|weak|poor|no|barely|bad)\b/i.test(text)) return "water_pressure";
+  // clog: blockage, overflow, won't drain
+  if (/\b(clog|clogged|backed\s+up|backup|backing\s+up|blocked|slow drain|plugged|overflow|overflowing)\b/i.test(text)) return "clog";
+  if (/\b(drain)\b/i.test(text) && /\b(slow|won't|can't|not|isn't|blocked|standing)\b/i.test(text)) return "clog";
+  if (/\b(standing\s+water|water\s+standing)\b/i.test(text)) return "clog";
+  // leak: water escape, drips, flooding, burst, puddle
+  if (/\b(leak|leaking|leaky|drip|dripping|drips|flood|flooding|flooded|burst|puddle)\b/i.test(text)) return "leak";
+  if (/\b(water\s+coming\s+from)\b/i.test(text)) return "leak";
+  // broken_fixture: mechanical failure (catch-all for fixture issues)
+  if (/\b(broken|snapped|cracked|handle|knob|stuck|jammed|won't flush|not flushing|won't turn)\b/i.test(text)) return "broken_fixture";
+  return null;
+}
+
+// ── Structural subcategory classification ──
+
+/**
+ * Classify structural subcategory from text.
+ * Returns "window" if the text mentions window/screen keywords, null otherwise.
+ */
+export function classifyStructural(text: string): string | null {
+  if (/\b(window|windows|screen|screens)\b/i.test(text)) return "window";
   return null;
 }
 

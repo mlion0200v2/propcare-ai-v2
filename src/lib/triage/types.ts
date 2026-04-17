@@ -16,6 +16,7 @@ export interface GatheredInfo {
   brand_model: string | null;
   subcategory: string | null;
   entry_point: string | null;
+  equipment: string | null;
 }
 
 export interface TriageContext {
@@ -44,6 +45,7 @@ export type TroubleshootingStepResult =
   | "helped"
   | "partial"
   | "did_not_help"
+  | "asking_how"
   | "unable_to_access"
   | "did_not_try"
   | "completed"
@@ -56,6 +58,7 @@ export type InterpretedResult =
   | "helped"
   | "partially_helped"
   | "did_not_help"
+  | "asking_how"
   | "unable_to_access"
   | "cannot_assess"
   | "did_not_try"
@@ -105,7 +108,8 @@ export type GuidedNextAction =
   | { type: "resolved" }
   | { type: "escalate"; reason: string }
   | { type: "all_steps_done" }
-  | { type: "clarify" };
+  | { type: "clarify" }
+  | { type: "provide_help" };
 
 /** Persisted state for guided troubleshooting (stored in classification JSONB) */
 export interface GuidedTroubleshootingState {
@@ -153,6 +157,7 @@ export interface ValidationResult {
   low_confidence: boolean;
   missing_citations: boolean;
   missing_safety_guidance: boolean;
+  domain_mismatch: boolean;
   reasons: string[];
   highest_score: number;
   average_score: number;

@@ -20,6 +20,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { logError } from "@/lib/triage/logger";
 import type { Database } from "@/lib/supabase/database-generated";
 
 const BUCKET = "ticket-media";
@@ -76,11 +77,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (ticketErr || !ticket) {
-      console.error("[media] ticket not found or access denied", {
-        ticketId,
-        userId: user.id,
-        error: ticketErr?.message,
-      });
+      logError("media_ticket_not_found", ticketErr, { ticketId, userId: user.id });
       return NextResponse.json(
         { error: "Ticket not found" },
         { status: 404 }
@@ -117,8 +114,7 @@ export async function POST(request: NextRequest) {
       });
 
     if (uploadErr) {
-      console.error("[media] storage upload failed", {
-        message: uploadErr.message,
+      logError("media_storage_upload", uploadErr, {
         bucket: BUCKET,
         filePath,
         userId: user.id,
@@ -158,10 +154,7 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (mediaErr || !media) {
-      console.error("[media] ticket_media insert failed", {
-        message: mediaErr?.message,
-        code: mediaErr?.code,
-        details: mediaErr?.details,
+      logError("media_record_insert", mediaErr, {
         ticketId,
         userId: user.id,
         filePath,
@@ -178,16 +171,19 @@ export async function POST(request: NextRequest) {
       fileType: media.file_type,
     });
 
+    // Generate a signed URL so the client can display the uploaded media
+    const { data: signedUrlData } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(filePath, 3600); // 1-hour expiry
+
     return NextResponse.json({
       media_id: media.id,
       file_path: media.file_path,
       file_type: media.file_type,
+      signed_url: signedUrlData?.signedUrl ?? null,
     });
   } catch (err: unknown) {
-    console.error("[media] fatal", {
-      err,
-      stack: err instanceof Error ? err.stack : undefined,
-    });
+    logError("media_fatal", err);
     return NextResponse.json(
       { error: "upload_failed", details: String(err) },
       { status: 500 }

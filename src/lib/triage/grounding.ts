@@ -12,6 +12,16 @@ import OpenAI from "openai";
 import type { GatheredInfo, TroubleshootingStep, GuidedStep, GuidedStepKind } from "./types";
 import type { RetrievalSnippet } from "../retrieval/types";
 import { getFallbackSOP } from "./sop-fallback";
+import { getEquipmentAliases, ALL_APPLIANCE_NAMES } from "./extract-details";
+
+const WEB_SEARCH_SYSTEM_PROMPT = `You are a friendly property maintenance assistant helping a tenant troubleshoot an issue in their rental unit. Search the web for practical advice, then generate 3-6 safe, tenant-appropriate troubleshooting steps.
+
+Rules:
+- Steps must be safe for a non-professional (no electrical work, gas line work, or structural repairs)
+- Write in a warm, conversational tone
+- Return ONLY the numbered steps, one per line
+- Always end with a note that the property manager has been notified
+- Focus on apartment/rental maintenance — not homeowner DIY`;
 
 const SYSTEM_PROMPT = `You are a friendly property maintenance assistant helping a tenant. Generate 3-6 practical troubleshooting steps based ONLY on the retrieved SOP snippets below.
 
@@ -23,6 +33,10 @@ Rules:
 - Write in a warm, conversational tone — like a helpful neighbor explaining what to try
 - Return ONLY the numbered steps, one per line, with citations
 - Always end with a note that the property manager has been notified and will follow up
+
+Equipment-specific rules:
+- Focus steps on the specific equipment type mentioned — do NOT include steps for unrelated appliances
+- If the issue is about a range hood, do NOT include refrigerator, dishwasher, or oven checks
 
 Pest-specific rules:
 - NEVER mix insect guidance with rodent guidance — match advice to the specific pest type
@@ -51,6 +65,7 @@ export interface GroundedResult {
   reply: string;
   steps: TroubleshootingStep[];
   usedFallback: boolean;
+  usedWebSearch?: boolean;
 }
 
 /**
@@ -141,6 +156,74 @@ function formatConversationalFallback(
 }
 
 /**
+ * Generate troubleshooting steps using OpenAI web search.
+ * Used as a fallback when Pinecone retrieval returns no results or low confidence.
+ * Returns null if the call fails or returns no parseable steps.
+ */
+export async function generateWebSearchSteps(
+  gathered: GatheredInfo,
+  isEmergency: boolean
+): Promise<GroundedResult | null> {
+  const category = gathered.category ?? "general";
+
+  const userPrompt = [
+    `Category: ${category}`,
+    gathered.subcategory ? `Subcategory: ${gathered.subcategory}` : null,
+    `Location: ${gathered.location_in_unit ?? "unknown"}`,
+    `Issue status: ${gathered.current_status ?? "unknown"}`,
+    gathered.equipment ? `Equipment type: ${gathered.equipment}` : null,
+    gathered.brand_model ? `Brand/model: ${gathered.brand_model}` : null,
+    "",
+    "Please search for practical troubleshooting advice for this rental maintenance issue and provide numbered steps.",
+  ]
+    .filter((line) => line !== null)
+    .join("\n");
+
+  try {
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.2,
+      max_tokens: 600,
+      web_search_options: { search_context_size: "low" },
+      messages: [
+        { role: "system", content: WEB_SEARCH_SYSTEM_PROMPT },
+        { role: "user", content: userPrompt },
+      ],
+    });
+
+    const stepsText = completion.choices[0]?.message?.content?.trim() ?? "";
+
+    const stepLines = stepsText
+      .split("\n")
+      .filter((line) => /^\d+[\.\)]/.test(line.trim()));
+
+    if (stepLines.length === 0) return null;
+
+    const steps: TroubleshootingStep[] = stepLines.map((line, i) => ({
+      step: i + 1,
+      description: line.replace(/^\d+[\.\)]\s*/, "").trim(),
+      completed: false,
+    }));
+
+    const reply = formatConversationalFallback(
+      stepLines.join("\n"),
+      isEmergency
+    );
+
+    return {
+      reply,
+      steps,
+      usedFallback: false,
+      usedWebSearch: true,
+    };
+  } catch (err) {
+    console.error("[grounding] web search fallback failed:", err);
+    return null;
+  }
+}
+
+/**
  * Generate grounded troubleshooting steps from retrieved snippets.
  *
  * If snippets are empty or low-confidence, falls back to hardcoded SOP.
@@ -156,7 +239,12 @@ export async function generateGroundedSteps(
 
   // Fallback path: no snippets or low confidence
   if (snippets.length === 0 || lowConfidence) {
-    const sop = getFallbackSOP(category, isEmergency, gathered.subcategory);
+    // Try web search before falling back to hardcoded SOP
+    const webResult = await generateWebSearchSteps(gathered, isEmergency);
+    if (webResult) return webResult;
+
+    // Web search failed or returned nothing — use hardcoded SOP
+    const sop = getFallbackSOP(category, isEmergency, gathered.subcategory, gathered.equipment);
 
     return {
       reply: formatConversationalFallback(sop.display, isEmergency),
@@ -178,7 +266,8 @@ export async function generateGroundedSteps(
     gathered.subcategory ? `Pest type: ${gathered.subcategory}` : null,
     `Location: ${gathered.location_in_unit ?? "unknown"}`,
     `Issue status: ${gathered.current_status ?? "unknown"}`,
-    gathered.brand_model ? `Equipment: ${gathered.brand_model}` : null,
+    gathered.equipment ? `Equipment type: ${gathered.equipment}` : null,
+    gathered.brand_model ? `Brand/model: ${gathered.brand_model}` : null,
     gathered.entry_point ? `Entry point reported: ${gathered.entry_point}` : null,
     "",
     "Retrieved SOP snippets:",
@@ -227,7 +316,7 @@ export async function generateGroundedSteps(
       steps.length > 0
         ? steps
         : // Fallback if LLM output couldn't be parsed
-          getFallbackSOP(category, isEmergency, gathered.subcategory).steps,
+          getFallbackSOP(category, isEmergency, gathered.subcategory, gathered.equipment).steps,
     usedFallback: false,
   };
 }
@@ -273,10 +362,21 @@ const TENANT_INAPPROPRIATE_KEYWORDS = [
   /\bconsider sealing\b/i,
 ];
 
+// Steps that are info-gathering meta-prompts, not real troubleshooting.
+// These duplicate already-collected info and should not trigger guided mode.
+const INFO_GATHERING_KEYWORDS = [
+  /^describe (the|your) (issue|problem)\b/i,
+  /^note (when|where|what)\b/i,
+  /^take photos?\b/i,
+  /\bproperty manager will (review|determine|assess|assign)\b/i,
+  /\byou'?re unsure of the category\b/i,
+];
+
 function detectStepKind(desc: string): GuidedStepKind {
   if (MEDIA_REQUEST_KEYWORDS.some((p) => p.test(desc))) return "media_request";
   if (TERMINAL_KEYWORDS.some((p) => p.test(desc))) return "terminal";
   if (TENANT_INAPPROPRIATE_KEYWORDS.some((p) => p.test(desc))) return "terminal";
+  if (INFO_GATHERING_KEYWORDS.some((p) => p.test(desc))) return "terminal";
   if (OBSERVATION_KEYWORDS.some((p) => p.test(desc))) return "observation";
   return "action";
 }
@@ -372,4 +472,79 @@ export function convertToGuidedSteps(
   }
 
   return result;
+}
+
+/**
+ * Filter grounded steps to remove those mentioning unrelated appliances.
+ *
+ * Logic:
+ * 1. If no equipment known or usedFallback → return unchanged
+ * 2. Build alias pattern for current equipment
+ * 3. For each step: if it mentions an appliance that does NOT match the alias → remove it
+ * 4. Steps mentioning no specific appliance → keep (generic steps)
+ * 5. If ALL steps filtered out → fall back to getFallbackSOP
+ */
+export function filterStepsByEquipment(
+  result: GroundedResult,
+  equipment: string | null,
+  category: string,
+  isEmergency: boolean,
+  subcategory?: string | null
+): GroundedResult {
+  if (!equipment) {
+    return result;
+  }
+
+  const aliases = getEquipmentAliases(equipment);
+  if (!aliases) {
+    return result; // Unknown equipment type — don't filter
+  }
+
+  // Build regex patterns
+  const aliasPattern = new RegExp(
+    `\\b(${aliases.map(escapeRegex).join("|")})\\b`,
+    "i"
+  );
+  const anyAppliancePattern = new RegExp(
+    `\\b(${ALL_APPLIANCE_NAMES.map(escapeRegex).join("|")})\\b`,
+    "i"
+  );
+
+  const filteredSteps = result.steps.filter((step) => {
+    const desc = step.description;
+    const mentionsAnyAppliance = anyAppliancePattern.test(desc);
+
+    if (!mentionsAnyAppliance) {
+      return true; // Generic step — keep
+    }
+
+    // Step mentions an appliance: keep only if it matches our equipment
+    return aliasPattern.test(desc);
+  });
+
+  if (filteredSteps.length === 0) {
+    // All steps filtered out — fall back to equipment-specific SOP
+    console.log("[filter] all steps filtered out for equipment:", equipment, "— using equipment-specific fallback");
+    const sop = getFallbackSOP(category, isEmergency, subcategory, equipment);
+    return {
+      reply: sop.display,
+      steps: sop.steps,
+      usedFallback: true,
+    };
+  }
+
+  // Re-number steps
+  const renumbered = filteredSteps.map((step, i) => ({
+    ...step,
+    step: i + 1,
+  }));
+
+  return {
+    ...result,
+    steps: renumbered,
+  };
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

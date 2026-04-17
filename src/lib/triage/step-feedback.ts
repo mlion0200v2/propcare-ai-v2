@@ -9,6 +9,7 @@
 
 import type {
   GuidedStep,
+  GuidedStepKind,
   GuidedTroubleshootingState,
   GuidedNextAction,
   TroubleshootingStepResult,
@@ -55,6 +56,17 @@ const DID_NOT_HELP_PATTERNS = [
   /\b(didn'?t stop|hasn'?t stopped|not stopped)\b/i,
 ];
 
+const ASKING_HOW_PATTERNS = [
+  /\b(how (do|can|should|would) (I|we|you))\b/i,
+  /\b(can you (explain|show|tell me|help me with))\b/i,
+  /\b(what (do|should|would) (I|we) (do|use|look for|check))\b/i,
+  /\b(do you know how)\b/i,
+  /\b(what does that mean|what is that)\b/i,
+  /\b(where (do|should|would) (I|we) (find|look|check|start))\b/i,
+  /\b(I('m| am) not sure (how|what))\b/i,
+  /\b(how to (do|check|find|tell|fix|clean|remove|open|close))\b/i,
+];
+
 const UNABLE_TO_ACCESS_PATTERNS = [
   /\b(can'?t|cannot|could ?not|couldn'?t) (find|reach|access|get to|locate|see|tell)\b/i,
   /\b(don'?t|do not) (know|see) where\b/i,
@@ -98,7 +110,7 @@ const DID_NOT_TRY_PATTERNS = [
 /**
  * Classify tenant's feedback on a troubleshooting step.
  *
- * Priority order: unsafe > helped > partial > did_not_help > unable_to_access > completed > did_not_try
+ * Priority order: unsafe > helped > partial > did_not_help > asking_how > unable_to_access > completed > did_not_try
  * Step-kind-aware: bare "no" is interpreted based on step context.
  * Default: "unclear" (does NOT silently advance).
  */
@@ -112,6 +124,7 @@ export function classifyStepFeedback(
   if (HELPED_PATTERNS.some((p) => p.test(text))) return "helped";
   if (PARTIAL_PATTERNS.some((p) => p.test(text))) return "partial";
   if (DID_NOT_HELP_PATTERNS.some((p) => p.test(text))) return "did_not_help";
+  if (ASKING_HOW_PATTERNS.some((p) => p.test(text))) return "asking_how";
   if (UNABLE_TO_ACCESS_PATTERNS.some((p) => p.test(text))) return "unable_to_access";
   if (COMPLETED_PATTERNS.some((p) => p.test(text))) return "completed";
   if (DID_NOT_TRY_PATTERNS.some((p) => p.test(text))) return "did_not_try";
@@ -213,6 +226,15 @@ export function determineNextAction(
       return { type: "all_steps_done" };
     }
     return { type: "clarify" };
+  }
+
+  // Asking how → provide help, but escape hatch if already helped once
+  if (feedback === "asking_how") {
+    if (previousResult === "asking_how") {
+      const nextIdx = findNextEligibleStep(state, state.current_step_index);
+      return nextIdx !== null ? { type: "next_step" } : { type: "all_steps_done" };
+    }
+    return { type: "provide_help" };
   }
 
   // Did not help on a step flagged as escalation_if_failed → escalate
@@ -441,5 +463,18 @@ export function buildFeedbackReply(
     );
   }
 
+  return parts.join("\n");
+}
+
+/**
+ * Build a reply that wraps LLM-generated help text with a re-offer prompt.
+ */
+export function buildHelpReply(helpText: string, step: GuidedStep): string {
+  const parts = [helpText, ""];
+  if (step.stop_if_unsure) {
+    parts.push("If you're not comfortable trying this, just let me know and we'll skip it.");
+  } else {
+    parts.push("Give it a try if you can, or let me know if you'd rather move on.");
+  }
   return parts.join("\n");
 }

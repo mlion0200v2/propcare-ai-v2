@@ -33,8 +33,15 @@ import {
   getNextMissingField,
   QUESTIONS,
 } from "../../src/lib/triage/state-machine";
-import { extractLocation, extractTiming, extractCurrentStatus } from "../../src/lib/triage/extract-details";
+import { extractLocation, extractTiming, extractCurrentStatus, extractEquipment, detectEquipmentCorrection } from "../../src/lib/triage/extract-details";
 import { getFallbackSOP } from "../../src/lib/triage/sop-fallback";
+import { filterStepsByEquipment, convertToGuidedSteps, shouldUseGuidedTroubleshooting } from "../../src/lib/triage/grounding";
+import {
+  classifyStepFeedback,
+  determineNextAction,
+  buildHelpReply,
+} from "../../src/lib/triage/step-feedback";
+import type { GuidedStep, GuidedTroubleshootingState } from "../../src/lib/triage/types";
 import {
   isGatherComplete,
   getNextExtendedQuestion,
@@ -109,6 +116,65 @@ export function testConversationalTriage(): TestResult {
     }
   } catch (e) {
     fail("classifyIssue appliance threw", e);
+  }
+
+  // ── Appliance misclassification guard ──
+
+  try {
+    const r = classifyIssue("my range hood is dripping oil");
+    if (r.category === "appliance") {
+      pass("classifyIssue: 'my range hood is dripping oil' → appliance");
+    } else {
+      fail("classifyIssue: expected appliance for range hood dripping oil", r);
+    }
+  } catch (e) {
+    fail("classifyIssue range hood dripping oil threw", e);
+  }
+
+  try {
+    const r = classifyIssue("range hood leaking grease");
+    if (r.category === "appliance") {
+      pass("classifyIssue: 'range hood leaking grease' → appliance");
+    } else {
+      fail("classifyIssue: expected appliance for range hood leaking grease", r);
+    }
+  } catch (e) {
+    fail("classifyIssue range hood leaking grease threw", e);
+  }
+
+  try {
+    const r = classifyIssue("stove dripping oil");
+    if (r.category === "appliance") {
+      pass("classifyIssue: 'stove dripping oil' → appliance");
+    } else {
+      fail("classifyIssue: expected appliance for stove dripping oil", r);
+    }
+  } catch (e) {
+    fail("classifyIssue stove dripping oil threw", e);
+  }
+
+  // ── Plumbing still works for actual plumbing ──
+
+  try {
+    const r = classifyIssue("kitchen sink is dripping");
+    if (r.category === "plumbing") {
+      pass("classifyIssue: 'kitchen sink is dripping' → plumbing");
+    } else {
+      fail("classifyIssue: expected plumbing for kitchen sink dripping", r);
+    }
+  } catch (e) {
+    fail("classifyIssue kitchen sink dripping threw", e);
+  }
+
+  try {
+    const r = classifyIssue("faucet is leaking");
+    if (r.category === "plumbing") {
+      pass("classifyIssue: 'faucet is leaking' → plumbing (still works)");
+    } else {
+      fail("classifyIssue: expected plumbing for faucet leaking", r);
+    }
+  } catch (e) {
+    fail("classifyIssue faucet leaking guard threw", e);
   }
 
   // ── Low-confidence classification ──
@@ -1177,6 +1243,454 @@ export function testConversationalTriage(): TestResult {
     }
   } catch (e) {
     fail("acknowledgement backwards compat threw", e);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // Equipment extraction
+  // ══════════════════════════════════════════════════════
+  printSection("Equipment Extraction");
+
+  try {
+    if (extractEquipment("my range hood is dripping oil") === "range hood") {
+      pass("extractEquipment: 'range hood is dripping oil' → range hood");
+    } else {
+      fail("extractEquipment: expected range hood", extractEquipment("my range hood is dripping oil"));
+    }
+
+    if (extractEquipment("the refrigerator is not cooling") === "refrigerator") {
+      pass("extractEquipment: 'refrigerator is not cooling' → refrigerator");
+    } else {
+      fail("extractEquipment: expected refrigerator");
+    }
+
+    // Alias: "fridge" → "refrigerator"
+    if (extractEquipment("my fridge stopped working") === "refrigerator") {
+      pass("extractEquipment: 'fridge' alias → refrigerator");
+    } else {
+      fail("extractEquipment: expected refrigerator for fridge alias");
+    }
+
+    // Alias: "hood fan" → "range hood"
+    if (extractEquipment("the hood fan is making noise") === "range hood") {
+      pass("extractEquipment: 'hood fan' alias → range hood");
+    } else {
+      fail("extractEquipment: expected range hood for hood fan alias");
+    }
+
+    // Longest-first: "range hood" beats "range"
+    if (extractEquipment("my range hood over the stove") === "range hood") {
+      pass("extractEquipment: 'range hood' matches before bare 'range'");
+    } else {
+      fail("extractEquipment: longest-first matching failed");
+    }
+
+    if (extractEquipment("the dishwasher won't drain") === "dishwasher") {
+      pass("extractEquipment: dishwasher");
+    } else {
+      fail("extractEquipment: expected dishwasher");
+    }
+
+    if (extractEquipment("washing machine is leaking") === "washer") {
+      pass("extractEquipment: 'washing machine' alias → washer");
+    } else {
+      fail("extractEquipment: expected washer for washing machine");
+    }
+
+    if (extractEquipment("something is broken") === null) {
+      pass("extractEquipment: no equipment keyword → null");
+    } else {
+      fail("extractEquipment: should return null for vague description");
+    }
+
+    // Word boundary: should not match inside other words
+    if (extractEquipment("the rangefinder is broken") === null) {
+      pass("extractEquipment: word boundary excludes 'rangefinder'");
+    } else {
+      fail("extractEquipment: should not match inside 'rangefinder'");
+    }
+  } catch (e) {
+    fail("extractEquipment threw", e);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // Equipment correction detection
+  // ══════════════════════════════════════════════════════
+  printSection("Equipment Correction Detection");
+
+  try {
+    const r = detectEquipmentCorrection(
+      "it's not a refrigerator, it's a range hood",
+      "refrigerator"
+    );
+    if (r.detected && r.equipment === "range hood") {
+      pass("detectEquipmentCorrection: 'not refrigerator, it's a range hood' → range hood");
+    } else {
+      fail("detectEquipmentCorrection: expected range hood", r);
+    }
+  } catch (e) {
+    fail("detectEquipmentCorrection basic threw", e);
+  }
+
+  try {
+    const r = detectEquipmentCorrection(
+      "this isn't about the oven, it's the dishwasher",
+      "oven"
+    );
+    if (r.detected && r.equipment === "dishwasher") {
+      pass("detectEquipmentCorrection: 'isn't about oven, it's dishwasher' → dishwasher");
+    } else {
+      fail("detectEquipmentCorrection: expected dishwasher", r);
+    }
+  } catch (e) {
+    fail("detectEquipmentCorrection isn't threw", e);
+  }
+
+  try {
+    // No negation → no correction
+    const r = detectEquipmentCorrection("the refrigerator is cold", "refrigerator");
+    if (!r.detected) {
+      pass("detectEquipmentCorrection: no negation → not detected");
+    } else {
+      fail("detectEquipmentCorrection: should not detect without negation", r);
+    }
+  } catch (e) {
+    fail("detectEquipmentCorrection no-negation threw", e);
+  }
+
+  try {
+    // Negation of non-appliance → no correction
+    const r = detectEquipmentCorrection("it's not working", "refrigerator");
+    if (!r.detected) {
+      pass("detectEquipmentCorrection: 'not working' (no appliance) → not detected");
+    } else {
+      fail("detectEquipmentCorrection: should not detect generic 'not working'", r);
+    }
+  } catch (e) {
+    fail("detectEquipmentCorrection generic threw", e);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // Regression: "range hood dripping oil" end-to-end
+  // ══════════════════════════════════════════════════════
+
+  printSection("Regression — Range Hood Dripping Oil");
+
+  try {
+    const description = "my range hood is dripping oil";
+
+    // Step 1: Classification
+    const classification = classifyIssue(description);
+    if (classification.category === "appliance") {
+      pass("regression: range hood classified as appliance");
+    } else {
+      fail("regression: expected appliance", classification);
+    }
+
+    // Step 2: Equipment extraction
+    const equipment = extractEquipment(description);
+    if (equipment === "range hood") {
+      pass("regression: equipment extracted as range hood");
+    } else {
+      fail("regression: expected range hood", equipment);
+    }
+
+    // Step 3: Fallback SOP (simulates lowConfidence path)
+    const sop = getFallbackSOP("appliance", false, null, "range hood");
+
+    const FORBIDDEN_PATTERNS = [
+      /\brefrigerator\b/i,
+      /\bdishwasher\b/i,
+      /\bwasher\b/i,
+      /\bplug(?:ged)?\s+in\b/i,
+      /\bbreaker/i,
+      /\bgas appliance/i,
+    ];
+
+    const hasForbidden = sop.steps.some((s) =>
+      FORBIDDEN_PATTERNS.some((p) => p.test(s.description))
+    );
+    if (!hasForbidden) {
+      pass("regression: range hood fallback SOP has no cross-appliance steps");
+    } else {
+      const offending = sop.steps
+        .filter((s) => FORBIDDEN_PATTERNS.some((p) => p.test(s.description)))
+        .map((s) => s.description);
+      fail("regression: forbidden steps in range hood fallback", offending);
+    }
+
+    const hasRelevant = sop.steps.some((s) =>
+      /grease|oil|hood|filter|vent|duct/i.test(s.description)
+    );
+    if (hasRelevant) {
+      pass("regression: range hood fallback has grease/oil/filter content");
+    } else {
+      fail("regression: expected grease/oil/filter content", sop.steps.map((s) => s.description));
+    }
+
+    // Step 4: Simulate the full production path (lowConfidence → equipment-specific fallback)
+    // In production, generateGroundedSteps calls getFallbackSOP with equipment,
+    // so the fallback SOP is already equipment-specific.
+    const productionFallback = {
+      reply: sop.display,
+      steps: sop.steps,
+      usedFallback: true,
+    };
+
+    // filterStepsByEquipment runs on the already-equipment-specific result
+    const filtered = filterStepsByEquipment(productionFallback, "range hood", "appliance", false, null);
+
+    // Verify filtered steps contain NO forbidden terms
+    const filteredForbidden = filtered.steps.some((s) =>
+      FORBIDDEN_PATTERNS.some((p) => p.test(s.description))
+    );
+    if (!filteredForbidden) {
+      pass("regression: production path has no forbidden steps for range hood");
+    } else {
+      const offending = filtered.steps
+        .filter((s) => FORBIDDEN_PATTERNS.some((p) => p.test(s.description)))
+        .map((s) => s.description);
+      fail("regression: forbidden steps in production path", offending);
+    }
+
+    // Step 5: LLM-grounded steps with cross-appliance noise get filtered
+    const llmResult = {
+      reply: "Here are some steps: [SOP-1]",
+      steps: [
+        { step: 1, description: "Clean the range hood grease filters [SOP-1]", completed: false },
+        { step: 2, description: "Check the refrigerator temperature [SOP-1]", completed: false },
+        { step: 3, description: "Check the dishwasher drain [SOP-1]", completed: false },
+      ],
+      usedFallback: false,
+    };
+    const llmFiltered = filterStepsByEquipment(llmResult, "range hood", "appliance", false, null);
+    if (llmFiltered.steps.length === 1 && /range hood/i.test(llmFiltered.steps[0].description)) {
+      pass("regression: LLM cross-appliance noise filtered for range hood");
+    } else {
+      fail("regression: expected only range hood step", llmFiltered.steps.map((s) => s.description));
+    }
+
+    // Step 6: Guided steps should be clean
+    const guidedSteps = convertToGuidedSteps(filtered.steps);
+    const guidedForbidden = guidedSteps.some((s) =>
+      FORBIDDEN_PATTERNS.some((p) => p.test(s.description))
+    );
+    if (!guidedForbidden) {
+      pass("regression: guided steps clean for range hood");
+    } else {
+      fail("regression: guided steps have forbidden content");
+    }
+
+    if (shouldUseGuidedTroubleshooting(guidedSteps, false)) {
+      pass("regression: guided troubleshooting activates for range hood");
+    } else {
+      fail("regression: expected guided mode to activate");
+    }
+  } catch (e) {
+    fail("regression: range hood end-to-end threw", e);
+  }
+
+  // ══════════════════════════════════════════════════════
+  // Asking How Detection
+  // ══════════════════════════════════════════════════════
+  printSection("Asking How Detection — Regex patterns");
+
+  const testStep: GuidedStep = {
+    index: 0,
+    description: "Check under the kitchen sink for any visible leaks.",
+    citation: null,
+    step_kind: "action",
+    depends_on: null,
+    stop_if_unsure: false,
+    escalation_if_failed: false,
+    request_media_after: false,
+  };
+
+  try {
+    const r = classifyStepFeedback("how do I check that", testStep);
+    if (r === "asking_how") {
+      pass("classifyStepFeedback: 'how do I check that' → asking_how");
+    } else {
+      fail("classifyStepFeedback: expected asking_how", r);
+    }
+  } catch (e) {
+    fail("classifyStepFeedback asking_how 1 threw", e);
+  }
+
+  try {
+    const r = classifyStepFeedback("can you explain how to do this", testStep);
+    if (r === "asking_how") {
+      pass("classifyStepFeedback: 'can you explain how to do this' → asking_how");
+    } else {
+      fail("classifyStepFeedback: expected asking_how", r);
+    }
+  } catch (e) {
+    fail("classifyStepFeedback asking_how 2 threw", e);
+  }
+
+  try {
+    const r = classifyStepFeedback("do you know how to check it", testStep);
+    if (r === "asking_how") {
+      pass("classifyStepFeedback: 'do you know how to check it' → asking_how");
+    } else {
+      fail("classifyStepFeedback: expected asking_how", r);
+    }
+  } catch (e) {
+    fail("classifyStepFeedback asking_how 3 threw", e);
+  }
+
+  try {
+    const r = classifyStepFeedback("where do I find the filter", testStep);
+    if (r === "asking_how") {
+      pass("classifyStepFeedback: 'where do I find the filter' → asking_how");
+    } else {
+      fail("classifyStepFeedback: expected asking_how", r);
+    }
+  } catch (e) {
+    fail("classifyStepFeedback asking_how 4 threw", e);
+  }
+
+  try {
+    const r = classifyStepFeedback("what does that mean", testStep);
+    if (r === "asking_how") {
+      pass("classifyStepFeedback: 'what does that mean' → asking_how");
+    } else {
+      fail("classifyStepFeedback: expected asking_how", r);
+    }
+  } catch (e) {
+    fail("classifyStepFeedback asking_how 5 threw", e);
+  }
+
+  try {
+    const r = classifyStepFeedback("I'm not sure how to do this", testStep);
+    if (r === "asking_how") {
+      pass("classifyStepFeedback: 'I'm not sure how to do this' → asking_how");
+    } else {
+      fail("classifyStepFeedback: expected asking_how", r);
+    }
+  } catch (e) {
+    fail("classifyStepFeedback asking_how 6 threw", e);
+  }
+
+  // ── Asking How → provide_help action ──
+  printSection("Asking How → provide_help action");
+
+  try {
+    const guidedState: GuidedTroubleshootingState = {
+      steps: [testStep],
+      current_step_index: 0,
+      log: [{
+        step_index: 0,
+        presented_at: new Date().toISOString(),
+        responded_at: null,
+        raw_response: null,
+        result: null,
+      }],
+      outcome: "in_progress",
+    };
+
+    const action = determineNextAction(guidedState, "asking_how", null);
+    if (action.type === "provide_help") {
+      pass("determineNextAction: asking_how + null previous → provide_help");
+    } else {
+      fail("determineNextAction: expected provide_help", action);
+    }
+  } catch (e) {
+    fail("determineNextAction asking_how threw", e);
+  }
+
+  try {
+    const secondStep: GuidedStep = {
+      index: 1,
+      description: "Try tightening the connection under the sink.",
+      citation: null,
+      step_kind: "action",
+      depends_on: null,
+      stop_if_unsure: false,
+      escalation_if_failed: false,
+      request_media_after: false,
+    };
+    const guidedState: GuidedTroubleshootingState = {
+      steps: [testStep, secondStep],
+      current_step_index: 0,
+      log: [{
+        step_index: 0,
+        presented_at: new Date().toISOString(),
+        responded_at: null,
+        raw_response: null,
+        result: "asking_how",
+      }],
+      outcome: "in_progress",
+    };
+
+    const action = determineNextAction(guidedState, "asking_how", "asking_how");
+    if (action.type === "next_step") {
+      pass("determineNextAction: asking_how + asking_how previous → next_step (escape hatch)");
+    } else {
+      fail("determineNextAction: expected next_step escape hatch", action);
+    }
+  } catch (e) {
+    fail("determineNextAction asking_how escape hatch threw", e);
+  }
+
+  // ── Asking How escape hatch with no more steps → all_steps_done ──
+  try {
+    const singleStepState: GuidedTroubleshootingState = {
+      steps: [testStep],
+      current_step_index: 0,
+      log: [{
+        step_index: 0,
+        presented_at: new Date().toISOString(),
+        responded_at: null,
+        raw_response: null,
+        result: "asking_how",
+      }],
+      outcome: "in_progress",
+    };
+
+    const action = determineNextAction(singleStepState, "asking_how", "asking_how");
+    if (action.type === "all_steps_done") {
+      pass("determineNextAction: asking_how escape hatch, no more steps → all_steps_done");
+    } else {
+      fail("determineNextAction: expected all_steps_done", action);
+    }
+  } catch (e) {
+    fail("determineNextAction asking_how no-steps escape threw", e);
+  }
+
+  // ── buildHelpReply ──
+  printSection("buildHelpReply — Help message formatting");
+
+  try {
+    const helpText = "Look under the kitchen sink. You should see pipes connected to the faucet above.";
+    const reply = buildHelpReply(helpText, testStep);
+    if (reply.includes(helpText)) {
+      pass("buildHelpReply: includes help text");
+    } else {
+      fail("buildHelpReply: missing help text", reply);
+    }
+    if (reply.includes("Give it a try")) {
+      pass("buildHelpReply: includes try prompt for non-stop_if_unsure step");
+    } else {
+      fail("buildHelpReply: missing try prompt", reply);
+    }
+  } catch (e) {
+    fail("buildHelpReply basic threw", e);
+  }
+
+  try {
+    const unsureStep: GuidedStep = {
+      ...testStep,
+      stop_if_unsure: true,
+    };
+    const helpText = "This requires checking inside the electrical panel.";
+    const reply = buildHelpReply(helpText, unsureStep);
+    if (reply.includes("not comfortable")) {
+      pass("buildHelpReply: stop_if_unsure step includes comfort prompt");
+    } else {
+      fail("buildHelpReply: missing comfort prompt for stop_if_unsure", reply);
+    }
+  } catch (e) {
+    fail("buildHelpReply stop_if_unsure threw", e);
   }
 
   return result;
