@@ -63,6 +63,11 @@ const KEYWORD_RULES: KeywordRule[] = [
   { category: "hvac", weight: 8, patterns: [/\b(vent|vents|ductwork|ducts|air filter)\b/i] },
 
   // Appliance — compound rules (must outweigh generic symptom rules)
+  // Vent + oil/grease → appliance (range hood), not HVAC or plumbing
+  { category: "appliance", weight: 14, patterns: [
+    /\b(vent|hood|exhaust)\b/i,
+    /\b(oil|grease|oily|greasy)\b/i,
+  ]},
   { category: "appliance", weight: 12, patterns: [
     /\b(range hood|hood fan|vent hood|exhaust hood|stove hood|oven hood)\b/i,
   ]},

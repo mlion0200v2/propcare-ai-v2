@@ -345,6 +345,35 @@ export function getEquipmentAliases(equipment: string): string[] | null {
   return null;
 }
 
+// ── Equipment → Category mapping ──
+
+const EQUIPMENT_CATEGORY_MAP: Record<string, string> = {
+  "range hood": "appliance",
+  "refrigerator": "appliance",
+  "dishwasher": "appliance",
+  "oven": "appliance",
+  "microwave": "appliance",
+  "washer": "appliance",
+  "dryer": "appliance",
+  "garbage disposal": "appliance",
+  "furnace": "hvac",
+};
+
+/**
+ * Get the issue category implied by an equipment type.
+ * e.g. "range hood" → "appliance", "furnace" → "hvac"
+ * Returns null if equipment doesn't imply a specific category.
+ */
+export function getEquipmentCategory(equipment: string): string | null {
+  // Direct match
+  if (EQUIPMENT_CATEGORY_MAP[equipment]) {
+    return EQUIPMENT_CATEGORY_MAP[equipment];
+  }
+  // Check via canonical name
+  const canonical = getCanonicalEquipment(equipment);
+  return EQUIPMENT_CATEGORY_MAP[canonical] ?? null;
+}
+
 // ── Equipment correction detection ──
 
 const NEGATION_PATTERNS = [
@@ -353,15 +382,32 @@ const NEGATION_PATTERNS = [
   /\bnot\s+(?:a\s+|the\s+)?(\w[\w\s]*?\w)\s*[,;.!-]/i,
 ];
 
+const ASSERTION_PATTERNS = [
+  /\bit'?s\s+(?:a\s+|the\s+|my\s+)?(\w[\w\s]*?\w)/i,
+  /\bactually\s+(?:a\s+|the\s+|my\s+)?(\w[\w\s]*?\w)/i,
+  /\bthe\s+problem\s+is\s+(?:with\s+)?(?:a\s+|the\s+|my\s+)?(\w[\w\s]*?\w)/i,
+];
+
 /**
  * Detect if the user is correcting the equipment type during guided troubleshooting.
  *
- * Matches patterns like:
+ * Matches two classes of patterns:
+ *
+ * **Negation** (explicit denial of current equipment):
  * - "it's not a refrigerator, it's a range hood"
  * - "this isn't about the oven"
  * - "not a dishwasher"
  *
- * Returns the corrected equipment if found in the rest of the message.
+ * **Assertion** (positive mention of different equipment):
+ * - "it's range hood dripping oil"
+ * - "actually a range hood"
+ * - "the problem is with my range hood"
+ *
+ * Assertion patterns only fire when the extracted equipment differs from
+ * currentEquipment AND belongs to a different category (to avoid false
+ * positives like "it's still leaking" during a valid plumbing flow).
+ *
+ * Returns the corrected equipment if found.
  */
 export function detectEquipmentCorrection(
   message: string,
@@ -369,7 +415,7 @@ export function detectEquipmentCorrection(
 ): { detected: boolean; equipment: string | null } {
   const lower = message.toLowerCase();
 
-  // Check if message contains a negation of an appliance name
+  // ── Path 1: Negation patterns (existing logic) ──
   let hasNegation = false;
   for (const pattern of NEGATION_PATTERNS) {
     const match = lower.match(pattern);
@@ -383,28 +429,53 @@ export function detectEquipmentCorrection(
     }
   }
 
-  if (!hasNegation) {
-    return { detected: false, equipment: null };
+  if (hasNegation) {
+    // Try to extract the correct equipment from the full message
+    // The user typically says "it's not X, it's Y" — extract Y
+    const correctedEquipment = extractEquipment(
+      // Remove the negation part to avoid re-matching the negated appliance
+      lower.replace(/\b(?:it'?s\s+)?not\s+(?:a\s+|the\s+)?[\w\s]+?(?=[,;.!-]|$)/i, "")
+    );
+
+    if (correctedEquipment && correctedEquipment !== currentEquipment) {
+      return { detected: true, equipment: correctedEquipment };
+    }
+
+    // Fallback: try full message — the correct equipment might still be extractable
+    const fullExtract = extractEquipment(message);
+    if (fullExtract && fullExtract !== currentEquipment) {
+      return { detected: true, equipment: fullExtract };
+    }
+
+    return { detected: true, equipment: null };
   }
 
-  // Try to extract the correct equipment from the full message
-  // The user typically says "it's not X, it's Y" — extract Y
-  const correctedEquipment = extractEquipment(
-    // Remove the negation part to avoid re-matching the negated appliance
-    lower.replace(/\b(?:it'?s\s+)?not\s+(?:a\s+|the\s+)?[\w\s]+?(?=[,;.!-]|$)/i, "")
-  );
+  // ── Path 2: Assertion patterns (new) ──
+  // Only fire when the mentioned equipment differs from current AND implies
+  // a different category, to avoid false positives on normal responses.
+  const mentionedEquipment = extractEquipment(message);
+  if (mentionedEquipment && mentionedEquipment !== currentEquipment) {
+    // Check that at least one assertion pattern matches
+    let hasAssertion = false;
+    for (const pattern of ASSERTION_PATTERNS) {
+      if (pattern.test(lower)) {
+        hasAssertion = true;
+        break;
+      }
+    }
 
-  if (correctedEquipment && correctedEquipment !== currentEquipment) {
-    return { detected: true, equipment: correctedEquipment };
+    if (hasAssertion) {
+      // Guard: only treat as correction if it implies a different category
+      const currentCategory = currentEquipment ? getEquipmentCategory(currentEquipment) : null;
+      const newCategory = getEquipmentCategory(mentionedEquipment);
+
+      if (newCategory && newCategory !== currentCategory) {
+        return { detected: true, equipment: mentionedEquipment };
+      }
+    }
   }
 
-  // Fallback: try full message — the correct equipment might still be extractable
-  const fullExtract = extractEquipment(message);
-  if (fullExtract && fullExtract !== currentEquipment) {
-    return { detected: true, equipment: fullExtract };
-  }
-
-  return { detected: true, equipment: null };
+  return { detected: false, equipment: null };
 }
 
 // ── Appliance → Location inference ──

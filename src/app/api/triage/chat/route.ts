@@ -33,7 +33,7 @@ import {
   TENANT_INFO_QUESTIONS,
   QUESTIONS,
 } from "@/lib/triage/state-machine";
-import { extractLocation, extractTiming, extractCurrentStatus, extractEntryPoint, extractEquipment, detectEquipmentCorrection, inferLocationFromEquipment } from "@/lib/triage/extract-details";
+import { extractLocation, extractTiming, extractCurrentStatus, extractEntryPoint, extractEquipment, detectEquipmentCorrection, inferLocationFromEquipment, getEquipmentCategory } from "@/lib/triage/extract-details";
 import { logTriageStep, logError, logWarn } from "@/lib/triage/logger";
 import { sendTicketSummaryEmail, getManagerEmailForTicket } from "@/lib/email/send-ticket-email";
 import {
@@ -997,9 +997,27 @@ async function handleFollowUp(
     const correction = detectEquipmentCorrection(message, gatheredEarly.equipment);
     if (correction.detected && correction.equipment) {
       const correctedGathered = { ...gatheredEarly, equipment: correction.equipment };
+
+      // If the corrected equipment implies a different category, update it
+      const newCategory = getEquipmentCategory(correction.equipment);
+      const previousCategory = correctedGathered.category;
+      if (newCategory && newCategory !== correctedGathered.category) {
+        correctedGathered.category = newCategory;
+        correctedGathered.subcategory = null;
+      }
+
+      // Infer location from the corrected equipment if not already set
+      if (!correctedGathered.location_in_unit) {
+        const inferred = inferLocationFromEquipment(correction.equipment);
+        if (inferred) correctedGathered.location_in_unit = inferred;
+      }
+
       const updatedStored: TriageClassification = {
         ...stored,
         gathered: correctedGathered,
+        issue_classification: newCategory && newCategory !== previousCategory
+          ? { category: newCategory, confidence: "high", rationale: `equipment_correction: ${correction.equipment}` }
+          : stored.issue_classification,
         retrieval: undefined,
         guided_troubleshooting: undefined,
         validation: undefined,
@@ -1015,6 +1033,8 @@ async function handleFollowUp(
         metadata: {
           previous_equipment: gatheredEarly.equipment,
           corrected_equipment: correction.equipment,
+          previous_category: previousCategory,
+          corrected_category: correctedGathered.category,
         },
       });
 
