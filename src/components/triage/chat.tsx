@@ -415,6 +415,7 @@ export function TriageChat() {
             >
               {msg.body}
               {msg.mediaUrl && msg.mediaType === "photo" && (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={msg.mediaUrl}
                   alt="Uploaded photo"

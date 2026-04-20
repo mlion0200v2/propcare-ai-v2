@@ -195,6 +195,7 @@ export default async function TicketDetailPage({
                 <div key={m.id} className="space-y-1">
                   {m.file_type === "photo" ? (
                     <a href={m.signed_url} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
                         src={m.signed_url}
                         alt="Uploaded photo"

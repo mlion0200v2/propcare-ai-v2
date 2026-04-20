@@ -9,7 +9,7 @@
 import { getIndex } from "../pinecone/client";
 import { embedForRetrieval } from "./embedding";
 import type { GatheredInfo, RetrievalLog } from "../triage/types";
-import type { RetrievalQuery, RetrievalResult, RetrievalSnippet } from "./types";
+import type { RetrievalResult, RetrievalSnippet } from "./types";
 
 // ── Defaults (overridable via env) ──
 
@@ -76,15 +76,6 @@ export async function querySnippets(
   });
   console.log("[retrieval] queryText:", queryText);
   console.log("[retrieval] filter:", { category: gathered.category ?? "general" });
-
-  const query: RetrievalQuery = {
-    query_text: queryText,
-    category: gathered.category ?? "general",
-    top_k: config.topK,
-    min_score: config.minScore,
-    max_chars: config.maxChars,
-    namespace: config.namespace,
-  };
 
   // Embed
   const { vector, model } = await embedForRetrieval(queryText);

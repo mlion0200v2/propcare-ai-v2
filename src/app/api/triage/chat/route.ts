@@ -79,7 +79,6 @@ import type {
   TriageClassification,
   ValidationResult,
   IssueClassification,
-  SafetyDetection,
   GuidedTroubleshootingState,
   TroubleshootingLogEntry,
 } from "@/lib/triage/types";
