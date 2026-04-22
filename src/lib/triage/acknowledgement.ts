@@ -59,19 +59,24 @@ const EXTRACTION_PATTERNS: ExtractionPattern[] = [
     pattern: /\bthe\s+(\w[\w\s]{0,20}?)\s+is\s+(leaking|broken|not working|clogged|stuck|making noise|dripping|running|overflowing|buzzing|flickering)\b/i,
     template: (m) => `your ${m[1].trim()} is ${m[2].toLowerCase()}`,
   },
-  // "X leaking/dripping" (without "is")
+  // "X leaking/dripping" (with or without "is") — requires article/possessive prefix
   {
-    pattern: /\b(\w[\w\s]{0,15}?)\s+(leaking|dripping|flooding|overflowing)\b/i,
-    template: (m) => `you have a ${m[1].trim().toLowerCase()} that's ${m[2].toLowerCase()}`,
+    pattern: /\b(?:my|the|our|a)\s+(\w[\w ]{0,15}?\w)\s+(?:(?:is|are|was|were)\s+)?(leaking|dripping|flooding|overflowing)\b/i,
+    template: (m) => `your ${m[1].trim().toLowerCase()} is ${m[2].toLowerCase()}`,
+  },
+  // Bare noun + leaking/dripping (no article — "water dripping from ceiling")
+  {
+    pattern: /\b(water|pipe|faucet|toilet|sink|tub|shower|ceiling|roof)\s+(?:(?:is|are|was|were)\s+)?(leaking|dripping|flooding|overflowing)\b/i,
+    template: (m) => `there's ${m[1].toLowerCase()} ${m[2].toLowerCase()} in your unit`,
   },
   // "no X" (no heat, no hot water, no power)
   {
     pattern: /\b(no|don't have|lost)\s+(heat|hot water|power|electricity|water|ac|air conditioning|cooling)\b/i,
     template: (m) => `you have ${m[1].toLowerCase()} ${m[2].toLowerCase()}`,
   },
-  // "X won't Y"
+  // "X won't Y" — requires article/possessive before noun to avoid capturing conjunctions
   {
-    pattern: /\b(\w[\w\s]{0,15}?)\s+won'?t\s+(turn on|turn off|start|stop|close|open|flush|drain|work)\b/i,
+    pattern: /\b(?:my|the|our|a)\s+(\w[\w\s]{0,15}?)\s+won'?t\s+(turn on|turn off|start|stop|close|open|flush|drain|work)\b/i,
     template: (m) => `your ${m[1].trim().toLowerCase()} won't ${m[2].toLowerCase()}`,
   },
   // "there is/are X" (there is a leak, there are ants)

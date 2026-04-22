@@ -5,7 +5,7 @@
  * in tickets.triage_state and gathered info in tickets.classification JSONB.
  */
 
-export type TriageStateName = "CONFIRM_PROFILE" | "COLLECT_TENANT_INFO" | "GATHER_INFO" | "AWAITING_MEDIA" | "GUIDED_TROUBLESHOOTING" | "DONE";
+export type TriageStateName = "CONFIRM_PROFILE" | "COLLECT_TENANT_INFO" | "GATHER_INFO" | "AWAITING_MEDIA" | "GUIDED_TROUBLESHOOTING" | "CONFIRM_SUMMARY" | "DONE";
 
 export interface GatheredInfo {
   category: string | null;
@@ -17,6 +17,7 @@ export interface GatheredInfo {
   subcategory: string | null;
   entry_point: string | null;
   equipment: string | null;
+  equipment_candidates?: string[] | null;
 }
 
 export interface TriageContext {
@@ -161,7 +162,7 @@ export interface ValidationResult {
   reasons: string[];
   highest_score: number;
   average_score: number;
-  action_taken: "none" | "fallback_sop" | "prepend_safety" | "fallback_sop_with_disclaimer";
+  action_taken: "none" | "fallback_sop" | "prepend_safety" | "fallback_sop_with_disclaimer" | "web_search_fallback";
 }
 
 export interface RetrievalLog {

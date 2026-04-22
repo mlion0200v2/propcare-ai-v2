@@ -109,7 +109,8 @@ const SOP_STEPS: Record<string, string[]> = {
     "Make sure the oven is plugged in (electric) or the gas valve is open (gas).",
     "Check if the clock/display shows an error code.",
     "For electric ovens: check that the heating element is not visibly damaged or broken.",
-    "For gas stoves: make sure the burner cap is properly centered on the base, and gently clean around the igniter and burner ports with a dry cloth or soft brush to remove any food debris or grease buildup.",
+    "For gas stoves: make sure the burner cap is properly centered on the base.",
+    "Gently clean around the igniter and burner ports with a dry cloth to remove food debris or grease.",
     "Do NOT attempt to repair gas oven connections yourself — report gas smell immediately.",
     "Take a photo of any visible damage or error codes.",
   ],
@@ -141,6 +142,36 @@ const SOP_STEPS: Record<string, string[]> = {
     "Press the reset button on the bottom of the disposal unit.",
     "Do NOT put your hand inside the disposal.",
   ],
+  // ── Symptom-specific appliance SOPs ──
+  "appliance:refrigerator:noise": [
+    "Check if the fridge is level — place a level on top or see if it rocks when nudged. Adjust the front feet until stable.",
+    "Pull the fridge out slightly and ensure there's 1–2 inches of clearance from the wall on all sides.",
+    "Open the fridge and check for loose shelves, bins, or items that could be vibrating.",
+    "Check the base grille (bottom front) — remove it and clear any dust or debris around the drain pan and compressor area.",
+    "Listen to whether the sound changes when the compressor kicks on/off — a loud hum from the back is usually compressor-related.",
+  ],
+  "appliance:refrigerator:leak": [
+    "Check if the fridge is level — water can pool and leak from a tilted unit.",
+    "Pull the fridge out and inspect the water line connection (if it has an ice maker or water dispenser).",
+    "Check the drain pan under the fridge — it may be full or cracked.",
+    "Look inside the freezer for excessive ice buildup blocking the defrost drain.",
+    "Take a photo of where the water is coming from.",
+  ],
+  appliance_noise: [
+    "Check if the appliance is sitting level on the floor — uneven footing causes vibration.",
+    "Ensure the appliance has clearance from walls and cabinets (vibrations transfer to surfaces).",
+    "Check for any loose parts, trays, or accessories inside or on top of the appliance.",
+    "Listen to whether the noise is constant or only happens at certain times (e.g., during a cycle).",
+    "Take a short video of the noise if possible — it helps maintenance diagnose remotely.",
+  ],
+  // ── Symptom-specific HVAC SOPs ──
+  hvac_noise: [
+    "Check if the air filter is dirty or clogged — a dirty filter makes the system work harder and louder.",
+    "Make sure all vents and registers are open and not blocked by furniture or curtains.",
+    "Listen for where the noise is coming from — the indoor unit, outdoor unit, or ductwork.",
+    "If the noise is a rattling or buzzing from a vent, the register cover may be loose — tighten the screws.",
+    "Turn the system off and on again — if the noise stops temporarily then returns, note when it restarts.",
+  ],
   structural: [
     "Take photos of any cracks, damage, or areas of concern.",
     "If there are ceiling cracks with water stains, there may be a leak above — report urgently.",
@@ -154,6 +185,12 @@ const SOP_STEPS: Record<string, string[]> = {
     "If the screen is torn or the spline is missing, avoid removing it further — note the window size and location for maintenance.",
     "Make sure the window locks and latches still function properly.",
     "Take a photo of the screen and frame so maintenance can bring the correct replacement parts.",
+  ],
+  structural_fixture: [
+    "Do not try to force the fixture back into place — it may cause further damage to the wall or drywall.",
+    "If the fixture is dangling or at risk of falling, carefully remove it and set it aside to avoid injury.",
+    "Check if the mounting hardware (screws, anchors, brackets) is still intact or if it pulled out of the wall.",
+    "Take a photo of the mounting area and the fixture so maintenance can bring the right hardware.",
   ],
   structural_mold: [
     "Improve ventilation in the affected area — open windows or use a fan to circulate air.",
@@ -212,6 +249,26 @@ const SOP_STEPS: Record<string, string[]> = {
     "If a tree or branch poses a safety risk, report as urgent.",
     "Take photos of the issue.",
   ],
+  landscaping_water_pooling: [
+    "Check if the puddle is near a sprinkler head, hose bib, or irrigation line — a broken head or connection can cause pooling.",
+    "Look for any muddy or unusually soft/squishy patches in the soil nearby — this can indicate a slow underground leak.",
+    "Note whether the puddle grows or shrinks throughout the day — if it grows without rain, water is likely coming from a pipe or irrigation source.",
+    "Check if a downspout or gutter is directing water to that spot — it may just need an extender or splash block.",
+    "Take a photo showing the puddle and surrounding area, and note approximately how large it is.",
+  ],
+  landscaping_tree_hazard: [
+    "Do NOT attempt to cut or remove the branch yourself — especially near power lines or structures.",
+    "If the tree or branch is blocking a path, doorway, or parking area, avoid the area until it's addressed.",
+    "Note whether the tree appears diseased (unusual leaf loss, fungus, or leaning).",
+    "Take a photo of the hazard from a safe distance so maintenance can assess priority.",
+  ],
+  landscaping_irrigation: [
+    "Check if a specific sprinkler head is broken, tilted, or spraying in the wrong direction.",
+    "Note which zone or area of the yard is affected (front, back, side, specific bed).",
+    "If there's flooding from the irrigation, look for the zone shut-off valve and turn it off if accessible.",
+    "Note the time of day the irrigation runs and whether the issue happens every cycle.",
+    "Take a photo of the affected sprinkler head or flooded area.",
+  ],
   general: [
     "Describe the issue in as much detail as possible.",
     "Take photos if applicable.",
@@ -241,7 +298,8 @@ export function getFallbackSOP(
   category: string,
   isEmergency: boolean,
   subcategory?: string | null,
-  equipment?: string | null
+  equipment?: string | null,
+  symptom?: string | null
 ): SOPResult {
   let lookupKey = category;
   if (category === "pest_control" && subcategory) {
@@ -260,10 +318,19 @@ export function getFallbackSOP(
   if (category === "structural" && subcategory === "window") {
     lookupKey = "structural_window";
   }
+  // Fixture-specific SOP: structural + fixture subcategory
+  if (category === "structural" && subcategory === "fixture") {
+    lookupKey = "structural_fixture";
+  }
   // Plumbing-specific SOP: plumbing + problem type subcategory
   const PLUMBING_SUBTYPES = ["leak", "clog", "broken_fixture", "running_toilet", "no_hot_water", "water_pressure"];
   if (category === "plumbing" && subcategory && PLUMBING_SUBTYPES.includes(subcategory)) {
     lookupKey = `plumbing_${subcategory}`;
+  }
+  // Landscaping-specific SOP: landscaping + problem type subcategory
+  const LANDSCAPING_SUBTYPES = ["water_pooling", "tree_hazard", "irrigation"];
+  if (category === "landscaping" && subcategory && LANDSCAPING_SUBTYPES.includes(subcategory)) {
+    lookupKey = `landscaping_${subcategory}`;
   }
   // Equipment-specific SOP: e.g. "appliance:range hood"
   // Resolve aliases so "stove" → "oven" → "appliance:oven"
@@ -272,6 +339,22 @@ export function getFallbackSOP(
     const equipmentKey = `${category}:${canonical}`;
     if (SOP_STEPS[equipmentKey]) {
       lookupKey = equipmentKey;
+    }
+  }
+  // Symptom-specific SOP: highest priority
+  // Priority: category:equipment:symptom > category_symptom > category:equipment > category
+  if (symptom && equipment) {
+    const canonical = getCanonicalEquipment(equipment);
+    const symptomKey = `${category}:${canonical}:${symptom}`;
+    if (SOP_STEPS[symptomKey]) {
+      lookupKey = symptomKey;
+    }
+  }
+  if (symptom && !lookupKey.includes(":") && lookupKey === category) {
+    // No equipment-specific key was found, try category_symptom
+    const categorySymptomKey = `${category}_${symptom}`;
+    if (SOP_STEPS[categorySymptomKey]) {
+      lookupKey = categorySymptomKey;
     }
   }
   const categorySteps = SOP_STEPS[lookupKey] ?? SOP_STEPS.general;

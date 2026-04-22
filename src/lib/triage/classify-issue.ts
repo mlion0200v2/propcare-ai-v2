@@ -46,7 +46,6 @@ const KEYWORD_RULES: KeywordRule[] = [
   { category: "plumbing", weight: 9, patterns: [/\b(pipe|pipes|plumb|drain|clog|clogged|backed up|backup|sewer|sewage)\b/i] },
   { category: "plumbing", weight: 8, patterns: [/\b(water heater|hot water|no hot water|water pressure)\b/i] },
   { category: "plumbing", weight: 7, patterns: [/\b(flood|flooding|flooded|water damage)\b/i] },
-  { category: "plumbing", weight: 6, patterns: [/\b(garbage disposal|disposal)\b/i] },
 
   // Electrical
   { category: "electrical", weight: 10, patterns: [/\b(outlet|outlets|socket|plug|electrical)\b/i] },
@@ -59,6 +58,7 @@ const KEYWORD_RULES: KeywordRule[] = [
   // HVAC
   { category: "hvac", weight: 10, patterns: [/\b(hvac|furnace|heater|heating)\b/i] },
   { category: "hvac", weight: 10, patterns: [/\b(air condition|ac unit|a\/c|air handler|condenser)\b/i] },
+  { category: "hvac", weight: 7, patterns: [/\bAC\b/] },  // case-sensitive bare "AC"
   { category: "hvac", weight: 9, patterns: [/\b(thermostat|temperature|too hot|too cold|no heat|no cooling)\b/i] },
   { category: "hvac", weight: 8, patterns: [/\b(vent|vents|ductwork|ducts|air filter)\b/i] },
 
@@ -71,22 +71,41 @@ const KEYWORD_RULES: KeywordRule[] = [
   { category: "appliance", weight: 12, patterns: [
     /\b(range hood|hood fan|vent hood|exhaust hood|stove hood|oven hood)\b/i,
   ]},
+  // Garbage disposal: appliance (not plumbing) — compound with symptom wins
+  { category: "appliance", weight: 12, patterns: [
+    /\b(garbage disposal|disposal)\b/i,
+    /\b(jam|jammed|stuck|hum|hums|humming|not working|broken|won't turn|smell|noise)\b/i,
+  ]},
   { category: "appliance", weight: 11, patterns: [
-    /\b(refrigerator|fridge|freezer|dishwasher|oven|stove|range|microwave|washer|dryer|washing machine|range hood)\b/i,
+    /\b(refrigerator|fridge|freezer|dishwasher|oven|stove|range|microwave|washer|dryer|washing machine|range hood|garbage disposal)\b/i,
     /\b(leak|leaking|drip|dripping|oil|grease|water|noise|smell|smoke)\b/i,
   ]},
   // Appliance — noun-only rules
-  { category: "appliance", weight: 10, patterns: [/\b(refrigerator|fridge|freezer|dishwasher|oven|stove|range|microwave|washer|dryer|washing machine|range hood)\b/i] },
+  { category: "appliance", weight: 10, patterns: [/\b(refrigerator|fridge|freezer|dishwasher|oven|stove|range|microwave|washer|dryer|washing machine|range hood|garbage disposal)\b/i] },
   { category: "appliance", weight: 8, patterns: [/\b(appliance|appliances)\b/i] },
 
   // Structural
+  // Window/screen + torn/damaged → structural (beats pest_control "bugs" at 10)
+  { category: "structural", weight: 12, patterns: [
+    /\b(window|screen|screens)\b/i,
+    /\b(torn|ripped|broken|damaged|rip|tear|hole|popped out)\b/i,
+  ]},
+  // Wall-mounted fixture + detachment → structural
+  { category: "structural", weight: 11, patterns: [
+    /\b(curtain rod|towel bar|towel rack|shelf|shelving|cabinet|mirror|blinds|shutter|shutters)\b/i,
+    /\b(falling|fell|loose|detached|coming off|pulled out|broke off|hanging|ripped out|wobbly)\b/i,
+  ]},
   { category: "structural", weight: 9, patterns: [/\b(mold|mildew|mouldy|moldy|moisture|damp|humid|fungus|musty)\b/i] },
   { category: "structural", weight: 10, patterns: [/\b(crack|cracks|cracking|foundation|settling)\b/i] },
   { category: "structural", weight: 9, patterns: [/\b(wall|walls|ceiling|floor)\b/i, /\b(damage|damaged|hole|sagging|bowing|buckling)\b/i] },
   { category: "structural", weight: 8, patterns: [/\b(window|windows|screen|screens|door|doors)\b/i, /\b(broken|stuck|won't close|won't open|jammed|loose|detached|falling|off track|coming off|torn|ripped)\b/i] },
   { category: "structural", weight: 7, patterns: [/\b(stair|stairs|railing|balcony|deck|porch)\b/i] },
 
-  // Pest control
+  // Pest control — compound rules beat plumbing fixture tie (e.g. "ants near the sink")
+  { category: "pest_control", weight: 12, patterns: [
+    /\b(ant|ants|roach|roaches|cockroach|mice|mouse|rat|rats|spider|spiders|bed ?bug|termite|termites)\b/i,
+    /\b(see|seeing|found|noticed|keep|kitchen|bathroom|bedroom|sink|counter|cabinet|floor|wall|corner)\b/i,
+  ]},
   { category: "pest_control", weight: 10, patterns: [/\b(pest|pests|bug|bugs|insect|insects|roach|roaches|cockroach|ant|ants|mice|mouse|rat|rats|rodent|spider|spiders|bed ?bug|termite|termites)\b/i] },
   { category: "pest_control", weight: 8, patterns: [/\b(infestation|exterminator|droppings)\b/i] },
 
@@ -94,6 +113,12 @@ const KEYWORD_RULES: KeywordRule[] = [
   { category: "locksmith", weight: 10, patterns: [/\b(lock|locked|lockout|locked out|key|keys|deadbolt)\b/i] },
 
   // Roofing
+  // Ceiling + drip/leak + rain → roofing (beats plumbing "dripping" at 10)
+  { category: "roofing", weight: 12, patterns: [
+    /\b(ceiling)\b/i,
+    /\b(leak|leaking|drip|dripping|water|stain)\b/i,
+    /\b(rain|rains|raining|storm|storms|stormy|weather)\b/i,
+  ]},
   { category: "roofing", weight: 10, patterns: [/\b(roof|roofing|shingle|shingles|gutter|gutters)\b/i] },
   { category: "roofing", weight: 8, patterns: [/\b(ceiling)\b/i, /\b(leak|leaking|stain|water)\b/i] },
 
@@ -316,6 +341,158 @@ export function classifyPlumbing(text: string): string | null {
  */
 export function classifyStructural(text: string): string | null {
   if (/\b(window|windows|screen|screens)\b/i.test(text)) return "window";
+  if (/\b(curtain rod|towel bar|towel rack|shelf|shelving|cabinet door|mirror|blinds|shutter|shutters)\b/i.test(text)) return "fixture";
+  return null;
+}
+
+// ── Appliance symptom classification ──
+
+/**
+ * Classify appliance symptom type from text.
+ * Returns null if no specific symptom identified.
+ */
+export function classifyApplianceSymptom(text: string): string | null {
+  if (/\b(noise|noisy|loud|vibrat|humming|hum|buzzing|buzz|rattling|rattle|grinding|clunking|banging|knocking)\b/i.test(text)) return "noise";
+  if (/\b(leak|leaking|leaky|drip|dripping|water on|puddle)\b/i.test(text)) return "leak";
+  if (/\b(not cooling|not cold|warm|temperature|too warm|not freezing|food spoil)\b/i.test(text)) return "temperature";
+  if (/\b(smell|odor|burning smell|burnt|smoky)\b/i.test(text)) return "smell";
+  if (/\b(won't start|not working|dead|doesn't turn on|won't turn on|no power|stopped working)\b/i.test(text)) return "not_working";
+  return null;
+}
+
+// ── HVAC symptom classification ──
+
+/**
+ * Classify HVAC symptom type from text.
+ * Returns null if no specific symptom identified.
+ */
+export function classifyHvacSymptom(text: string): string | null {
+  if (/\b(noise|noisy|loud|vibrat|humming|hum|buzzing|buzz|rattling|rattle|grinding|clunking|banging|knocking)\b/i.test(text)) return "noise";
+  if (/\b(not cooling|not heating|too hot|too cold|no heat|no cooling|warm|temperature)\b/i.test(text)) return "temperature";
+  if (/\b(smell|odor|burning|burnt|musty)\b/i.test(text)) return "smell";
+  if (/\b(won't start|not working|not running|dead|doesn't turn on|won't turn on|no power|stopped working)\b/i.test(text)) return "not_working";
+  return null;
+}
+
+// ── Category correction parsing ──
+
+// Human-friendly aliases for category names
+const CATEGORY_NAME_ALIASES: Record<string, IssueCategory> = {
+  "plumbing": "plumbing",
+  "electrical": "electrical",
+  "electric": "electrical",
+  "hvac": "hvac",
+  "heating": "hvac",
+  "cooling": "hvac",
+  "air conditioning": "hvac",
+  "appliance": "appliance",
+  "structural": "structural",
+  "pest control": "pest_control",
+  "pest": "pest_control",
+  "pests": "pest_control",
+  "locksmith": "locksmith",
+  "lock": "locksmith",
+  "roofing": "roofing",
+  "roof": "roofing",
+  "painting": "painting",
+  "paint": "painting",
+  "flooring": "flooring",
+  "floor": "flooring",
+  "landscaping": "landscaping",
+  "landscape": "landscaping",
+  "general": "general",
+};
+
+/**
+ * Parse a category correction from a tenant's message during CONFIRM_SUMMARY.
+ *
+ * Handles patterns like:
+ *   "it's a plumbing issue instead of landscaping"
+ *   "it should be plumbing"
+ *   "actually it's plumbing"
+ *   "change category to plumbing"
+ *   "plumbing, not landscaping"
+ *
+ * Returns the corrected category, or null if no correction detected.
+ * Uses direct category name matching to avoid keyword confusion
+ * (e.g., "it's plumbing instead of landscaping" should match "plumbing",
+ * not "landscaping" which also appears in the message).
+ */
+export function parseCategoryCorrection(
+  message: string,
+  currentCategory: string
+): IssueCategory | null {
+  const lower = message.toLowerCase().trim();
+
+  // Pattern: "it's [a] X [issue] instead of Y" / "X, not Y" / "X not Y"
+  // Also handles: "i think it might be X instead of Y", "it could be X not Y"
+  // Extract X (the desired category) — appears BEFORE "instead of" / "not"
+  const insteadMatch = lower.match(
+    /(?:it'?s\s+(?:an?\s+)?|should\s+be\s+|actually\s+(?:an?\s+)?|change\s+(?:it\s+)?(?:to\s+)?|(?:i\s+think\s+)?(?:it\s+)?(?:might|could|may)\s+be\s+(?:an?\s+)?|(?:i\s+think\s+)?maybe\s+(?:it'?s\s+)?(?:an?\s+)?)([\w\s]+?)(?:\s+issue)?\s+(?:instead\s+of|not|rather\s+than)\b/i
+  );
+  if (insteadMatch) {
+    const candidate = insteadMatch[1].trim();
+    const mapped = CATEGORY_NAME_ALIASES[candidate];
+    if (mapped && mapped !== currentCategory) return mapped;
+  }
+
+  // Pattern: "X, not Y" — X appears before comma+not
+  const commaNotMatch = lower.match(/^([\w\s]+?),?\s+not\s+/i);
+  if (commaNotMatch) {
+    const candidate = commaNotMatch[1].trim();
+    const mapped = CATEGORY_NAME_ALIASES[candidate];
+    if (mapped && mapped !== currentCategory) return mapped;
+  }
+
+  // Pattern: "it's [a/an] X [issue]" / "should be X" / "actually X" / "change to X"
+  // Also handles: "i think it might be X", "it could be X", "maybe it's X"
+  const assertionMatch = lower.match(
+    /(?:it'?s\s+(?:an?\s+)?|should\s+be\s+(?:an?\s+)?|actually\s+(?:an?\s+)?|change\s+(?:it\s+)?(?:to\s+)?(?:an?\s+)?|(?:i\s+think\s+)?(?:it\s+)?(?:might|could|may)\s+be\s+(?:an?\s+)?|(?:i\s+think\s+)?maybe\s+(?:it'?s\s+)?(?:an?\s+)?)([\w\s]+?)(?:\s+issue)?$/i
+  );
+  if (assertionMatch) {
+    const candidate = assertionMatch[1].trim();
+    const mapped = CATEGORY_NAME_ALIASES[candidate];
+    if (mapped && mapped !== currentCategory) return mapped;
+  }
+
+  // Fallback: scan for any category name mentioned that differs from current
+  // (only if the message also contains a correction signal word)
+  const hasCorrectionSignal = /\b(instead|actually|should|change|correct|wrong|not right|mistake|think|might be|could be|maybe)\b/i.test(lower);
+  if (hasCorrectionSignal) {
+    // Check category names in order (longest-first to avoid partial matches)
+    const sortedAliases = Object.entries(CATEGORY_NAME_ALIASES)
+      .sort((a, b) => b[0].length - a[0].length);
+    for (const [alias, category] of sortedAliases) {
+      if (category === currentCategory) continue;
+      // Also skip if the current category name appears (to avoid "landscaping" in "not landscaping")
+      const currentAliases = Object.entries(CATEGORY_NAME_ALIASES)
+        .filter(([, c]) => c === currentCategory)
+        .map(([a]) => a);
+      if (currentAliases.includes(alias)) continue;
+
+      const idx = lower.indexOf(alias);
+      if (idx === -1) continue;
+      const before = idx === 0 || /[\s,.'"\-!(]/.test(lower[idx - 1]);
+      const afterIdx = idx + alias.length;
+      const after = afterIdx >= lower.length || /[\s,.'"\-!)?]/.test(lower[afterIdx]);
+      if (before && after) return category;
+    }
+  }
+
+  return null;
+}
+
+// ── Landscaping subcategory classification ──
+
+/**
+ * Classify landscaping subcategory from text.
+ * Returns null if no specific landscaping problem type identified.
+ */
+export function classifyLandscaping(text: string): string | null {
+  // Irrigation-specific equipment checked first (sprinkler + flooding = irrigation, not water_pooling)
+  if (/\b(sprinkler|irrigation|drip line|spray head|hose bib)\b/i.test(text)) return "irrigation";
+  if (/\b(puddle|pooling|standing water|soggy|flooded|flooding|wet area|water collecting)\b/i.test(text)) return "water_pooling";
+  if (/\b(tree|branch|limb|fallen|leaning|dead tree|overgrown)\b/i.test(text)) return "tree_hazard";
   return null;
 }
 

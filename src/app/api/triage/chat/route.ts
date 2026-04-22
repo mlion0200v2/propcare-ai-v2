@@ -33,7 +33,7 @@ import {
   TENANT_INFO_QUESTIONS,
   QUESTIONS,
 } from "@/lib/triage/state-machine";
-import { extractLocation, extractTiming, extractCurrentStatus, extractEntryPoint, extractEquipment, detectEquipmentCorrection, inferLocationFromEquipment, getEquipmentCategory } from "@/lib/triage/extract-details";
+import { extractLocation, extractTiming, extractCurrentStatus, extractEntryPoint, extractEquipment, detectEquipmentCorrection, inferLocationFromEquipment, getEquipmentCategory, detectEquipmentAmbiguity } from "@/lib/triage/extract-details";
 import { logTriageStep, logError, logWarn } from "@/lib/triage/logger";
 import { sendTicketSummaryEmail, getManagerEmailForTicket } from "@/lib/email/send-ticket-email";
 import {
@@ -50,7 +50,11 @@ import {
   classifyMold,
   classifyPlumbing,
   classifyStructural,
+  classifyApplianceSymptom,
+  classifyHvacSymptom,
+  classifyLandscaping,
   parseClarifyingResponse,
+  parseCategoryCorrection,
   buildClarifyingCategoryQuestion,
 } from "@/lib/triage/classify-issue";
 import {
@@ -59,8 +63,8 @@ import {
   checkPestEscalation,
 } from "@/lib/triage/detect-safety";
 import { querySnippets } from "@/lib/retrieval/pinecone";
-import { generateGroundedSteps, convertToGuidedSteps, shouldUseGuidedTroubleshooting, filterStepsByEquipment } from "@/lib/triage/grounding";
-import { generateTicketSummary } from "@/lib/triage/summary";
+import { generateGroundedSteps, generateWebSearchSteps, convertToGuidedSteps, shouldUseGuidedTroubleshooting, filterStepsByEquipment } from "@/lib/triage/grounding";
+import { generateTicketSummary, generateTenantSummary } from "@/lib/triage/summary";
 import { validateGroundedResult } from "@/lib/triage/validate";
 import { getFallbackSOP } from "@/lib/triage/sop-fallback";
 import {
@@ -199,6 +203,7 @@ export async function POST(request: NextRequest) {
       ticket_id?: string;
       confirm_profile?: string;
       media_action?: string;
+      confirm_summary?: string;
     };
     try {
       body = await request.json();
@@ -207,8 +212,8 @@ export async function POST(request: NextRequest) {
     }
 
     const message = body.message?.trim();
-    // message is required unless this is a confirm_profile or media_action
-    if (!message && !body.confirm_profile && !body.media_action) {
+    // message is required unless this is a confirm_profile, media_action, or confirm_summary
+    if (!message && !body.confirm_profile && !body.media_action && !body.confirm_summary) {
       return NextResponse.json(
         { error: "message is required" },
         { status: 400 }
@@ -234,6 +239,7 @@ export async function POST(request: NextRequest) {
       message ?? "",
       body.confirm_profile,
       body.media_action,
+      body.confirm_summary,
       start
     );
   } catch (err: unknown) {
@@ -319,6 +325,24 @@ async function handleFirstMessage(
     ? classifyStructural(message)
     : null;
 
+  // ── Appliance symptom subcategory ──
+  const applianceSymptom = classification_result.category === "appliance"
+    ? classifyApplianceSymptom(message)
+    : null;
+
+  // ── HVAC symptom subcategory ──
+  const hvacSymptom = classification_result.category === "hvac"
+    ? classifyHvacSymptom(message)
+    : null;
+
+  // ── Landscaping subcategory ──
+  const landscapingResult = classification_result.category === "landscaping"
+    ? classifyLandscaping(message)
+    : null;
+
+  // ── Multi-equipment ambiguity ──
+  const { candidates: equipmentCandidates } = detectEquipmentAmbiguity(message);
+
   // ── Build acknowledgement ──
   const acknowledgement = buildAcknowledgement(message, {
     timing: extractedTiming,
@@ -365,11 +389,23 @@ async function handleFirstMessage(
     if (structuralResult) {
       initialGathered.subcategory = structuralResult;
     }
+    if (applianceSymptom) {
+      initialGathered.subcategory = applianceSymptom;
+    }
+    if (hvacSymptom) {
+      initialGathered.subcategory = hvacSymptom;
+    }
+    if (landscapingResult) {
+      initialGathered.subcategory = landscapingResult;
+    }
     if (extractedEntryPoint) {
       initialGathered.entry_point = extractedEntryPoint;
     }
     if (extractedEquipment) {
       initialGathered.equipment = extractedEquipment;
+    }
+    if (equipmentCandidates.length > 0) {
+      initialGathered.equipment_candidates = equipmentCandidates;
     }
 
     if (classification_result.confidence === "low") {
@@ -441,11 +477,23 @@ async function handleFirstMessage(
     if (structuralResult) {
       initialGathered.subcategory = structuralResult;
     }
+    if (applianceSymptom) {
+      initialGathered.subcategory = applianceSymptom;
+    }
+    if (hvacSymptom) {
+      initialGathered.subcategory = hvacSymptom;
+    }
+    if (landscapingResult) {
+      initialGathered.subcategory = landscapingResult;
+    }
     if (extractedEntryPoint) {
       initialGathered.entry_point = extractedEntryPoint;
     }
     if (extractedEquipment) {
       initialGathered.equipment = extractedEquipment;
+    }
+    if (equipmentCandidates.length > 0) {
+      initialGathered.equipment_candidates = equipmentCandidates;
     }
 
     const tenantInfo = {
@@ -561,6 +609,7 @@ async function handleFollowUp(
   message: string,
   confirmProfile: string | undefined,
   mediaAction: string | undefined,
+  confirmSummary: string | undefined,
   start: number
 ) {
   // Load ticket
@@ -588,6 +637,110 @@ async function handleFollowUp(
   }
 
   const stored = (ticket.classification ?? {}) as unknown as TriageClassification;
+
+  // ── CONFIRM_SUMMARY branch ──
+  if (ticket.triage_state === "CONFIRM_SUMMARY") {
+    const summaryAction = confirmSummary ?? message;
+    const isConfirm = confirmSummary === "confirm" ||
+      /\b(yes|yeah|yep|looks good|correct|confirm|that's right|right|good|submit)\b/i.test(summaryAction);
+
+    // Insert user message
+    const userText = isConfirm ? "Looks good, submit" : summaryAction;
+    await supabase.from("messages").insert({
+      ticket_id: ticket.id,
+      sender_id: userId,
+      body: userText,
+      is_bot_reply: false,
+    });
+
+    if (isConfirm) {
+      // Proceed to DONE — run the full final completion logic
+      return handleFinalCompletion(supabase, userId, ticket, stored, start);
+    } else {
+      // Tenant typed a correction — try to extract updated fields
+      const gathered = stored.gathered ?? buildInitialGathered();
+
+      const newLocation = extractLocation(summaryAction);
+      if (newLocation) gathered.location_in_unit = newLocation;
+
+      const newTiming = extractTiming(summaryAction);
+      if (newTiming) gathered.started_when = newTiming;
+
+      const newStatus = extractCurrentStatus(summaryAction);
+      if (newStatus) gathered.current_status = newStatus;
+
+      const newEquipment = extractEquipment(summaryAction);
+      if (newEquipment) gathered.equipment = newEquipment;
+
+      // Re-classify using correction-aware parser (handles "it's X instead of Y")
+      const correctedCategory = parseCategoryCorrection(summaryAction, gathered.category ?? "general");
+      if (correctedCategory) {
+        gathered.category = correctedCategory;
+        gathered.subcategory = null; // Reset subcategory when category changes
+      }
+
+      // Re-check emergency
+      if (hasEmergencyKeywords(summaryAction)) {
+        gathered.is_emergency = true;
+      }
+
+      // Re-generate tenant summary with corrections
+      const { count: corrMediaCount } = await supabase
+        .from("ticket_media")
+        .select("id", { count: "exact", head: true })
+        .eq("ticket_id", ticket.id);
+
+      const updatedSummary = generateTenantSummary({
+        description: ticket.description,
+        gathered,
+        mediaCount: corrMediaCount ?? 0,
+        guidedOutcome: stored.guided_troubleshooting?.outcome,
+      });
+
+      const correctionClassification: TriageClassification = {
+        ...stored,
+        gathered,
+      };
+
+      const { error: corrUpdateErr } = await supabase
+        .from("tickets")
+        .update({
+          triage_state: "CONFIRM_SUMMARY",
+          classification: correctionClassification as unknown as Json,
+        })
+        .eq("id", ticket.id)
+        .select("id")
+        .single();
+      if (corrUpdateErr) {
+        logError("chat_confirm_summary_correction_update", corrUpdateErr, { ticketId: ticket.id });
+      }
+
+      const corrReply = "Got it, I've updated your report.\n\n" + updatedSummary;
+
+      await supabase.from("messages").insert({
+        ticket_id: ticket.id,
+        sender_id: userId,
+        body: corrReply,
+        is_bot_reply: true,
+      });
+
+      logTriageStep({
+        trace_id: ticket.trace_id ?? ticket.id,
+        ticket_id: ticket.id,
+        triage_state: "CONFIRM_SUMMARY",
+        action: "summary_correction",
+        latency_ms: Date.now() - start,
+        timestamp: new Date().toISOString(),
+      });
+
+      return NextResponse.json({
+        ticket_id: ticket.id,
+        reply: corrReply,
+        triage_state: "CONFIRM_SUMMARY",
+        is_complete: false,
+      });
+    }
+  }
 
   // ── CONFIRM_PROFILE branch ──
   if (ticket.triage_state === "CONFIRM_PROFILE") {
@@ -656,6 +809,9 @@ async function handleFollowUp(
       }
       if (stored.gathered?.equipment) {
         gatheredWithCategory.equipment = stored.gathered.equipment;
+      }
+      if (stored.gathered?.equipment_candidates) {
+        gatheredWithCategory.equipment_candidates = stored.gathered.equipment_candidates;
       }
 
       // If fields were pre-extracted, find the actual next question (base or extended)
@@ -1469,6 +1625,24 @@ async function handleFollowUp(
     if (structural) gathered.subcategory = structural;
   }
 
+  // 2g. Classify appliance symptom if appliance and not yet classified
+  if (gathered.category === "appliance" && !gathered.subcategory) {
+    const symptom = classifyApplianceSymptom(message);
+    if (symptom) gathered.subcategory = symptom;
+  }
+
+  // 2h. Classify HVAC symptom if hvac and not yet classified
+  if (gathered.category === "hvac" && !gathered.subcategory) {
+    const symptom = classifyHvacSymptom(message);
+    if (symptom) gathered.subcategory = symptom;
+  }
+
+  // 2i. Classify landscaping subcategory if landscaping and not yet classified
+  if (gathered.category === "landscaping" && !gathered.subcategory) {
+    const landscaping = classifyLandscaping(message);
+    if (landscaping) gathered.subcategory = landscaping;
+  }
+
   // 3. Check if ALL fields (base + extended) are complete
   if (!isGatherComplete(gathered)) {
     // Determine what to ask next
@@ -1850,7 +2024,7 @@ async function handleRetrievalAndCompletion(
     );
   } catch (err) {
     logError("chat_grounding", err, { ticketId: ticket.id });
-    const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment);
+    const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment, gathered.subcategory);
     groundedResult = {
       reply: sop.display,
       steps: sop.steps,
@@ -1935,37 +2109,63 @@ async function handleRetrievalAndCompletion(
     }
 
     if (validation.missing_citations) {
-      const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment);
-      groundedResult = {
-        reply: sop.display,
-        steps: sop.steps,
-        usedFallback: true,
-      };
-      validation = { ...validation, action_taken: "fallback_sop" };
+      // Try web search before falling back to hardcoded SOP
+      const webResult = await generateWebSearchSteps(gathered, isEmergency);
+      if (webResult) {
+        groundedResult = webResult;
+        validation = { ...validation, action_taken: "web_search_fallback" };
+      } else {
+        const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment, gathered.subcategory);
+        groundedResult = {
+          reply: sop.display,
+          steps: sop.steps,
+          usedFallback: true,
+        };
+        validation = { ...validation, action_taken: "fallback_sop" };
+      }
     } else if (validation.domain_mismatch) {
-      logWarn("chat_domain_mismatch", "Domain mismatch detected — falling back to category SOP", {
+      logWarn("chat_domain_mismatch", "Domain mismatch detected — trying web search before SOP fallback", {
         ticketId: ticket.id,
         category: gathered.category,
         reasons: validation.reasons.filter((r: string) => r.startsWith("domain_mismatch")),
       });
-      const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment);
-      groundedResult = {
-        reply: sop.display,
-        steps: sop.steps,
-        usedFallback: true,
-      };
-      validation = { ...validation, action_taken: "fallback_sop" };
+      // Try web search before falling back to hardcoded SOP
+      const webResult = await generateWebSearchSteps(gathered, isEmergency);
+      if (webResult) {
+        groundedResult = webResult;
+        validation = { ...validation, action_taken: "web_search_fallback" };
+      } else {
+        const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment, gathered.subcategory);
+        groundedResult = {
+          reply: sop.display,
+          steps: sop.steps,
+          usedFallback: true,
+        };
+        validation = { ...validation, action_taken: "fallback_sop" };
+      }
     } else if (validation.low_confidence) {
-      const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment);
-      const disclaimer =
-        "Note: We could not find a high-confidence match in our knowledge base for your specific issue. " +
-        "Here are general troubleshooting steps for this category:\n\n";
-      groundedResult = {
-        reply: disclaimer + sop.display,
-        steps: sop.steps,
-        usedFallback: true,
-      };
-      validation = { ...validation, action_taken: "fallback_sop_with_disclaimer" };
+      // Don't override web search results — they're already internet-grounded
+      if (groundedResult.usedWebSearch) {
+        validation = { ...validation, action_taken: "none", low_confidence: false };
+      } else {
+        // Try web search before falling back to hardcoded SOP
+        const webResult = await generateWebSearchSteps(gathered, isEmergency);
+        if (webResult) {
+          groundedResult = webResult;
+          validation = { ...validation, action_taken: "web_search_fallback" };
+        } else {
+          const sop = getFallbackSOP(gathered.category ?? "general", isEmergency, gathered.subcategory, gathered.equipment, gathered.subcategory);
+          const disclaimer =
+            "Note: We could not find a high-confidence match in our knowledge base for your specific issue. " +
+            "Here are general troubleshooting steps for this category:\n\n";
+          groundedResult = {
+            reply: disclaimer + sop.display,
+            steps: sop.steps,
+            usedFallback: true,
+          };
+          validation = { ...validation, action_taken: "fallback_sop_with_disclaimer" };
+        }
+      }
     }
   } else {
     validation = { ...validation, action_taken: "none" };
@@ -2054,28 +2254,20 @@ async function handleRetrievalAndCompletion(
     } // shouldUseGuidedTroubleshooting
   }
 
-  // Summary (with idempotency check)
-  let summary = stored.summary ?? null;
-  if (!summary) {
-    const { count: mediaCount } = await supabase
-      .from("ticket_media")
-      .select("id", { count: "exact", head: true })
-      .eq("ticket_id", ticket.id);
+  // ── Transition to CONFIRM_SUMMARY instead of DONE ──
+  // Store all enrichments so handleFinalCompletion can use them when tenant confirms.
+  const { count: mediaCount } = await supabase
+    .from("ticket_media")
+    .select("id", { count: "exact", head: true })
+    .eq("ticket_id", ticket.id);
 
-    summary = generateTicketSummary({
-      ticketId: ticket.id,
-      traceId,
-      description: ticket.description,
-      gathered,
-      tenantInfo: stored.tenant_info,
-      steps: groundedResult.steps,
-      mediaCount: mediaCount ?? 0,
-      timestamp: new Date().toISOString(),
-    });
-  }
+  const tenantSummary = generateTenantSummary({
+    description: ticket.description,
+    gathered,
+    mediaCount: mediaCount ?? 0,
+  });
 
-  // Persist DONE state with all enrichments
-  const doneClassification: TriageClassification = {
+  const confirmClassification: TriageClassification = {
     gathered,
     current_question: null,
     tenant_info: stored.tenant_info,
@@ -2084,42 +2276,39 @@ async function handleRetrievalAndCompletion(
     media_refs: stored.media_refs,
     retrieval: retrievalLog ?? undefined,
     validation,
-    summary,
   };
 
-  const { error: doneUpdateErr } = await supabase
+  const { error: confirmUpdateErr } = await supabase
     .from("tickets")
     .update({
-      triage_state: "DONE",
-      classification: doneClassification as unknown as Json,
+      triage_state: "CONFIRM_SUMMARY",
+      classification: confirmClassification as unknown as Json,
+      // Pre-set ticket fields so they're visible even before final DONE
       category: (gathered.category ?? "general") as Database["public"]["Enums"]["ticket_category"],
-      priority: isEmergency ? "emergency" : "medium",
-      status: isEmergency ? "escalated" : "open",
-      safety_assessment: isEmergency
-        ? ({ flagged: true, reason: "emergency_detected" } as unknown as Json)
-        : null,
       troubleshooting_steps: groundedResult.steps as unknown as Json,
     })
     .eq("id", ticket.id)
     .select("id")
     .single();
-  if (doneUpdateErr) {
-    logError("chat_done_update", doneUpdateErr, { ticketId: ticket.id });
+  if (confirmUpdateErr) {
+    logError("chat_confirm_summary_update", confirmUpdateErr, { ticketId: ticket.id });
   }
 
-  // Insert bot reply AFTER state is persisted
+  // Send troubleshooting steps first, then tenant summary
+  const combinedReply = groundedResult.reply + "\n\n---\n\n" + tenantSummary;
+
   await supabase.from("messages").insert({
     ticket_id: ticket.id,
     sender_id: userId,
-    body: groundedResult.reply,
+    body: combinedReply,
     is_bot_reply: true,
   });
 
   logTriageStep({
     trace_id: traceId,
     ticket_id: ticket.id,
-    triage_state: "DONE",
-    action: "triage_complete",
+    triage_state: "CONFIRM_SUMMARY",
+    action: "confirm_summary_shown",
     latency_ms: Date.now() - start,
     timestamp: new Date().toISOString(),
     metadata: {
@@ -2129,33 +2318,16 @@ async function handleRetrievalAndCompletion(
       retrieval_matches: retrievalLog?.matches.length ?? 0,
       used_fallback: groundedResult.usedFallback,
       used_web_search: groundedResult.usedWebSearch ?? false,
-      has_summary: !!summary,
       validation_valid: validation.is_valid,
       validation_action: validation.action_taken,
     },
   });
 
-  // Email PM (awaited so serverless doesn't terminate before send completes)
-  const pmEmail = await getManagerEmailForTicket(ticket.id, ticket.unit_id, stored.tenant_info?.reported_address);
-  if (pmEmail) {
-    const emailResult = await sendTicketSummaryEmail({
-      to: pmEmail,
-      ticketId: ticket.id,
-      ticketTitle: ticket.description?.slice(0, 80) ?? ticket.id,
-      summary: summary ?? doneClassification.summary ?? "",
-      isEmergency,
-      category: gathered.category ?? "general",
-    });
-    if (!emailResult.success) {
-      logError("email_send_failed", emailResult.error, { ticketId: ticket.id });
-    }
-  }
-
   return NextResponse.json({
     ticket_id: ticket.id,
-    reply: groundedResult.reply,
-    triage_state: "DONE",
-    is_complete: true,
+    reply: combinedReply,
+    triage_state: "CONFIRM_SUMMARY",
+    is_complete: false,
   });
 }
 
@@ -2173,36 +2345,21 @@ async function handleGuidedComplete(
 ) {
   const traceId = ticket.trace_id ?? ticket.id;
   const gathered = stored.gathered ?? buildInitialGathered();
-  const isEmergency = gathered.is_emergency ?? false;
 
-  // Generate summary
+  // Generate tenant-facing summary for confirmation
   const { count: mediaCount } = await supabase
     .from("ticket_media")
     .select("id", { count: "exact", head: true })
     .eq("ticket_id", ticket.id);
 
-  // Collect completed steps for summary
-  const completedSteps = guidedState.steps.map((s) => ({
-    step: s.index + 1,
-    description: s.description,
-    completed: guidedState.log.some(
-      (l) => l.step_index === s.index && l.result !== null
-    ),
-  }));
-
-  const summary = generateTicketSummary({
-    ticketId: ticket.id,
-    traceId,
+  const tenantSummary = generateTenantSummary({
     description: ticket.description,
     gathered,
-    tenantInfo: stored.tenant_info,
-    steps: completedSteps,
     mediaCount: mediaCount ?? 0,
-    timestamp: new Date().toISOString(),
-    guidedState,
+    guidedOutcome: guidedState.outcome,
   });
 
-  const doneClassification: TriageClassification = {
+  const confirmClassification: TriageClassification = {
     gathered,
     current_question: null,
     tenant_info: stored.tenant_info,
@@ -2212,6 +2369,109 @@ async function handleGuidedComplete(
     retrieval: stored.retrieval,
     validation: stored.validation,
     guided_troubleshooting: guidedState,
+  };
+
+  const { error: confirmUpdateErr } = await supabase
+    .from("tickets")
+    .update({
+      triage_state: "CONFIRM_SUMMARY",
+      classification: confirmClassification as unknown as Json,
+      // Pre-set ticket fields
+      category: (gathered.category ?? "general") as Database["public"]["Enums"]["ticket_category"],
+      troubleshooting_steps: guidedState.steps.map((s) => ({
+        step: s.index + 1,
+        description: s.description,
+        completed: guidedState.log.some(
+          (l) => l.step_index === s.index && l.result !== null
+        ),
+      })) as unknown as Json,
+    })
+    .eq("id", ticket.id)
+    .select("id")
+    .single();
+  if (confirmUpdateErr) {
+    logError("chat_guided_confirm_summary_update", confirmUpdateErr, { ticketId: ticket.id });
+  }
+
+  // Send guided completion reply + tenant summary
+  const combinedReply = reply + "\n\n---\n\n" + tenantSummary;
+
+  await supabase.from("messages").insert({
+    ticket_id: ticket.id,
+    sender_id: userId,
+    body: combinedReply,
+    is_bot_reply: true,
+  });
+
+  logTriageStep({
+    trace_id: traceId,
+    ticket_id: ticket.id,
+    triage_state: "CONFIRM_SUMMARY",
+    action: "guided_confirm_summary_shown",
+    latency_ms: Date.now() - start,
+    timestamp: new Date().toISOString(),
+    metadata: {
+      outcome: guidedState.outcome,
+      steps_presented: guidedState.log.length,
+      total_steps: guidedState.steps.length,
+      is_escalated: isEscalated,
+    },
+  });
+
+  return NextResponse.json({
+    ticket_id: ticket.id,
+    reply: combinedReply,
+    triage_state: "CONFIRM_SUMMARY",
+    is_complete: false,
+  });
+}
+
+// ── Final completion handler (called when tenant confirms summary) ──
+
+async function handleFinalCompletion(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  ticket: { id: string; trace_id: string | null; description: string; triage_state: string; classification: Json | null; unit_id: string | null },
+  stored: TriageClassification,
+  start: number
+) {
+  const traceId = ticket.trace_id ?? ticket.id;
+  const gathered = stored.gathered ?? buildInitialGathered();
+  const isEmergency = gathered.is_emergency ?? false;
+  const guidedState = stored.guided_troubleshooting;
+  const isEscalated = guidedState?.outcome === "escalated";
+
+  // Generate manager-facing summary
+  const { count: mediaCount } = await supabase
+    .from("ticket_media")
+    .select("id", { count: "exact", head: true })
+    .eq("ticket_id", ticket.id);
+
+  let steps: import("@/lib/triage/types").TroubleshootingStep[] = [];
+  if (guidedState) {
+    steps = guidedState.steps.map((s) => ({
+      step: s.index + 1,
+      description: s.description,
+      completed: guidedState.log.some(
+        (l) => l.step_index === s.index && l.result !== null
+      ),
+    }));
+  }
+
+  const summary = stored.summary ?? generateTicketSummary({
+    ticketId: ticket.id,
+    traceId,
+    description: ticket.description,
+    gathered,
+    tenantInfo: stored.tenant_info,
+    steps,
+    mediaCount: mediaCount ?? 0,
+    timestamp: new Date().toISOString(),
+    guidedState,
+  });
+
+  const doneClassification: TriageClassification = {
+    ...stored,
     summary,
   };
 
@@ -2229,26 +2489,20 @@ async function handleGuidedComplete(
       safety_assessment: isEmergency
         ? ({ flagged: true, reason: "emergency_detected" } as unknown as Json)
         : null,
-      troubleshooting_steps: guidedState.steps.map((s) => ({
-        step: s.index + 1,
-        description: s.description,
-        completed: guidedState.log.some(
-          (l) => l.step_index === s.index && l.result !== null
-        ),
-      })) as unknown as Json,
     })
     .eq("id", ticket.id)
     .select("id")
     .single();
   if (doneUpdateErr) {
-    logError("chat_guided_complete_update", doneUpdateErr, { ticketId: ticket.id });
+    logError("chat_final_completion_update", doneUpdateErr, { ticketId: ticket.id });
   }
 
-  // Insert bot reply
+  const confirmReply = "Your report has been submitted. Your property manager has been notified and will follow up with you.";
+
   await supabase.from("messages").insert({
     ticket_id: ticket.id,
     sender_id: userId,
-    body: reply,
+    body: confirmReply,
     is_bot_reply: true,
   });
 
@@ -2256,26 +2510,23 @@ async function handleGuidedComplete(
     trace_id: traceId,
     ticket_id: ticket.id,
     triage_state: "DONE",
-    action: "guided_complete",
+    action: "triage_complete",
     latency_ms: Date.now() - start,
     timestamp: new Date().toISOString(),
     metadata: {
-      outcome: guidedState.outcome,
-      steps_presented: guidedState.log.length,
-      total_steps: guidedState.steps.length,
-      is_escalated: isEscalated,
+      confirmed_by_tenant: true,
     },
   });
 
-  // Email PM (awaited so serverless doesn't terminate before send completes)
-  const guidedPmEmail = await getManagerEmailForTicket(ticket.id, ticket.unit_id, stored.tenant_info?.reported_address);
-  if (guidedPmEmail) {
+  // Email PM
+  const pmEmail = await getManagerEmailForTicket(ticket.id, ticket.unit_id, stored.tenant_info?.reported_address);
+  if (pmEmail) {
     const emailResult = await sendTicketSummaryEmail({
-      to: guidedPmEmail,
+      to: pmEmail,
       ticketId: ticket.id,
       ticketTitle: ticket.description?.slice(0, 80) ?? ticket.id,
-      summary: summary ?? doneClassification.summary ?? "",
-      isEmergency: isEmergency || isEscalated,
+      summary: summary ?? "",
+      isEmergency: isEmergency || !!isEscalated,
       category: gathered.category ?? "general",
     });
     if (!emailResult.success) {
@@ -2285,7 +2536,7 @@ async function handleGuidedComplete(
 
   return NextResponse.json({
     ticket_id: ticket.id,
-    reply,
+    reply: confirmReply,
     triage_state: "DONE",
     is_complete: true,
   });

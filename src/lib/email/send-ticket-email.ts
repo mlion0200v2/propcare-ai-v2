@@ -2,7 +2,13 @@ import { Resend } from "resend";
 import { logTriageStep, logError, logWarn } from "@/lib/triage/logger";
 import { createServiceClient } from "@/lib/supabase/server";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let _resend: Resend | null = null;
+function getResend() {
+  if (!_resend) {
+    _resend = new Resend(process.env.RESEND_API_KEY);
+  }
+  return _resend;
+}
 
 export async function sendTicketSummaryEmail(params: {
   to: string;
@@ -18,7 +24,7 @@ export async function sendTicketSummaryEmail(params: {
   const subject = `${prefix}[MaintenanceWise] New ticket: ${ticketTitle}`;
 
   try {
-    const { error } = await resend.emails.send({
+    const { error } = await getResend().emails.send({
       from: "MaintenanceWise <noreply@simoneliu.com>",
       to,
       subject,

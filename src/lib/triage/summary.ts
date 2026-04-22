@@ -181,6 +181,73 @@ export function generateTicketSummary(input: SummaryInput): string {
 }
 
 /**
+ * Generate a short, friendly tenant-facing summary for confirmation.
+ *
+ * Different from `generateTicketSummary()` which is manager-facing.
+ * This shows the tenant what was gathered so they can confirm or correct.
+ */
+export function generateTenantSummary(input: {
+  description: string;
+  gathered: GatheredInfo;
+  mediaCount: number;
+  guidedOutcome?: string | null;
+}): string {
+  const { description, gathered, mediaCount, guidedOutcome } = input;
+
+  const category = gathered.category ?? "general";
+  const categoryDisplay = category.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+  const isEmergency = gathered.is_emergency ?? false;
+
+  const lines: string[] = [];
+  lines.push("**Here's a summary of what you reported:**");
+  lines.push("");
+
+  // Issue description — truncate at word boundary for readability
+  let truncDesc = description;
+  if (description.length > 200) {
+    const cut = description.lastIndexOf(" ", 200);
+    truncDesc = description.slice(0, cut > 100 ? cut : 200) + "...";
+  }
+  lines.push(`- **Issue:** ${truncDesc}`);
+  lines.push(`- **Category:** ${categoryDisplay}`);
+
+  if (gathered.location_in_unit) {
+    lines.push(`- **Location:** ${gathered.location_in_unit}`);
+  }
+  if (gathered.started_when) {
+    lines.push(`- **When it started:** ${gathered.started_when}`);
+  }
+  if (gathered.current_status) {
+    lines.push(`- **Status:** ${gathered.current_status}`);
+  }
+  if (gathered.equipment) {
+    lines.push(`- **Equipment:** ${gathered.equipment}`);
+  }
+  if (gathered.brand_model) {
+    lines.push(`- **Brand/Model:** ${gathered.brand_model}`);
+  }
+  lines.push(`- **Emergency:** ${isEmergency ? "Yes" : "No"}`);
+
+  if (mediaCount > 0) {
+    lines.push(`- **Photos/Videos:** ${mediaCount} uploaded`);
+  }
+
+  if (guidedOutcome) {
+    const outcomeDisplay = guidedOutcome === "resolved"
+      ? "Resolved during troubleshooting"
+      : guidedOutcome === "escalated"
+      ? "Escalated to property manager"
+      : "Troubleshooting steps completed";
+    lines.push(`- **Troubleshooting:** ${outcomeDisplay}`);
+  }
+
+  lines.push("");
+  lines.push("Does this look right? You can confirm or let me know if anything needs correcting.");
+
+  return lines.join("\n");
+}
+
+/**
  * Build PM recommendations based on gathered info and guided outcome.
  */
 function buildRecommendations(

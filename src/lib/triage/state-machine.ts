@@ -135,7 +135,7 @@ export function step(context: TriageContext, userMessage: string): StepResult {
   // 4. All base fields gathered → DONE
   const category = updated.category ?? "general";
   const isEmergency = updated.is_emergency ?? false;
-  const sop = getFallbackSOP(category, isEmergency, updated.subcategory);
+  const sop = getFallbackSOP(category, isEmergency, updated.subcategory, updated.equipment);
 
   return {
     next_state: "DONE",
@@ -186,6 +186,7 @@ export function buildInitialGathered(): GatheredInfo {
     subcategory: null,
     entry_point: null,
     equipment: null,
+    equipment_candidates: null,
   };
 }
 

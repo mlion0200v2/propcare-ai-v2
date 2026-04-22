@@ -16,10 +16,17 @@ const LOCATION_KEYWORDS = [
   "laundry room",
   "living room",
   "dining room",
+  "parking lot",
   "front porch",
+  "front yard",
   "back porch",
+  "back yard",
   "front door",
   "back door",
+  "side yard",
+  "backyard",
+  "driveway",
+  "sidewalk",
   "bathroom",
   "basement",
   "bedroom",
@@ -32,6 +39,7 @@ const LOCATION_KEYWORDS = [
   "patio",
   "attic",
   "porch",
+  "yard",
 ] as const;
 
 /**
@@ -234,6 +242,8 @@ export function extractEntryPoint(text: string): string | null {
 
 // Sorted longest-first so "range hood" matches before "range", etc.
 const EQUIPMENT_KEYWORDS = [
+  "air conditioning",
+  "air conditioner",
   "washing machine",
   "range hood",
   "hood fan",
@@ -254,6 +264,13 @@ const EQUIPMENT_KEYWORDS = [
   "range",
   "oven",
 ] as const;
+
+// Case-sensitive patterns (not caught by lowercased keyword matching)
+const EQUIPMENT_REGEX_RULES: Array<{ pattern: RegExp; equipment: string }> = [
+  { pattern: /\bAC\b/, equipment: "air conditioner" },          // case-sensitive bare "AC"
+  { pattern: /\ba\/c\b/i, equipment: "air conditioner" },        // "a/c" with slash
+  { pattern: /\bac unit\b/i, equipment: "air conditioner" },     // "ac unit"
+];
 
 /**
  * Extract an equipment type from free text, or null if none found.
@@ -278,7 +295,67 @@ export function extractEquipment(text: string): string | null {
     }
   }
 
+  // Check case-sensitive / regex patterns
+  for (const { pattern, equipment } of EQUIPMENT_REGEX_RULES) {
+    if (pattern.test(text)) {
+      return normalizeEquipment(equipment);
+    }
+  }
+
   return null;
+}
+
+/**
+ * Extract ALL equipment types mentioned in free text.
+ * Returns array of normalized equipment names (may contain duplicates removed).
+ */
+export function extractAllEquipment(text: string): string[] {
+  const lower = text.toLowerCase();
+  const found = new Set<string>();
+
+  for (const kw of EQUIPMENT_KEYWORDS) {
+    const idx = lower.indexOf(kw);
+    if (idx === -1) continue;
+
+    const before = idx === 0 || /[\s,.'"\-!(]/.test(lower[idx - 1]);
+    const afterIdx = idx + kw.length;
+    const after =
+      afterIdx >= lower.length || /[\s,.'"\-!)?]/.test(lower[afterIdx]);
+
+    if (before && after) {
+      found.add(normalizeEquipment(kw));
+    }
+  }
+
+  for (const { pattern, equipment } of EQUIPMENT_REGEX_RULES) {
+    if (pattern.test(text)) {
+      found.add(normalizeEquipment(equipment));
+    }
+  }
+
+  return Array.from(found);
+}
+
+/**
+ * Detect if multiple equipment from different categories are mentioned.
+ * Returns the list of candidates and whether there's cross-category ambiguity.
+ */
+export function detectEquipmentAmbiguity(
+  text: string
+): { candidates: string[]; ambiguous: boolean } {
+  const candidates = extractAllEquipment(text);
+  if (candidates.length <= 1) {
+    return { candidates, ambiguous: false };
+  }
+
+  // Check if candidates span multiple categories
+  const categories = new Set<string>();
+  for (const eq of candidates) {
+    const cat = getEquipmentCategory(eq);
+    if (cat) categories.add(cat);
+  }
+
+  return { candidates, ambiguous: categories.size > 1 };
 }
 
 // ── Equipment alias normalization ──
@@ -291,6 +368,9 @@ const EQUIPMENT_ALIASES: Record<string, string> = {
   "oven hood": "range hood",
   "fridge": "refrigerator",
   "washing machine": "washer",
+  "stove": "oven",
+  "range": "oven",
+  "air conditioning": "air conditioner",
 };
 
 function normalizeEquipment(raw: string): string {
@@ -309,6 +389,7 @@ export const EQUIPMENT_ALIAS_GROUPS: Record<string, string[]> = {
   "dryer": ["dryer"],
   "garbage disposal": ["garbage disposal"],
   "furnace": ["furnace"],
+  "air conditioner": ["air conditioner", "air conditioning"],
 };
 
 // All known appliance names (flattened from alias groups)
@@ -357,6 +438,7 @@ const EQUIPMENT_CATEGORY_MAP: Record<string, string> = {
   "dryer": "appliance",
   "garbage disposal": "appliance",
   "furnace": "hvac",
+  "air conditioner": "hvac",
 };
 
 /**

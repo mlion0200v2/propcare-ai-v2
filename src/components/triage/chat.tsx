@@ -5,6 +5,58 @@ import { Button } from "@/components/ui/button";
 
 const DRAFT_TICKET_KEY = "propcare_draft_ticket_id";
 
+/**
+ * Lightweight markdown renderer for bot messages.
+ * Handles **bold**, - list items, and --- dividers.
+ */
+function renderBotMarkdown(text: string): React.ReactNode {
+  const lines = text.split("\n");
+  return lines.map((line, i) => {
+    // Horizontal rule
+    if (/^-{3,}$/.test(line.trim())) {
+      return <hr key={i} className="my-2 border-gray-300" />;
+    }
+
+    // List item: "- text" or "  - text"
+    const listMatch = line.match(/^(\s*)- (.+)$/);
+    const indent = listMatch ? listMatch[1].length : 0;
+
+    const content = listMatch ? listMatch[2] : line;
+
+    // Inline bold: **text**
+    const parts: React.ReactNode[] = [];
+    const boldRegex = /\*\*(.+?)\*\*/g;
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = boldRegex.exec(content)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push(content.slice(lastIndex, match.index));
+      }
+      parts.push(<strong key={`${i}-b-${match.index}`}>{match[1]}</strong>);
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < content.length) {
+      parts.push(content.slice(lastIndex));
+    }
+
+    if (listMatch) {
+      return (
+        <div key={i} style={{ paddingLeft: `${indent * 4 + 8}px` }} className="flex">
+          <span className="mr-1.5 shrink-0">&bull;</span>
+          <span>{parts}</span>
+        </div>
+      );
+    }
+
+    // Regular line (preserve blank lines)
+    return (
+      <div key={i}>
+        {parts.length > 0 ? parts : "\u00A0"}
+      </div>
+    );
+  });
+}
+
 interface ChatMessage {
   id: string;
   body: string;
@@ -23,6 +75,7 @@ export function TriageChat() {
   const [isUploading, setIsUploading] = useState(false);
   const [triageState, setTriageState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [summaryEditMode, setSummaryEditMode] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -165,6 +218,11 @@ export function TriageChat() {
         setTicketId(data.ticket_id);
       }
       setTriageState(data.triage_state ?? null);
+
+      // Reset edit mode when response comes back (e.g., after CONFIRM_SUMMARY correction)
+      if (summaryEditMode) {
+        setSummaryEditMode(false);
+      }
 
       const botMsg: ChatMessage = {
         id: `bot-${Date.now()}`,
@@ -360,6 +418,60 @@ export function TriageChat() {
     }
   }
 
+  async function handleConfirmSummary(action: "confirm" | "edit") {
+    if (isLoading || isComplete || !ticketId) return;
+
+    if (action === "edit") {
+      // Switch to edit mode — show text input for corrections
+      setSummaryEditMode(true);
+      return;
+    }
+
+    // "confirm" — submit to API
+    setError(null);
+    setIsLoading(true);
+    setSummaryEditMode(false);
+
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      body: "Looks good, submit",
+      is_bot_reply: false,
+    };
+    setMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const res = await fetch("/api/triage/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: "confirm", ticket_id: ticketId, confirm_summary: "confirm" }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error ?? "Something went wrong");
+        return;
+      }
+
+      setTriageState(data.triage_state ?? null);
+
+      const botMsg: ChatMessage = {
+        id: `bot-${Date.now()}`,
+        body: data.reply,
+        is_bot_reply: true,
+      };
+      setMessages((prev) => [...prev, botMsg]);
+
+      if (data.is_complete) {
+        setIsComplete(true);
+      }
+    } catch {
+      setError("Network error. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
   function triggerFileUpload(accept: string) {
     if (fileInputRef.current) {
       fileInputRef.current.accept = accept;
@@ -407,13 +519,13 @@ export function TriageChat() {
             className={`flex ${msg.is_bot_reply ? "justify-start" : "justify-end"}`}
           >
             <div
-              className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap ${
+              className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm ${
                 msg.is_bot_reply
                   ? "bg-gray-100 text-gray-900"
-                  : "bg-blue-600 text-white"
+                  : "bg-blue-600 text-white whitespace-pre-wrap"
               }`}
             >
-              {msg.body}
+              {msg.is_bot_reply ? renderBotMarkdown(msg.body) : msg.body}
               {msg.mediaUrl && msg.mediaType === "photo" && (
                 /* eslint-disable-next-line @next/next/no-img-element */
                 <img
@@ -468,6 +580,18 @@ export function TriageChat() {
         </div>
       )}
 
+      {/* Confirm Summary buttons */}
+      {triageState === "CONFIRM_SUMMARY" && !isComplete && !isLoading && !summaryEditMode && (
+        <div className="border-t border-gray-200 p-4 flex gap-2">
+          <Button onClick={() => handleConfirmSummary("confirm")} size="md">
+            Looks good, submit
+          </Button>
+          <Button onClick={() => handleConfirmSummary("edit")} variant="secondary" size="md">
+            I need to correct something
+          </Button>
+        </div>
+      )}
+
       {/* Media upload controls */}
       {showMediaControls && (
         <div className="border-t border-gray-200 p-4">
@@ -498,7 +622,7 @@ export function TriageChat() {
       )}
 
       {/* Input */}
-      {triageState !== "CONFIRM_PROFILE" && triageState !== "AWAITING_MEDIA" && (
+      {triageState !== "CONFIRM_PROFILE" && triageState !== "AWAITING_MEDIA" && (triageState !== "CONFIRM_SUMMARY" || summaryEditMode) && (
         <div className="border-t border-gray-200 p-4">
           <div className="flex gap-2">
             <textarea
@@ -508,6 +632,8 @@ export function TriageChat() {
               placeholder={
                 isComplete
                   ? "Triage complete"
+                  : summaryEditMode
+                  ? "Type your correction (e.g., 'it's in the back yard, not front yard')..."
                   : messages.length === 0
                   ? "Describe your maintenance issue..."
                   : "Type your reply..."
