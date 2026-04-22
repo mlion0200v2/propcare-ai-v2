@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MaintenanceWise",
+  title: "PropCare-AI",
   description: "AI-powered property maintenance triage",
 };
 

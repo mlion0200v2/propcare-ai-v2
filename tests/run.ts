@@ -39,7 +39,7 @@ async function main() {
   const startTime = Date.now();
 
   console.log("\n\x1b[1m Phase 1 Test Suite\x1b[0m");
-  console.log("   PropCare-AI v2 (MaintenanceWise)");
+  console.log("   PropCare-AI v2");
   console.log(`   ${new Date().toISOString()}`);
   console.log(`   RUN_INTEGRATION=${process.env.RUN_INTEGRATION ?? "0"}`);
   console.log(`   RUN_EXTERNAL=${process.env.RUN_EXTERNAL ?? "0"}\n`);

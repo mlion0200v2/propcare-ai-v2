@@ -15,7 +15,7 @@ export default function LoginPage() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sign in to MaintenanceWise</CardTitle>
+        <CardTitle>Sign in to PropCare-AI</CardTitle>
       </CardHeader>
       <CardContent>
         <form action={formAction} className="space-y-4">

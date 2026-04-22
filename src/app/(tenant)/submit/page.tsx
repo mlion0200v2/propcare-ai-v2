@@ -1,7 +1,7 @@
 import { TriageChat } from "@/components/triage/chat";
 
 export const metadata = {
-  title: "Submit Issue | MaintenanceWise",
+  title: "Submit Issue | PropCare-AI",
 };
 
 export default function SubmitPage() {

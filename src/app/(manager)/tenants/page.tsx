@@ -2,7 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
-  title: "Tenants | MaintenanceWise",
+  title: "Tenants | PropCare-AI",
 };
 
 export default async function TenantsPage() {

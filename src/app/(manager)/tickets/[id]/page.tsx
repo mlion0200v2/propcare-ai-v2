@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { GatheredInfo, TenantInfo } from "@/lib/triage/types";
 
 export const metadata = {
-  title: "Ticket Details | MaintenanceWise",
+  title: "Ticket Details | PropCare-AI",
 };
 
 export default async function TicketDetailPage({

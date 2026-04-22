@@ -21,11 +21,11 @@ export async function sendTicketSummaryEmail(params: {
   const { to, ticketId, ticketTitle, summary, isEmergency, category } = params;
 
   const prefix = isEmergency ? "[EMERGENCY] " : "";
-  const subject = `${prefix}[MaintenanceWise] New ticket: ${ticketTitle}`;
+  const subject = `${prefix}[PropCare-AI] New ticket: ${ticketTitle}`;
 
   try {
     const { error } = await getResend().emails.send({
-      from: "MaintenanceWise <noreply@simoneliu.com>",
+      from: "PropCare-AI <noreply@simoneliu.com>",
       to,
       subject,
       text: summary,

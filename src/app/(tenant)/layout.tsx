@@ -9,7 +9,7 @@ export default function TenantLayout({
     <div className="min-h-screen bg-gray-50">
       <header className="border-b border-gray-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
-          <h1 className="text-lg font-semibold text-gray-900">MaintenanceWise</h1>
+          <h1 className="text-lg font-semibold text-gray-900">PropCare-AI</h1>
           <form action={signOut}>
             <button
               type="submit"

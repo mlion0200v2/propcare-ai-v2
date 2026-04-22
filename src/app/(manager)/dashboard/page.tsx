@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const metadata = {
-  title: "Dashboard | MaintenanceWise",
+  title: "Dashboard | PropCare-AI",
 };
 
 export default async function DashboardPage() {

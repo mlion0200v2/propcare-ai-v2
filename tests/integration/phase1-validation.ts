@@ -29,7 +29,7 @@ async function main() {
   const startTime = Date.now();
 
   console.log("\n\x1b[1m🔧 Phase 1 Infrastructure Validation\x1b[0m");
-  console.log("   PropCare-AI v2 (MaintenanceWise)");
+  console.log("   PropCare-AI v2");
   console.log(`   ${new Date().toISOString()}\n`);
 
   const totals: TestResult = { passed: 0, failed: 0, skipped: 0 };
