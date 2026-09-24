@@ -5,7 +5,7 @@
  * this module generates a brief, practical explanation using gpt-4o-mini.
  */
 
-import OpenAI from "openai";
+import { openai } from "../openai-client";
 import type { GuidedStep } from "./types";
 
 const SYSTEM_PROMPT = `You are a friendly property maintenance assistant helping a tenant who isn't sure how to perform a troubleshooting step.
@@ -43,7 +43,6 @@ export async function generateStepHelp(
   category: string
 ): Promise<string> {
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",

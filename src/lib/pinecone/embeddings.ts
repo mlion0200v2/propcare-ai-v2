@@ -1,6 +1,5 @@
-import OpenAI from "openai";
+import { openai } from "../openai-client";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 const EMBEDDING_MODEL = "text-embedding-3-small";
 const EMBEDDING_DIMENSIONS = 1536;

@@ -16,7 +16,7 @@
  * All routing decisions remain deterministic in step-feedback.ts / route.ts.
  */
 
-import OpenAI from "openai";
+import { openai } from "../openai-client";
 import type {
   GuidedStep,
   InterpretedStepResponse,
@@ -153,7 +153,6 @@ export async function interpretStepResponse(
   tenantReply: string
 ): Promise<InterpretedStepResponse | null> {
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",

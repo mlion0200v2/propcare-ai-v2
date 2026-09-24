@@ -8,7 +8,7 @@
  * Output is conversational — friendly intro, grouped steps in plain language.
  */
 
-import OpenAI from "openai";
+import { openai } from "../openai-client";
 import type { GatheredInfo, TroubleshootingStep, GuidedStep, GuidedStepKind } from "./types";
 import type { RetrievalSnippet } from "../retrieval/types";
 import { getFallbackSOP } from "./sop-fallback";
@@ -180,7 +180,6 @@ export async function generateWebSearchSteps(
     .join("\n");
 
   try {
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0.2,
@@ -277,7 +276,6 @@ export async function generateGroundedSteps(
     .join("\n");
 
   // Call OpenAI
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     temperature: 0.2,
