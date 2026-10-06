@@ -7,4 +7,8 @@ import OpenAI from "openai";
  * (embeddings, grounding, step interpretation, step help).
  * Keeps API key handling and client config in a single place.
  */
-export const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+export const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY!,
+    timeout: 30000,
+    maxRetries: 2
+});

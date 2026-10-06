@@ -13,6 +13,8 @@ import type { GatheredInfo, TroubleshootingStep, GuidedStep, GuidedStepKind } fr
 import type { RetrievalSnippet } from "../retrieval/types";
 import { getFallbackSOP } from "./sop-fallback";
 import { getEquipmentAliases, ALL_APPLIANCE_NAMES } from "./extract-details";
+import { zodResponseFormat } from "openai/helpers/zod";
+import { z } from "zod";
 
 const WEB_SEARCH_SYSTEM_PROMPT = `You are a friendly property maintenance assistant helping a tenant troubleshoot an issue in their rental unit. Search the web for practical advice, then generate 3-6 safe, tenant-appropriate troubleshooting steps.
 
@@ -31,7 +33,8 @@ Rules:
 - Do NOT invent, assume, or add information not in the snippets
 - Keep steps simple, safe, and tenant-appropriate (no professional-level repairs)
 - Write in a warm, conversational tone — like a helpful neighbor explaining what to try
-- Return ONLY the numbered steps, one per line, with citations
+- Return the steps as JSON: { "steps": [{ "description": "...", "citation": "[SOP-N]" }] }
+- Use empty string for citation when a step needs none
 - Always end with a note that the property manager has been notified and will follow up
 
 Equipment-specific rules:
@@ -60,6 +63,13 @@ const EMERGENCY_SAFETY_LINES = [
   "---",
   "",
 ];
+
+const GroundedStepsSchema = z.object({
+  steps: z.array(z.object({
+    description: z.string(),
+    citation: z.string(),  // "[SOP-2]" or empty string
+  })).min(1).max(8),
+});
 
 export interface GroundedResult {
   reply: string;
@@ -197,7 +207,10 @@ export async function generateWebSearchSteps(
       .split("\n")
       .filter((line) => /^\d+[\.\)]/.test(line.trim()));
 
-    if (stepLines.length === 0) return null;
+    if (stepLines.length === 0) {
+      console.warn("[grounding] web search returned no parseable steps");
+      return null;
+    }
 
     const steps: TroubleshootingStep[] = stepLines.map((line, i) => ({
       step: i + 1,
@@ -238,11 +251,20 @@ export async function generateGroundedSteps(
 
   // Fallback path: no snippets or low confidence
   if (snippets.length === 0 || lowConfidence) {
+    console.warn("[grounding] entering fallback path", {
+      reason: snippets.length === 0 ? "no_snippets" : "low_confidence",
+      category,
+      isEmergency,
+    });
     // Try web search before falling back to hardcoded SOP
     const webResult = await generateWebSearchSteps(gathered, isEmergency);
-    if (webResult) return webResult;
+    if (webResult) {
+      console.log("[grounding] using web search fallback");
+      return webResult;
+    }
 
     // Web search failed or returned nothing — use hardcoded SOP
+    console.warn("[grounding] web search failed or empty — using hardcoded SOP");
     const sop = getFallbackSOP(category, isEmergency, gathered.subcategory, gathered.equipment);
 
     return {
@@ -275,27 +297,40 @@ export async function generateGroundedSteps(
     .filter((line) => line !== null)
     .join("\n");
 
-  // Call OpenAI
-  const completion = await openai.chat.completions.create({
+  // Call OpenAI with Structured Outputs: the API guarantees valid JSON,
+  // so no regex scraping of free text is needed.
+  const completion = await openai.chat.completions.parse({
     model: "gpt-4o-mini",
     temperature: 0.2,
     max_tokens: 600,
+    response_format: zodResponseFormat(GroundedStepsSchema, "grounded_steps"),
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userPrompt },
     ],
   });
 
-  const stepsText = completion.choices[0]?.message?.content?.trim() ?? "";
+  const parsed = completion.choices[0]?.message?.parsed;
+  if (!parsed || parsed.steps.length === 0) {
+    // Structured parse failed — fall back to the hardcoded SOP, same as before
+    console.warn("[grounding] Structured parse failed or empty — falling back to hardcoded SOP");
+    const sop = getFallbackSOP(category, isEmergency, gathered.subcategory, gathered.equipment);
+    return {
+      reply: formatConversationalFallback(sop.display, isEmergency),
+      steps: sop.steps,
+      usedFallback: true,
+    };
+  }
 
-  // Parse numbered steps from LLM output
-  const stepLines = stepsText
-    .split("\n")
-    .filter((line) => /^\d+[\.\)]/.test(line.trim()));
+  // Rebuild the numbered text so all downstream functions
+  // (formatting, citation stripping, guided-step conversion) work unchanged.
+  const stepsText = parsed.steps
+    .map((s, i) => `${i + 1}. ${s.description}${s.citation ? ` ${s.citation}` : ""}`)
+    .join("\n");
 
-  const steps: TroubleshootingStep[] = stepLines.map((line, i) => ({
+  const steps: TroubleshootingStep[] = parsed.steps.map((s, i) => ({
     step: i + 1,
-    description: line.replace(/^\d+[\.\)]\s*/, "").trim(),
+    description: `${s.description}${s.citation ? ` ${s.citation}` : ""}`,
     completed: false,
   }));
 
@@ -308,13 +343,10 @@ export async function generateGroundedSteps(
     ),
   ].join("\n");
 
+  console.log("[grounding] grounded steps generated", { steps: steps.length, snippets: snippets.length });
   return {
     reply: formatConversationalTroubleshooting(stepsText, sourcesFooter, isEmergency),
-    steps:
-      steps.length > 0
-        ? steps
-        : // Fallback if LLM output couldn't be parsed
-          getFallbackSOP(category, isEmergency, gathered.subcategory, gathered.equipment).steps,
+    steps,
     usedFallback: false,
   };
 }
@@ -495,6 +527,7 @@ export function filterStepsByEquipment(
 
   const aliases = getEquipmentAliases(equipment);
   if (!aliases) {
+    console.warn("[filter] unknown equipment, skipping equipment filter:", equipment);
     return result; // Unknown equipment type — don't filter
   }
 

@@ -22,7 +22,7 @@ import type { GatheredInfo } from "../src/lib/triage/types";
 
 // ── Test case definition ──
 
-interface TestCase {
+export interface TestCase {
   id: number;
   description: string;
   expectedCategory: string;
@@ -40,7 +40,7 @@ interface TestCase {
   correctionExpectedCategory?: string;
 }
 
-const TEST_CASES: TestCase[] = [
+export const TEST_CASES: TestCase[] = [
   // 1. The bug we just fixed
   {
     id: 1,
@@ -358,7 +358,7 @@ const CORRECTION_TESTS: CorrectionTestCase[] = [
 
 // ── Runner ──
 
-function buildGathered(
+export function buildGathered(
   category: string,
   description: string,
   subcategory: string | null = null,
@@ -668,4 +668,8 @@ function main() {
   }
 }
 
-main();
+// Guard: only run the old suite when this file is executed directly,
+// not when imported by evaluate-pipeline.ts
+if (process.argv[1]?.endsWith("evaluate-20-issues.ts")) {
+  main();
+}

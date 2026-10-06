@@ -1,6 +1,7 @@
 import type { RecordMetadata } from "@pinecone-database/pinecone";
 import { getIndex } from "./client";
 import { embedText } from "./embeddings";
+import { withTimeoutRetry} from "../retry";
 
 interface TicketMetadata extends RecordMetadata {
   ticket_id: string;
@@ -21,15 +22,18 @@ export async function upsertTicket(
   const embedding = await embedText(text);
   const index = getIndex();
 
-  await index.upsert({
-    records: [
-      {
-        id: ticketId,
-        values: embedding,
-        metadata,
-      },
-    ],
-  });
+  await withTimeoutRetry(
+    () => index.upsert({
+      records: [
+        {
+          id: ticketId,
+          values: embedding,
+          metadata,
+        },
+      ],
+    }),
+    { timeoutMs: 15000, retries: 2, label: "pinecone-upsert-ticket" }
+  );
 }
 
 /**
@@ -44,12 +48,15 @@ export async function searchSimilarTickets(
   const embedding = await embedText(description);
   const index = getIndex();
 
-  const results = await index.query({
-    vector: embedding,
-    topK,
-    includeMetadata: true,
-    filter,
-  });
+  const results = await withTimeoutRetry(
+    () => index.query({
+      vector: embedding,
+      topK,
+      includeMetadata: true,
+      filter,
+    }),
+    { timeoutMs: 15000, retries: 2, label: "pinecone-search-tickets"}
+  );
 
   return (results.matches ?? []).map((match) => ({
     ticket_id: match.id,
@@ -63,5 +70,8 @@ export async function searchSimilarTickets(
  */
 export async function deleteTicketVector(ticketId: string) {
   const index = getIndex();
-  await index.deleteOne({ id: ticketId });
+  await withTimeoutRetry(
+    () => index.deleteOne({ id: ticketId }),
+    { timeoutMs: 15000, retries: 2, label: "pinecone-delete-ticket" }
+  );
 }

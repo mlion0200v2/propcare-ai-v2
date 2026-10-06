@@ -17,6 +17,8 @@
  */
 
 import { openai } from "../openai-client";
+import { zodResponseFormat } from "openai/helpers/zod";
+import { z } from "zod";
 import type {
   GuidedStep,
   InterpretedStepResponse,
@@ -24,6 +26,28 @@ import type {
   TroubleshootingStepResult,
 } from "./types";
 import { classifyStepFeedback } from "./step-feedback";
+
+// ── Structured output schema ──
+const InterpretationSchema = z.object({
+  result: z.enum([
+    "completed",
+    "helped",
+    "partially_helped",
+    "did_not_help",
+    "asking_how",
+    "unable_to_access",
+    "cannot_assess",
+    "did_not_try",
+    "skip",
+    "unknown",
+  ]),
+  confidence: z.enum(["high", "medium", "low"]),
+  extracted_note: z.string(),
+  mentioned_safety_issue: z.boolean(),
+  mentioned_emergency_issue: z.boolean(),
+  should_clarify: z.boolean(),
+  clarification_question: z.string(),
+});
 
 // ── Result mapper ──
 
@@ -154,10 +178,11 @@ export async function interpretStepResponse(
 ): Promise<InterpretedStepResponse | null> {
   try {
 
-    const completion = await openai.chat.completions.create({
+    const completion = await openai.chat.completions.parse({
       model: "gpt-4o-mini",
       temperature: 0,
       max_tokens: 200,
+      response_format: zodResponseFormat(InterpretationSchema, "step_interpretation"),
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -167,10 +192,18 @@ export async function interpretStepResponse(
       ],
     });
 
-    const content = completion.choices[0]?.message?.content;
-    if (!content) return null;
+    const parsed = completion.choices[0]?.message?.parsed;
+    if (!parsed) return null;
 
-    return parseInterpretation(content);
+    return {
+      result: parsed.result as InterpretedResult,
+      confidence: parsed.confidence,
+      extracted_note: parsed.extracted_note.trim() || undefined,
+      mentioned_safety_issue: parsed.mentioned_safety_issue,
+      mentioned_emergency_issue: parsed.mentioned_emergency_issue,
+      should_clarify: parsed.should_clarify,
+      clarification_question: parsed.clarification_question.trim() || undefined,
+    };
   } catch (err) {
     console.error("[interpret-step-response] LLM call failed", {
       error: err instanceof Error ? err.message : String(err),
