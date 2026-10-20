@@ -88,3 +88,36 @@ export const inviteLimiter = createRateLimiter([
   { limit: 20, windowMs: HOUR },
   { limit: 60, windowMs: 24 * HOUR },
 ]);
+
+// ── Tenant link (/r/<token>) — keyed by client IP, destination or token ──
+
+/** Opening tenant links, per IP (also slows token guessing). */
+export const intakeLinkLimiter = createRateLimiter([
+  { limit: 60, windowMs: 10 * MINUTE },
+  { limit: 300, windowMs: 24 * HOUR },
+]);
+
+/** Code sends per destination (one inbox or phone). */
+export const intakeCodeDestinationLimiter = createRateLimiter([
+  { limit: 3, windowMs: 10 * MINUTE },
+  { limit: 10, windowMs: 24 * HOUR },
+]);
+
+/** Code sends per IP and per unit link, so one link can't flood anyone. */
+export const intakeCodeIpLimiter = createRateLimiter([
+  { limit: 10, windowMs: HOUR },
+  { limit: 30, windowMs: 24 * HOUR },
+]);
+export const intakeCodeLinkLimiter = createRateLimiter([
+  { limit: 20, windowMs: HOUR },
+  { limit: 60, windowMs: 24 * HOUR },
+]);
+
+/** Code verification attempts per IP. */
+export const intakeVerifyLimiter = createRateLimiter([{ limit: 20, windowMs: 10 * MINUTE }]);
+
+/** Tenant sign-in / account links, per IP. */
+export const magicLinkLimiter = createRateLimiter([
+  { limit: 5, windowMs: 10 * MINUTE },
+  { limit: 20, windowMs: 24 * HOUR },
+]);

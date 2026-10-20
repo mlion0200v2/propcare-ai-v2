@@ -12,6 +12,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { safeNextPath } from "@/lib/app-url";
 import { createPendingWorkspace, ensureProfile } from "@/lib/workspace/onboarding";
+import { claimTenancies } from "@/lib/intake/server";
 import { logError } from "@/lib/triage/logger";
 
 const OTP_TYPES: EmailOtpType[] = ["signup", "invite", "magiclink", "recovery", "email_change", "email"];
@@ -41,7 +42,9 @@ export async function GET(request: NextRequest) {
   if (user) {
     try {
       await ensureProfile(user);
-      if (!next.startsWith("/invite/")) await createPendingWorkspace(user);
+      // Tenant who kept an account: attach the tenancies they proved.
+      await claimTenancies(user);
+      if (!next.startsWith("/invite/") && next !== "/my-requests") await createPendingWorkspace(user);
     } catch (err) {
       logError("auth_confirm_onboarding", err, { userId: user.id });
     }
