@@ -1,39 +1,78 @@
 -- ============================================================
--- Migration 005: Workspaces, memberships and workspace-scoped RLS
+-- PropCare — baseline schema (workspaces)
 -- ============================================================
 --
--- Replaces the global "manager" role with workspaces. Every record now
--- belongs to one workspace; a user's role lives in `memberships`
--- (admin | manager | owner), never in user_metadata or profiles.role.
+-- One migration that builds the whole database on a brand-new Supabase
+-- project (`supabase db reset` locally, `supabase db push` hosted). It
+-- replaces the pre-launch migrations 001–005; PropCare was never in
+-- production, so there is no data to carry over.
+--
+-- Model: every record belongs to a workspace (a landlord or a property
+-- management company). A user's role lives in `memberships`
+-- (admin | manager | owner), never in user_metadata or profiles.
 --
 --   admin, manager  "team": everything in their workspace
 --   owner           only the properties listed in owner_property_access,
 --                   never "team only" comments (company workspaces only)
---   tenant          no membership: sees only their own tickets (or, with an
---                   account, every ticket of the tenancy they hold) and only
---                   tenant-visible comments
+--   tenant          no membership: reports through a unit's link; sees only
+--                   their own tickets (or, with an account, every ticket of
+--                   the tenancy they hold) and only tenant-visible comments
 --
--- Writes to memberships, workspaces creation, invitation acceptance and
+-- Writes to memberships, workspace creation, invitation acceptance and
 -- approval decisions go through SECURITY DEFINER functions, so no user can
 -- grant themselves a role with a direct insert/update.
---
--- Existing rows (properties, units, tickets, vendors) are NOT moved here:
--- run supabase/scripts/migrate_existing_data_to_workspaces.sql once, after
--- this migration (see docs/workspaces-migration.md). Until then legacy rows
--- have workspace_id NULL and are invisible to every signed-in user.
 -- ============================================================
 
 -- ---------- Enums ----------
 create type workspace_kind as enum ('individual', 'company');
 create type membership_role as enum ('admin', 'manager', 'owner');
+create type property_type as enum ('single_family', 'multi_unit', 'condo', 'commercial');
+create type unit_status as enum ('occupied', 'vacant', 'maintenance');
+create type ticket_status as enum ('open', 'in_progress', 'awaiting_tenant', 'escalated', 'resolved', 'closed');
+create type ticket_stage as enum ('new', 'waiting_for_owner', 'vendor_booked', 'fixed', 'closed');
+create type ticket_priority as enum ('low', 'medium', 'high', 'emergency');
+create type ticket_category as enum (
+  'plumbing', 'electrical', 'hvac', 'appliance', 'structural',
+  'pest_control', 'locksmith', 'roofing', 'painting', 'flooring',
+  'landscaping', 'general', 'other'
+);
+create type media_type as enum ('photo', 'video');
 create type comment_visibility as enum ('team', 'team_owner', 'tenant');
 create type approval_decision as enum ('pending', 'approved', 'declined');
-create type ticket_stage as enum ('new', 'waiting_for_owner', 'vendor_booked', 'fixed', 'closed');
+
+-- ---------- Helper: auto-update updated_at ----------
+create or replace function update_updated_at()
+returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
 
 -- ============================================================
--- New tables
+-- Tables
 -- ============================================================
 
+-- ---------- Profiles (one per auth user; created by the server) ----------
+create table profiles (
+  id                        uuid primary key references auth.users(id) on delete cascade,
+  -- Optional: guest tenants confirmed by phone have none.
+  email                     text unique,
+  full_name                 text not null,
+  phone                     text,
+  avatar_url                text,
+  -- Used by the triage chat's legacy "no unit on file" path.
+  default_property_address  text,
+  default_unit_number       text,
+  created_at                timestamptz not null default now(),
+  updated_at                timestamptz not null default now()
+);
+
+create trigger profiles_updated_at
+  before update on profiles
+  for each row execute function update_updated_at();
+
+-- ---------- Workspaces and members ----------
 create table workspaces (
   id                    uuid primary key default gen_random_uuid(),
   name                  text not null check (char_length(name) between 1 and 120),
@@ -79,22 +118,47 @@ create table invitations (
 
 create index idx_invitations_workspace on invitations(workspace_id);
 
--- ---------- Properties / units: add workspace + tenant link ----------
-alter table properties add column workspace_id uuid references workspaces(id) on delete cascade;
-alter table properties alter column manager_id drop not null;  -- legacy, unused by the app
-create index idx_properties_workspace on properties(workspace_id);
--- New and updated rows must belong to a workspace; legacy rows are fixed by
--- the data-migration script, which then VALIDATEs the constraint.
-alter table properties add constraint properties_workspace_required
-  check (workspace_id is not null) not valid;
+-- ---------- Homes and units ----------
+create table properties (
+  id              uuid primary key default gen_random_uuid(),
+  workspace_id    uuid not null references workspaces(id) on delete cascade,
+  address_line1   text not null,
+  address_line2   text,
+  city            text not null,
+  state           text not null,   -- province
+  zip             text not null,   -- postal code
+  property_type   property_type not null default 'single_family',
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
 
-alter table units add column workspace_id uuid references workspaces(id) on delete cascade;
--- Unguessable per-unit intake link: /r/<intake_token>. 122 random bits.
-alter table units add column intake_token text not null unique
-  default replace(gen_random_uuid()::text, '-', '');
-alter table units add column link_active boolean not null default true;
-alter table units add column link_rotated_at timestamptz;
+create index idx_properties_workspace on properties(workspace_id);
+
+create trigger properties_updated_at
+  before update on properties
+  for each row execute function update_updated_at();
+
+create table units (
+  id               uuid primary key default gen_random_uuid(),
+  property_id      uuid not null references properties(id) on delete cascade,
+  -- Always the property's workspace (set by trigger).
+  workspace_id     uuid not null references workspaces(id) on delete cascade,
+  unit_number      text,                -- NULL for single-family homes
+  status           unit_status not null default 'vacant',
+  -- Unguessable per-unit intake link: /r/<intake_token>. 122 random bits.
+  intake_token     text not null unique default replace(gen_random_uuid()::text, '-', ''),
+  link_active      boolean not null default true,
+  link_rotated_at  timestamptz,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+create index idx_units_property on units(property_id);
 create index idx_units_workspace on units(workspace_id);
+
+create trigger units_updated_at
+  before update on units
+  for each row execute function update_updated_at();
 
 create table owner_property_access (
   workspace_id  uuid not null,
@@ -107,6 +171,7 @@ create table owner_property_access (
 
 create index idx_owner_access_workspace on owner_property_access(workspace_id);
 
+-- ---------- Tenants ----------
 create table tenancies (
   id              uuid primary key default gen_random_uuid(),
   workspace_id    uuid not null references workspaces(id) on delete cascade,
@@ -132,9 +197,9 @@ create trigger tenancies_updated_at
   before update on tenancies
   for each row execute function update_updated_at();
 
--- A device (auth user, usually anonymous) that confirmed a one-time code for
--- this tenancy. Lets it file tickets for the tenancy's unit; it sees only the
--- tickets it filed itself.
+-- A device (auth user, usually a guest session) that confirmed a one-time
+-- code for this tenancy. Lets it file tickets for the tenancy's unit; it
+-- sees only the tickets it filed itself.
 create table tenancy_verifications (
   tenancy_id   uuid not null references tenancies(id) on delete cascade,
   user_id      uuid not null references auth.users(id) on delete cascade,
@@ -161,23 +226,100 @@ create table intake_codes (
 
 create index idx_intake_codes_lookup on intake_codes(unit_id, destination, created_at desc);
 
--- ---------- Tickets: workspace, tenancy, collaboration fields ----------
-alter table tickets add column workspace_id uuid references workspaces(id) on delete cascade;
-alter table tickets add column tenancy_id uuid references tenancies(id) on delete set null;
-alter table tickets add column stage ticket_stage not null default 'new';
-alter table tickets add column vendor_name text check (vendor_name is null or char_length(vendor_name) <= 200);
-alter table tickets add column vendor_booked_for timestamptz;
-alter table tickets add column entry_notice text check (entry_notice is null or char_length(entry_notice) <= 1000);
-create index idx_tickets_workspace on tickets(workspace_id, created_at desc);
-create index idx_tickets_tenancy on tickets(tenancy_id);
-alter table tickets add constraint tickets_workspace_required
-  check (workspace_id is not null) not valid;
+-- ---------- Tickets ----------
+create table tickets (
+  id                      uuid primary key default gen_random_uuid(),
+  -- Always the unit's workspace (set by trigger).
+  workspace_id            uuid not null references workspaces(id) on delete cascade,
+  unit_id                 uuid not null references units(id) on delete cascade,
+  tenancy_id              uuid references tenancies(id) on delete set null,
+  tenant_id               uuid not null references profiles(id) on delete cascade,
+  assigned_to             uuid references profiles(id) on delete set null,
 
-alter table vendors add column workspace_id uuid references workspaces(id) on delete cascade;
-alter table vendors alter column manager_id drop not null;
-create index idx_vendors_workspace on vendors(workspace_id);
-alter table vendors add constraint vendors_workspace_required
-  check (workspace_id is not null) not valid;
+  title                   text not null,
+  description             text not null,
+  category                ticket_category not null default 'general',
+  priority                ticket_priority not null default 'medium',
+  -- Triage-side status (escalation etc.); `stage` is what people work with.
+  status                  ticket_status not null default 'open',
+  stage                   ticket_stage not null default 'new',
+
+  vendor_name             text check (vendor_name is null or char_length(vendor_name) <= 200),
+  vendor_booked_for       timestamptz,
+  entry_notice            text check (entry_notice is null or char_length(entry_notice) <= 1000),
+
+  -- AI triage outputs
+  classification          jsonb,
+  safety_assessment       jsonb,
+  similar_issues          jsonb,
+  troubleshooting_steps   jsonb,
+  triage_state            text not null default 'GATHER_INFO',
+  trace_id                uuid default gen_random_uuid(),
+
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now(),
+  resolved_at             timestamptz
+);
+
+create index idx_tickets_workspace on tickets(workspace_id, created_at desc);
+create index idx_tickets_unit on tickets(unit_id);
+create index idx_tickets_tenancy on tickets(tenancy_id);
+create index idx_tickets_tenant on tickets(tenant_id);
+create index idx_tickets_stage on tickets(stage);
+create index idx_tickets_assigned on tickets(assigned_to);
+
+create trigger tickets_updated_at
+  before update on tickets
+  for each row execute function update_updated_at();
+
+create table ticket_media (
+  id              uuid primary key default gen_random_uuid(),
+  ticket_id       uuid not null references tickets(id) on delete cascade,
+  file_path       text not null,
+  file_type       media_type not null,
+  mime_type       text not null,
+  file_size       integer not null,
+  display_order   smallint not null default 1,
+  uploaded_by     uuid not null references profiles(id) on delete cascade,
+  created_at      timestamptz not null default now()
+);
+
+create index idx_ticket_media_ticket on ticket_media(ticket_id);
+
+-- At most 5 photos and 1 video per ticket.
+create or replace function check_media_limits()
+returns trigger as $$
+declare
+  photo_count integer;
+  video_count integer;
+begin
+  select count(*) into photo_count from ticket_media where ticket_id = new.ticket_id and file_type = 'photo';
+  select count(*) into video_count from ticket_media where ticket_id = new.ticket_id and file_type = 'video';
+  if new.file_type = 'photo' and photo_count >= 5 then
+    raise exception 'Maximum 5 photos per ticket';
+  end if;
+  if new.file_type = 'video' and video_count >= 1 then
+    raise exception 'Maximum 1 video per ticket';
+  end if;
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger enforce_media_limits
+  before insert on ticket_media
+  for each row execute function check_media_limits();
+
+-- Triage chat transcript (tenant ↔ PropCare).
+create table messages (
+  id            uuid primary key default gen_random_uuid(),
+  ticket_id     uuid not null references tickets(id) on delete cascade,
+  sender_id     uuid not null references profiles(id) on delete cascade,
+  body          text not null,
+  is_bot_reply  boolean not null default false,
+  created_at    timestamptz not null default now()
+);
+
+create index idx_messages_ticket on messages(ticket_id, created_at);
 
 create table ticket_comments (
   id             uuid primary key default gen_random_uuid(),
@@ -213,8 +355,24 @@ create table approvals (
 
 create index idx_approvals_ticket on approvals(ticket_id, created_at desc);
 
--- ---------- Profiles: email optional (phone-only tenants) ----------
-alter table profiles alter column email drop not null;
+create table vendors (
+  id            uuid primary key default gen_random_uuid(),
+  workspace_id  uuid not null references workspaces(id) on delete cascade,
+  name          text not null,
+  trade         ticket_category not null,
+  phone         text,
+  email         text,
+  rating        numeric(2,1) check (rating >= 1 and rating <= 5),
+  notes         text,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+create index idx_vendors_workspace on vendors(workspace_id);
+
+create trigger vendors_updated_at
+  before update on vendors
+  for each row execute function update_updated_at();
 
 -- ============================================================
 -- Helper functions (SECURITY DEFINER: read past RLS, no recursion)
@@ -817,47 +975,36 @@ end;
 $$;
 
 -- ============================================================
--- Row Level Security
+-- Row Level Security (every table)
 -- ============================================================
 
+alter table profiles enable row level security;
 alter table workspaces enable row level security;
 alter table memberships enable row level security;
 alter table invitations enable row level security;
+alter table properties enable row level security;
+alter table units enable row level security;
 alter table owner_property_access enable row level security;
 alter table tenancies enable row level security;
 alter table tenancy_verifications enable row level security;
 alter table intake_codes enable row level security;
+alter table tickets enable row level security;
+alter table ticket_media enable row level security;
+alter table messages enable row level security;
 alter table ticket_comments enable row level security;
 alter table approvals enable row level security;
-
--- ---------- Drop every legacy policy (global manager role, manager_id) ----------
-drop policy if exists "Managers can read tenant profiles in their properties" on profiles;
-drop policy if exists "Users can update own profile" on profiles;
-drop policy if exists "Managers can CRUD own properties" on properties;
-drop policy if exists "Tenants can read their property" on properties;
-drop policy if exists "Managers can CRUD units in their properties" on units;
-drop policy if exists "Tenants can read own unit" on units;
-drop policy if exists "Tenants can create tickets" on tickets;
-drop policy if exists "Tenants can create tickets for their unit" on tickets;
-drop policy if exists "Tenants can read own tickets" on tickets;
-drop policy if exists "Tenants can update own open tickets" on tickets;
-drop policy if exists "Managers can read tickets in their properties" on tickets;
-drop policy if exists "Managers can update tickets in their properties" on tickets;
-drop policy if exists "Users can insert media for their tickets" on ticket_media;
-drop policy if exists "Users can view media on accessible tickets" on ticket_media;
-drop policy if exists "Users can insert messages on accessible tickets" on messages;
-drop policy if exists "Users can read messages on accessible tickets" on messages;
-drop policy if exists "Managers can CRUD own vendors" on vendors;
-drop function if exists auth_is_manager_of_property(uuid);
+alter table vendors enable row level security;
 
 -- ---------- Profiles ----------
--- "Users can read own profile" (from 001) stays.
+create policy "Users can read own profile"
+  on profiles for select using (id = auth.uid());
+
 create policy "Users can update own profile"
   on profiles for update
   using (id = auth.uid())
   with check (id = auth.uid());
 
--- profiles.role is legacy and must never be user-writable.
+-- Users may edit their name and contact details only (never email or id).
 revoke update on profiles from anon, authenticated;
 grant update (full_name, phone, avatar_url, default_property_address, default_unit_number)
   on profiles to authenticated;
@@ -1094,3 +1241,38 @@ grant execute on function accept_invitation(text, text) to authenticated, servic
 grant execute on function set_member_role(uuid, uuid, membership_role) to authenticated, service_role;
 grant execute on function remove_member(uuid, uuid) to authenticated, service_role;
 grant execute on function decide_approval(uuid, approval_decision, text) to authenticated, service_role;
+
+-- ============================================================
+-- Storage: ticket-media bucket (private)
+-- ============================================================
+-- Upload path: <user_id>/<ticket_id>/<file>. Tenants write and read their
+-- own folder; the team sees photos through short-lived signed URLs created
+-- server-side after an RLS check on the ticket.
+
+insert into storage.buckets (id, name, public)
+values ('ticket-media', 'ticket-media', false)
+on conflict (id) do nothing;
+
+create policy "Authenticated users can upload ticket media"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'ticket-media'
+    and auth.role() = 'authenticated'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can read own ticket media"
+  on storage.objects for select
+  using (
+    bucket_id = 'ticket-media'
+    and auth.role() = 'authenticated'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Users can delete own ticket media"
+  on storage.objects for delete
+  using (
+    bucket_id = 'ticket-media'
+    and auth.role() = 'authenticated'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );

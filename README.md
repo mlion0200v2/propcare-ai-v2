@@ -95,82 +95,10 @@ tests/                             # Integration + unit tests
 
 ## Getting Started
 
-### Prerequisites
-
-- Node.js 20+
-- A [Supabase](https://supabase.com) project
-- A [Pinecone](https://www.pinecone.io) index (dimension: 1536, metric: cosine)
-- An [OpenAI](https://platform.openai.com) API key
-- A [Resend](https://resend.com) API key (for email notifications)
-
-### 1. Install dependencies
-
-```bash
-npm install
-```
-
-### 2. Configure environment
-
-Create a `.env.local` file in the project root:
-
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-# OpenAI (embeddings + grounding)
-OPENAI_API_KEY=sk-...
-
-# Pinecone (vector search)
-PINECONE_API_KEY=your-pinecone-key
-PINECONE_ENVIRONMENT=us-east-1
-PINECONE_INDEX=propcare-kb
-PINECONE_NAMESPACE=sop
-
-# Retrieval tuning (optional)
-RETRIEVAL_MIN_SCORE=0.40
-
-# Email notifications
-RESEND_API_KEY=re_...
-FALLBACK_MANAGER_EMAIL=manager@example.com
-
-# App
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-```
-
-### 3. Set up the database
-
-Run the Supabase migrations in order:
-
-```bash
-# Via Supabase CLI
-supabase db push
-
-# Or apply migrations manually in the Supabase SQL Editor:
-#   supabase/migrations/001_initial_schema.sql
-#   supabase/migrations/002_nullable_unit_id.sql
-#   supabase/migrations/003_profiles_defaults.sql
-#   supabase/migrations/004_storage_policies.sql
-```
-
-### 4. Seed the knowledge base
-
-Ingest SOP documents into Pinecone:
-
-```bash
-npx tsx scripts/ingest_sop_to_pinecone.ts
-```
-
-This reads `scripts/propcare_sop_seed_50.jsonl` and upserts 50 SOP snippets covering plumbing, electrical, HVAC, appliance, pest control, and more.
-
-### 5. Run the dev server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
+See **[SETUP.md](SETUP.md)**: run everything locally with Docker and the
+Supabase CLI (`npx supabase start`, demo data included), set up a brand-new
+hosted Supabase project, environment variables, and seeding the Pinecone SOP
+knowledge base.
 
 ## API Endpoints
 
@@ -216,19 +144,19 @@ plumbing, electrical, hvac, appliance, structural, pest_control, locksmith, roof
 
 ## Database Schema
 
-Key tables with Row-Level Security:
+One baseline migration (`supabase/migrations/20261020000000_baseline.sql`),
+row-level security on every table, keyed by workspace membership:
 
 | Table | Purpose |
 |-------|---------|
-| `profiles` | Users (tenant or manager role) |
-| `properties` | Buildings owned by managers |
-| `units` | Individual units within properties |
-| `tickets` | Maintenance issues with JSONB classification |
-| `messages` | Chat history (sender, body, is_bot_reply) |
-| `ticket_media` | Uploaded photos and videos |
-| `vendors` | Contractor list per manager |
+| `workspaces`, `memberships`, `invitations` | A landlord's or management company's workspace; members with a role (admin, manager, owner) |
+| `properties`, `units`, `owner_property_access` | Homes and units (each unit has a tenant link); which homes an owner sees |
+| `tenancies`, `tenancy_verifications`, `intake_codes` | Tenants of a unit, devices that confirmed a one-time code, the codes (hashed) |
+| `tickets`, `messages`, `ticket_media` | Requests, the triage chat, photos/videos |
+| `ticket_comments`, `approvals` | Team / team-and-owner / to-tenant comments; owner approval of quotes |
+| `profiles`, `vendors` | Names and contact details; contractors per workspace |
 
-The `tickets.classification` JSONB column stores the full triage state: gathered fields, issue classification, safety detection, media refs, retrieval results, validation, guided troubleshooting log, and PM summary.
+The `tickets.classification` JSONB column stores the full triage state: gathered fields, issue classification, safety detection, media refs, retrieval results, validation, guided troubleshooting log, and PM summary. Access rules: [docs/workspaces.md](docs/workspaces.md).
 
 ## Testing
 
@@ -236,14 +164,14 @@ The `tickets.classification` JSONB column stores the full triage state: gathered
 # Pure tests (no external services)
 npx tsx tests/run.ts
 
-# Include Supabase integration tests
+# Include checks against a running Supabase (e.g. local `npx supabase start`)
 RUN_INTEGRATION=1 npx tsx tests/run.ts
 
 # Full suite (Supabase + Pinecone + OpenAI)
 RUN_INTEGRATION=1 RUN_EXTERNAL=1 npx tsx tests/run.ts
 ```
 
-Test suites cover: state machine logic, classification, safety detection, retrieval pipeline, grounding validation, guided troubleshooting feedback, edge cases (pest, plumbing), RLS policies, and end-to-end flows.
+Test suites cover: state machine logic, classification, safety detection, retrieval pipeline, grounding validation, guided troubleshooting feedback, edge cases (pest, plumbing), and row-level security (`tests/integration/test-workspace-rls.ts`, run against the real migration and seed in an in-process Postgres, no Docker needed).
 
 ## Scripts
 
@@ -253,7 +181,7 @@ Test suites cover: state machine logic, classification, safety detection, retrie
 | `npm run build` | Production build |
 | `npm run start` | Start production server |
 | `npm run lint` | Run ESLint |
-| `npx tsx scripts/ingest_sop_to_pinecone.ts` | Ingest SOPs into Pinecone |
+| `npx tsx scripts/ingest_sop_to_pinecone.ts scripts/propcare_sop_seed_50.jsonl` | Ingest SOPs into Pinecone |
 | `npx tsx scripts/generate_sop_jsonl.ts` | Generate JSONL from YAML source |
 
 ## License
