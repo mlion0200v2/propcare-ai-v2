@@ -1,0 +1,91 @@
+name: Deploy staging
+
+# Every push to main that passes CI is built into an image, pushed to Artifact
+# Registry and rolled out to the staging Cloud Run service (Montreal). Google
+# Cloud authentication uses Workload Identity Federation: no keys in GitHub.
+# The infrastructure (service, registry, secrets, deployer) is Terraform in the
+# Birchwood website repo: infra/terraform/modules/propcare.
+#
+# Repository variables (Settings > Secrets and variables > Actions > Variables):
+#   GCP_STAGING_PROJECT_ID, GCP_STAGING_WIF_PROVIDER, GCP_STAGING_DEPLOYER_SA,
+#   STAGING_APP_URL, STAGING_SUPABASE_URL, STAGING_SUPABASE_ANON_KEY
+# (the anon key is public by design: Supabase row-level security protects the data).
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+env:
+  REGION: northamerica-northeast1
+  SERVICE: propcare
+  SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  deploy:
+    name: Build, push, deploy
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_APP_URL }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.SHA }}
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_STAGING_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_STAGING_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - id: image
+        run: echo "name=${REGION}-docker.pkg.dev/${{ vars.GCP_STAGING_PROJECT_ID }}/propcare/${SERVICE}:${SHA}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.image.outputs.name }}
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ vars.STAGING_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ vars.STAGING_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_APP_URL=${{ vars.STAGING_APP_URL }}
+            APP_VERSION=${{ env.SHA }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy "$SERVICE" \
+            --project "${{ vars.GCP_STAGING_PROJECT_ID }}" \
+            --region "$REGION" \
+            --image "${{ steps.image.outputs.name }}" \
+            --quiet
+
+      - name: Smoke test
+        run: |
+          url="${{ vars.STAGING_APP_URL }}"
+          for i in $(seq 1 20); do
+            if curl -fsS "$url/api/health"; then echo; break; fi
+            sleep 3
+          done
+          curl -fsS -o /dev/null -w "login %{http_code}\n" "$url/login"
