@@ -64,30 +64,30 @@ insert into memberships (workspace_id, user_id, role, display_name) values
 
 -- ---------- Homes and units ----------
 insert into properties (id, workspace_id, address_line1, city, state, zip, property_type) values
-  ('00000000-0000-4000-c000-000000000001', '00000000-0000-4000-b000-000000000001',
+  ('00000000-0000-4000-8c00-000000000001', '00000000-0000-4000-b000-000000000001',
    '3076 Arbutus Street', 'Vancouver', 'BC', 'V6J 3G1', 'multi_unit'),
-  ('00000000-0000-4000-c000-000000000002', '00000000-0000-4000-b000-000000000001',
+  ('00000000-0000-4000-8c00-000000000002', '00000000-0000-4000-b000-000000000001',
    '418 Oak Street', 'Vancouver', 'BC', 'V6H 2L9', 'single_family');
 
 -- workspace_id is filled in by trigger from the property.
 insert into units (id, property_id, unit_number, status, intake_token) values
-  ('00000000-0000-4000-d000-000000000101', '00000000-0000-4000-c000-000000000001', '101', 'occupied', 'demo-link-arbutus-unit-101'),
-  ('00000000-0000-4000-d000-000000000102', '00000000-0000-4000-c000-000000000001', '102', 'vacant',   'demo-link-arbutus-unit-102'),
-  ('00000000-0000-4000-d000-000000000201', '00000000-0000-4000-c000-000000000002', null,  'occupied', 'demo-link-oak-street-house');
+  ('00000000-0000-4000-8d00-000000000101', '00000000-0000-4000-8c00-000000000001', '101', 'occupied', 'demo-link-arbutus-unit-101'),
+  ('00000000-0000-4000-8d00-000000000102', '00000000-0000-4000-8c00-000000000001', '102', 'vacant',   'demo-link-arbutus-unit-102'),
+  ('00000000-0000-4000-8d00-000000000201', '00000000-0000-4000-8c00-000000000002', null,  'occupied', 'demo-link-oak-street-house');
 
 insert into owner_property_access (workspace_id, user_id, property_id) values
-  ('00000000-0000-4000-b000-000000000001', '00000000-0000-4000-a000-000000000003', '00000000-0000-4000-c000-000000000001');
+  ('00000000-0000-4000-b000-000000000001', '00000000-0000-4000-a000-000000000003', '00000000-0000-4000-8c00-000000000001');
 
 -- ---------- A tenant with an account, and one request ----------
 insert into tenancies (id, unit_id, tenant_user_id, name, email, phone, verified_at) values
-  ('00000000-0000-4000-e000-000000000001', '00000000-0000-4000-d000-000000000101',
+  ('00000000-0000-4000-8e00-000000000001', '00000000-0000-4000-8d00-000000000101',
    '00000000-0000-4000-a000-000000000004', 'Taylor Tenant', 'tenant@example.test', '604-555-0142', now());
 
 insert into tickets (id, unit_id, tenancy_id, tenant_id, title, description, category, triage_state, stage, classification)
 values (
-  '00000000-0000-4000-f000-000000000001',
-  '00000000-0000-4000-d000-000000000101',
-  '00000000-0000-4000-e000-000000000001',
+  '00000000-0000-4000-8f00-000000000001',
+  '00000000-0000-4000-8d00-000000000101',
+  '00000000-0000-4000-8e00-000000000001',
   '00000000-0000-4000-a000-000000000004',
   'Kitchen sink, slow drain',
   'Kitchen sink drains slowly since yesterday. Tried hot water and a plunger: better, still slow.',
@@ -96,18 +96,18 @@ values (
 );
 
 insert into messages (ticket_id, sender_id, body, is_bot_reply, created_at) values
-  ('00000000-0000-4000-f000-000000000001', '00000000-0000-4000-a000-000000000004',
+  ('00000000-0000-4000-8f00-000000000001', '00000000-0000-4000-a000-000000000004',
    'Kitchen sink drains slowly since yesterday.', false, now() - interval '2 hours'),
-  ('00000000-0000-4000-f000-000000000001', '00000000-0000-4000-a000-000000000004',
+  ('00000000-0000-4000-8f00-000000000001', '00000000-0000-4000-a000-000000000004',
    'Thanks — I''ve sent this to your property manager with what you tried.', true, now() - interval '1 hour 50 minutes');
 
 insert into ticket_comments (ticket_id, workspace_id, author_id, author_name, author_role, visibility, body, created_at) values
-  ('00000000-0000-4000-f000-000000000001', '00000000-0000-4000-b000-000000000001',
+  ('00000000-0000-4000-8f00-000000000001', '00000000-0000-4000-b000-000000000001',
    '00000000-0000-4000-a000-000000000002', 'Morgan Manager', 'manager', 'team',
    'Same unit had a slow drain in March. Ask the plumber to scope the line.', now() - interval '90 minutes'),
-  ('00000000-0000-4000-f000-000000000001', '00000000-0000-4000-b000-000000000001',
+  ('00000000-0000-4000-8f00-000000000001', '00000000-0000-4000-b000-000000000001',
    '00000000-0000-4000-a000-000000000002', 'Morgan Manager', 'manager', 'team_owner',
    'Plumber quote expected to be around $340.', now() - interval '80 minutes'),
-  ('00000000-0000-4000-f000-000000000001', '00000000-0000-4000-b000-000000000001',
+  ('00000000-0000-4000-8f00-000000000001', '00000000-0000-4000-b000-000000000001',
    '00000000-0000-4000-a000-000000000002', 'Morgan Manager', 'manager', 'tenant',
    'Hi Taylor, we''re booking a plumber and will confirm a time shortly.', now() - interval '70 minutes');
