@@ -7,6 +7,7 @@
 
 import type { TroubleshootingStep } from "./types";
 import { getCanonicalEquipment } from "./extract-details";
+import { FORTISBC_EMERGENCY_PHONE } from "./emergency";
 
 interface SOPResult {
   steps: TroubleshootingStep[];
@@ -50,9 +51,9 @@ const SOP_STEPS: Record<string, string[]> = {
     "Note how long the toilet has been running and whether it runs constantly or intermittently.",
   ],
   plumbing_no_hot_water: [
-    "Check your water heater's thermostat — it should be set between 120°F and 140°F.",
-    "Check your electrical panel for a tripped breaker labeled 'water heater' and reset it if needed.",
-    "For gas water heaters, check if the pilot light is lit (refer to the instructions on the unit).",
+    "Check that the temperature dial on the water heater hasn't been turned down — it is normally set to about 50–60 °C.",
+    "For an electric water heater, check whether the breaker labelled 'water heater' has tripped. Reset it once only — if it trips again, leave it off and let us know.",
+    "Do NOT try to relight a pilot light or touch any gas controls or gas lines — if you smell gas, leave and call FortisBC 1-800-663-9911.",
     "Run hot water at another faucet to see if the issue is throughout the unit or just one fixture.",
     "Note how long you've been without hot water and whether it happened suddenly or gradually.",
   ],
@@ -66,7 +67,7 @@ const SOP_STEPS: Record<string, string[]> = {
     "Do NOT touch exposed wires or attempt electrical repairs yourself.",
     "If an outlet isn't working, check if the breaker has tripped in your breaker panel.",
     "If a breaker keeps tripping, unplug all devices from that circuit.",
-    "If you smell burning or see sparks, turn off the breaker and contact management immediately.",
+    "If you smell burning or see sparks or smoke, do NOT touch the outlet, switch or panel — leave the area, call 911 if there is smoke or fire, and tell us right away.",
     "Use flashlights (not candles) if power is out.",
   ],
   hvac: [
@@ -100,18 +101,17 @@ const SOP_STEPS: Record<string, string[]> = {
   ],
   "appliance:dishwasher": [
     "Make sure the dishwasher door is latching properly — it won't run if it's not closed.",
-    "Check for kinks in the water supply or drain hose behind the dishwasher.",
+    "Under the sink, check whether the dishwasher drain hose looks kinked or pinched (don't pull the dishwasher out).",
     "Clean the filter at the bottom of the dishwasher tub (often a twist-out screen).",
     "Run an empty cycle with dishwasher cleaner or a cup of white vinegar.",
     "Take a photo of any error codes or visible issues.",
   ],
   "appliance:oven": [
-    "Make sure the oven is plugged in (electric) or the gas valve is open (gas).",
+    "For electric ovens, make sure the oven is plugged in and the outlet is working.",
     "Check if the clock/display shows an error code.",
     "For electric ovens: check that the heating element is not visibly damaged or broken.",
-    "For gas stoves: make sure the burner cap is properly centered on the base.",
-    "Gently clean around the igniter and burner ports with a dry cloth to remove food debris or grease.",
-    "Do NOT attempt to repair gas oven connections yourself — report gas smell immediately.",
+    "For gas stoves: with the burner off and cool, make sure the burner cap is sitting centred on its base.",
+    "Do NOT touch gas connections or try to repair a gas stove yourself — if you smell gas, leave and call FortisBC 1-800-663-9911.",
     "Take a photo of any visible damage or error codes.",
   ],
   "appliance:microwave": [
@@ -124,7 +124,7 @@ const SOP_STEPS: Record<string, string[]> = {
   "appliance:washer": [
     "Check that the washer is plugged in and the outlet is working.",
     "Make sure both the hot and cold water supply valves are open.",
-    "Check for kinks in the water supply hoses.",
+    "If you can see the water supply hoses without moving the washer, check that they aren't kinked.",
     "If leaking, check the door seal (front-loader) or lid switch (top-loader).",
     "Take a photo of any visible leaks or error codes.",
   ],
@@ -144,17 +144,16 @@ const SOP_STEPS: Record<string, string[]> = {
   ],
   // ── Symptom-specific appliance SOPs ──
   "appliance:refrigerator:noise": [
-    "Check if the fridge is level — place a level on top or see if it rocks when nudged. Adjust the front feet until stable.",
-    "Pull the fridge out slightly and ensure there's 1–2 inches of clearance from the wall on all sides.",
+    "Without moving the fridge, check whether it rocks when you gently press on a top corner — note it if it does.",
     "Open the fridge and check for loose shelves, bins, or items that could be vibrating.",
-    "Check the base grille (bottom front) — remove it and clear any dust or debris around the drain pan and compressor area.",
+    "Check that nothing (bags, boxes, a mop) is wedged between the fridge and the wall or cabinets.",
     "Listen to whether the sound changes when the compressor kicks on/off — a loud hum from the back is usually compressor-related.",
   ],
   "appliance:refrigerator:leak": [
-    "Check if the fridge is level — water can pool and leak from a tilted unit.",
-    "Pull the fridge out and inspect the water line connection (if it has an ice maker or water dispenser).",
-    "Check the drain pan under the fridge — it may be full or cracked.",
+    "Without moving the fridge, note where the water is pooling — in front, underneath, or inside the fridge.",
+    "Look inside the fridge for water collecting under the crisper drawers or at the back wall.",
     "Look inside the freezer for excessive ice buildup blocking the defrost drain.",
+    "Wipe up the water so nobody slips. Please don't pull the fridge out — maintenance will check the water line and drain pan.",
     "Take a photo of where the water is coming from.",
   ],
   appliance_noise: [
@@ -223,14 +222,14 @@ const SOP_STEPS: Record<string, string[]> = {
   locksmith: [
     "If locked out, contact your property management before calling a locksmith.",
     "Do NOT attempt to force open locks — this can cause expensive damage.",
-    "If a lock is broken or a key is stuck, try lubricant (WD-40) gently.",
+    "If a lock is broken or a key is stuck, don't force it — let us know and we'll arrange a locksmith.",
     "If you feel your unit security is compromised, report immediately.",
   ],
   roofing: [
     "Place buckets under any active drips and move belongings away from the area.",
     "Take photos of water stains, drips, or visible roof damage.",
     "Do NOT go on the roof yourself.",
-    "If water is near electrical fixtures, turn off the breaker for that area.",
+    "If water is coming through or near a light fixture, outlet or wiring, stay away from it, don't touch any switches, and tell us right away — this is an emergency.",
   ],
   painting: [
     "Note areas with peeling, bubbling, or staining paint.",
@@ -283,7 +282,7 @@ const SOP_STEPS: Record<string, string[]> = {
 };
 
 const EMERGENCY_PREFIX_STEPS: string[] = [
-  "If you smell gas, leave the unit immediately and contact the FortisBC gas emergency line.",
+  `If you smell gas, leave the unit immediately and call the FortisBC gas emergency line at ${FORTISBC_EMERGENCY_PHONE} from outside.`,
   "If there's flooding, turn off the main water valve if it is safe to do so.",
   "If there's a fire or smoke, evacuate and call 911.",
   "Do NOT re-enter the unit until cleared by emergency services or your property manager.",

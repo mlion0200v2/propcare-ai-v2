@@ -28,7 +28,6 @@ import {
   stepTenantInfo,
   getNextMissingTenantInfo,
   getNextMissingField,
-  hasEmergencyKeywords,
   validateTenantInfo,
   TENANT_INFO_QUESTIONS,
   QUESTIONS,
@@ -59,11 +58,10 @@ import {
 } from "@/lib/triage/classify-issue";
 import {
   detectSafety,
-  parseSafetyResponse,
   checkPestEscalation,
 } from "@/lib/triage/detect-safety";
 import { querySnippets } from "@/lib/retrieval/pinecone";
-import { generateGroundedSteps, generateWebSearchSteps, convertToGuidedSteps, shouldUseGuidedTroubleshooting, filterStepsByEquipment } from "@/lib/triage/grounding";
+import { generateGroundedSteps, generateWebSearchSteps, convertToGuidedSteps, shouldUseGuidedTroubleshooting, filterStepsByEquipment, enforceStepSafety } from "@/lib/triage/grounding";
 import { generateTicketSummary, generateTenantSummary } from "@/lib/triage/summary";
 import { validateGroundedResult } from "@/lib/triage/validate";
 import { getFallbackSOP } from "@/lib/triage/sop-fallback";
@@ -78,6 +76,17 @@ import {
 } from "@/lib/triage/step-feedback";
 import { classifyStepHybrid } from "@/lib/triage/interpret-step-response";
 import { generateStepHelp } from "@/lib/triage/step-help";
+import {
+  detectEmergency,
+  classifySafetyAnswer,
+  buildEmergencyReply,
+  buildEmergencyFollowUpReply,
+  type EmergencyMatch,
+} from "@/lib/triage/emergency";
+import { escalateEmergency, setPrivilegedTicketFields } from "@/lib/triage/escalate-emergency";
+import { isSummaryConfirmation } from "@/lib/triage/confirmation";
+import { triageChatRequestSchema } from "@/lib/utils/validation";
+import { triageChatLimiter } from "@/lib/rate-limit";
 import type {
   TriageContext,
   TriageClassification,
@@ -174,7 +183,7 @@ export async function GET(request: NextRequest) {
   } catch (err: unknown) {
     logError("chat_get_fatal", err);
     return NextResponse.json(
-      { error: "triage_chat_resume_failed", details: String(err) },
+      { error: "triage_chat_resume_failed" },
       { status: 500 }
     );
   }
@@ -197,21 +206,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // ── Parse body ──
-    let body: {
-      message?: string;
-      ticket_id?: string;
-      confirm_profile?: string;
-      media_action?: string;
-      confirm_summary?: string;
-    };
+    // ── Parse + validate body ──
+    let rawBody: unknown;
     try {
-      body = await request.json();
+      rawBody = await request.json();
     } catch {
       return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
     }
+    const parsedBody = triageChatRequestSchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: parsedBody.error.issues[0]?.message ?? "Invalid request" },
+        { status: 400 }
+      );
+    }
+    const body = parsedBody.data;
 
     const message = body.message?.trim();
+
+    // ── Per-user rate limit (each message can trigger OpenAI calls) ──
+    // Emergencies are never throttled: that path makes no LLM calls.
+    const isEmergencyMessage = !!message && detectEmergency(message) !== null;
+    if (!isEmergencyMessage) {
+      const limit = triageChatLimiter.check(user.id);
+      if (!limit.allowed) {
+        return NextResponse.json(
+          { error: "Too many messages. Please wait a moment and try again." },
+          { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+        );
+      }
+    }
     // message is required unless this is a confirm_profile, media_action, or confirm_summary
     if (!message && !body.confirm_profile && !body.media_action && !body.confirm_summary) {
       return NextResponse.json(
@@ -245,7 +269,7 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     logError("chat_post_fatal", err);
     return NextResponse.json(
-      { error: "triage_chat_failed", details: String(err) },
+      { error: "triage_chat_failed" },
       { status: 500 }
     );
   }
@@ -295,8 +319,9 @@ async function handleFirstMessage(
     rationale: classification_result.rationale,
   };
 
-  // ── Auto-detect emergency keywords ──
-  const emergencyDetected = hasEmergencyKeywords(message);
+  // ── Shared emergency detector ──
+  const emergency = detectEmergency(message);
+  const emergencyDetected = emergency !== null;
 
   // ── Extract structured details from initial description ──
   const extractedLocation = extractLocation(message) ?? inferLocationFromEquipment(message);
@@ -566,6 +591,21 @@ async function handleFirstMessage(
     logError("chat_user_message_insert", userMsgErr);
   }
 
+  // Emergency in the very first message: reply with safety guidance now,
+  // alert the manager now, and skip all questions/troubleshooting.
+  if (emergency) {
+    return handleEmergency(
+      supabase,
+      userId,
+      { ...ticket, description: message, triage_state: triageState, unit_id: hasUnit ? unit.id : null },
+      triageClassification,
+      message,
+      emergency,
+      start,
+      { insertUserMessage: false }
+    );
+  }
+
   // Insert bot reply
   const { error: botMsgErr } = await supabase.from("messages").insert({
     ticket_id: ticket.id,
@@ -638,11 +678,71 @@ async function handleFollowUp(
 
   const stored = (ticket.classification ?? {}) as unknown as TriageClassification;
 
+  // ── EMERGENCY branch: already escalated — record anything new, no troubleshooting ──
+  if (ticket.triage_state === "EMERGENCY") {
+    if (message) {
+      await supabase.from("messages").insert({
+        ticket_id: ticket.id,
+        sender_id: userId,
+        body: message,
+        is_bot_reply: false,
+      });
+    }
+    const followUpReply = buildEmergencyFollowUpReply();
+    await supabase.from("messages").insert({
+      ticket_id: ticket.id,
+      sender_id: userId,
+      body: followUpReply,
+      is_bot_reply: true,
+    });
+    return NextResponse.json({
+      ticket_id: ticket.id,
+      reply: followUpReply,
+      triage_state: "EMERGENCY",
+      is_complete: false,
+    });
+  }
+
+  // ── Emergency detection on EVERY turn, in every state ──
+  // Runs before any state-specific handling so an emergency typed in reply to
+  // any question (address, location, a troubleshooting step, the summary…)
+  // gets safety guidance immediately and stops troubleshooting.
+  // (Phone/email answers are format-validated and skipped: "sparks@…" is not a fire.)
+  const isContactAnswer =
+    ticket.triage_state === "COLLECT_TENANT_INFO" &&
+    (stored.current_question === "contact_phone" || stored.current_question === "contact_email");
+  let emergency: EmergencyMatch | null =
+    message && !isContactAnswer ? detectEmergency(message) : null;
+
+  // Answer to the targeted safety question: only a clear "no" clears it;
+  // a "yes" or an unclear answer escalates.
+  if (
+    !emergency &&
+    ticket.triage_state === "GATHER_INFO" &&
+    stored.current_question === "safety_check"
+  ) {
+    const answer = classifySafetyAnswer(message);
+    if (answer !== "no_concern") {
+      emergency = { kind: "unconfirmed_safety", phrase: message.slice(0, 120) };
+      stored.safety_detection = {
+        detected: true,
+        method: answer === "concern" ? "user_confirmed" : "user_unclear",
+        rationale: `user_response: "${message.slice(0, 50)}"`,
+      };
+    }
+  }
+
+  if (emergency) {
+    return handleEmergency(supabase, userId, ticket, stored, message, emergency, start, {
+      insertUserMessage: true,
+    });
+  }
+
   // ── CONFIRM_SUMMARY branch ──
   if (ticket.triage_state === "CONFIRM_SUMMARY") {
     const summaryAction = confirmSummary ?? message;
-    const isConfirm = confirmSummary === "confirm" ||
-      /\b(yes|yeah|yep|looks good|correct|confirm|that's right|right|good|submit)\b/i.test(summaryAction);
+    // Negation-aware: "not right" / "no, that's wrong" must NOT submit.
+    const isConfirm = isSummaryConfirmation(summaryAction, confirmSummary);
 
     // Insert user message
     const userText = isConfirm ? "Looks good, submit" : summaryAction;
@@ -677,11 +777,6 @@ async function handleFollowUp(
       if (correctedCategory) {
         gathered.category = correctedCategory;
         gathered.subcategory = null; // Reset subcategory when category changes
-      }
-
-      // Re-check emergency
-      if (hasEmergencyKeywords(summaryAction)) {
-        gathered.is_emergency = true;
       }
 
       // Re-generate tenant summary with corrections
@@ -1271,6 +1366,26 @@ async function handleFollowUp(
       log: updatedLog,
     };
 
+    // Unsafe reply during troubleshooting (scared, getting worse, LLM-detected
+    // emergency, …) → stop troubleshooting and escalate now.
+    if (feedback === "unsafe") {
+      const unsafeStored: TriageClassification = {
+        ...stored,
+        gathered,
+        guided_troubleshooting: { ...guidedState, log: updatedLog, outcome: "escalated" },
+      };
+      return handleEmergency(
+        supabase,
+        userId,
+        ticket,
+        unsafeStored,
+        message,
+        { kind: "unconfirmed_safety", phrase: message.slice(0, 120) },
+        start,
+        { insertUserMessage: false }
+      );
+    }
+
     // Determine next action
     const action = determineNextAction(stateForDecision, feedback, previousResult);
 
@@ -1552,13 +1667,13 @@ async function handleFollowUp(
 
     currentQuestion = null; // Move to next field
   } else if (currentQuestion === "safety_check") {
-    // Targeted safety question — parse the response
-    const isSafe = !parseSafetyResponse(message);
-    gathered.is_emergency = !isSafe;
+    // Targeted safety question. Concern or unclear answers were already
+    // escalated above (handleEmergency), so only a clear "no" reaches here.
+    gathered.is_emergency = false;
 
     stored.safety_detection = {
-      detected: !isSafe,
-      method: !isSafe ? "user_confirmed" : "user_denied",
+      detected: false,
+      method: "user_denied",
       rationale: `user_response: "${message.slice(0, 50)}"`,
     };
 
@@ -1584,10 +1699,7 @@ async function handleFollowUp(
     }
   }
 
-  // 2. Auto-detect emergency keywords in every message
-  if (hasEmergencyKeywords(message)) {
-    gathered.is_emergency = true;
-  }
+  // 2. Emergencies in this message were already handled above (handleEmergency).
 
   // 2b. Extract entry point from every GATHER_INFO message
   if (!gathered.entry_point) {
@@ -1741,13 +1853,23 @@ async function handleFollowUp(
     const safetyResult = detectSafety(ticket.description, gathered);
 
     if (safetyResult.detected) {
-      // Auto-detected emergency
+      // Auto-detected emergency (e.g. electrical + burning) → escalate now.
       gathered.is_emergency = true;
       stored.safety_detection = {
         detected: true,
         method: "auto",
         rationale: safetyResult.rationale,
       };
+      return handleEmergency(
+        supabase,
+        userId,
+        ticket,
+        { ...stored, gathered },
+        message,
+        { kind: safetyResult.kind ?? "unconfirmed_safety", phrase: safetyResult.rationale },
+        start,
+        { insertUserMessage: true }
+      );
     } else if (safetyResult.needsQuestion && !stored.safety_detection) {
       // Need to ask a targeted safety question
       const updatedClassification: TriageClassification = {
@@ -1810,6 +1932,21 @@ async function handleFollowUp(
         rationale: safetyResult.rationale,
       };
     }
+  }
+
+  // Emergency flagged earlier in the conversation but not escalated yet
+  // (e.g. a ticket created before this release) → escalate now.
+  if (gathered.is_emergency === true) {
+    return handleEmergency(
+      supabase,
+      userId,
+      ticket,
+      { ...stored, gathered },
+      message,
+      { kind: "unconfirmed_safety", phrase: stored.safety_detection?.rationale ?? "flagged during triage" },
+      start,
+      { insertUserMessage: true }
+    );
   }
 
   // ── Transition to AWAITING_MEDIA ──
@@ -1958,8 +2095,6 @@ async function handleRetrievalAndCompletion(
         triage_state: "DONE",
         classification: escalationClassification as unknown as Json,
         category: (gathered.category ?? "general") as Database["public"]["Enums"]["ticket_category"],
-        priority: "high" as Database["public"]["Enums"]["ticket_priority"],
-        status: "escalated" as Database["public"]["Enums"]["ticket_status"],
       })
       .eq("id", ticket.id)
       .select("id")
@@ -1967,6 +2102,8 @@ async function handleRetrievalAndCompletion(
     if (escalateErr) {
       logError("chat_pest_escalation_update", escalateErr, { ticketId: ticket.id });
     }
+    // Priority/status are not tenant-writable (migration 005) — set server-side.
+    await setPrivilegedTicketFields(ticket.id, userId, { priority: "high", status: "escalated" });
 
     await supabase.from("messages").insert({
       ticket_id: ticket.id,
@@ -2170,6 +2307,16 @@ async function handleRetrievalAndCompletion(
   } else {
     validation = { ...validation, action_taken: "none" };
   }
+
+  // ── Never-instruct post-filter (all sources: grounded, web, SOP) ──
+  const safeResult = enforceStepSafety(groundedResult);
+  if (safeResult.removedUnsafe.length > 0) {
+    logWarn("chat_unsafe_steps_removed", "Removed unsafe troubleshooting steps", {
+      ticketId: ticket.id,
+      rules: safeResult.removedUnsafe,
+    });
+  }
+  groundedResult = safeResult;
 
   // ── Guided troubleshooting bifurcation ──
   // SOP-driven: enter guided mode when steps contain safe, actionable content
@@ -2478,23 +2625,31 @@ async function handleFinalCompletion(
   const effectivePriority = isEscalated || isEmergency ? "emergency" : "medium";
   const effectiveStatus = isEscalated || isEmergency ? "escalated" : "open";
 
+  // Priority/status/safety are not tenant-writable (migration 005): set them
+  // server-side first, while the ticket is still in a tenant-editable status.
+  await setPrivilegedTicketFields(ticket.id, userId, {
+    priority: effectivePriority,
+    safety_assessment: isEmergency
+      ? ({ flagged: true, reason: "emergency_detected" } as unknown as Json)
+      : null,
+  });
+
   const { error: doneUpdateErr } = await supabase
     .from("tickets")
     .update({
       triage_state: "DONE",
       classification: doneClassification as unknown as Json,
       category: (gathered.category ?? "general") as Database["public"]["Enums"]["ticket_category"],
-      priority: effectivePriority,
-      status: effectiveStatus,
-      safety_assessment: isEmergency
-        ? ({ flagged: true, reason: "emergency_detected" } as unknown as Json)
-        : null,
     })
     .eq("id", ticket.id)
     .select("id")
     .single();
   if (doneUpdateErr) {
     logError("chat_final_completion_update", doneUpdateErr, { ticketId: ticket.id });
+  }
+
+  if (effectiveStatus !== "open") {
+    await setPrivilegedTicketFields(ticket.id, userId, { status: effectiveStatus });
   }
 
   const confirmReply = "Your report has been submitted. Your property manager has been notified and will follow up with you.";
@@ -2539,5 +2694,104 @@ async function handleFinalCompletion(
     reply: confirmReply,
     triage_state: "DONE",
     is_complete: true,
+  });
+}
+
+// ── Emergency handler (any state, any turn) ──
+
+/**
+ * Stop triage and escalate: reply at once with leave-now guidance (FortisBC /
+ * 911), mark the ticket priority=emergency / status=escalated, alert the
+ * manager immediately, and move to the EMERGENCY state (no more questions or
+ * troubleshooting steps).
+ */
+async function handleEmergency(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  ticket: { id: string; trace_id: string | null; description: string; triage_state: string; unit_id: string | null },
+  stored: TriageClassification,
+  message: string,
+  emergency: EmergencyMatch,
+  start: number,
+  opts: { insertUserMessage: boolean }
+) {
+  if (opts.insertUserMessage && message) {
+    await supabase.from("messages").insert({
+      ticket_id: ticket.id,
+      sender_id: userId,
+      body: message,
+      is_bot_reply: false,
+    });
+  }
+
+  const gathered = { ...(stored.gathered ?? buildInitialGathered()), is_emergency: true };
+  const emergencyClassification: TriageClassification = {
+    ...stored,
+    gathered,
+    current_question: null,
+    safety_detection: stored.safety_detection?.detected
+      ? stored.safety_detection
+      : { detected: true, method: "auto", rationale: `${emergency.kind}: "${emergency.phrase}"` },
+    emergency: {
+      kind: emergency.kind,
+      phrase: emergency.phrase,
+      detected_at: new Date().toISOString(),
+      previous_state: ticket.triage_state,
+      manager_notified: false,
+    },
+  };
+
+  const result = await escalateEmergency({
+    ticketId: ticket.id,
+    tenantId: userId,
+    unitId: ticket.unit_id,
+    description: ticket.description,
+    latestMessage: message,
+    emergency,
+    classification: emergencyClassification,
+  });
+
+  if (!result.escalated) {
+    // Service role unavailable: still stop troubleshooting via the tenant's
+    // own client (priority/status could not be set — logged in escalateEmergency).
+    const { error } = await supabase
+      .from("tickets")
+      .update({
+        triage_state: "EMERGENCY",
+        classification: emergencyClassification as unknown as Json,
+      })
+      .eq("id", ticket.id);
+    if (error) logError("chat_emergency_state_update", error, { ticketId: ticket.id });
+  }
+
+  const reply = buildEmergencyReply(emergency.kind, result.managerNotified);
+  await supabase.from("messages").insert({
+    ticket_id: ticket.id,
+    sender_id: userId,
+    body: reply,
+    is_bot_reply: true,
+  });
+
+  logTriageStep({
+    trace_id: ticket.trace_id ?? ticket.id,
+    ticket_id: ticket.id,
+    triage_state: "EMERGENCY",
+    action: "emergency_detected",
+    latency_ms: Date.now() - start,
+    timestamp: new Date().toISOString(),
+    metadata: {
+      kind: emergency.kind,
+      previous_state: ticket.triage_state,
+      escalated: result.escalated,
+      manager_notified: result.managerNotified,
+    },
+  });
+
+  return NextResponse.json({
+    ticket_id: ticket.id,
+    reply,
+    triage_state: "EMERGENCY",
+    is_complete: false,
+    is_emergency: true,
   });
 }

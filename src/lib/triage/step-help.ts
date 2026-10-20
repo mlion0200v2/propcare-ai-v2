@@ -7,6 +7,7 @@
 
 import { openai } from "../openai-client";
 import type { GuidedStep } from "./types";
+import { isUnsafeInstruction, sanitizeReplyText } from "./step-safety";
 
 const SYSTEM_PROMPT = `You are a friendly property maintenance assistant helping a tenant who isn't sure how to perform a troubleshooting step.
 
@@ -15,8 +16,10 @@ Rules:
 - Use simple language — the tenant is not a professional
 - If the step involves locating something, describe where to look
 - Do NOT suggest repairs, disassembly, or anything requiring tools beyond basics
-- If the step seems beyond a typical tenant's ability, say so honestly
-- End with a YouTube search suggestion: "You might find a helpful video by searching YouTube for '[specific search term]'."`;
+- If the step seems beyond a typical tenant's ability, say so honestly and tell them it's fine to skip it
+- NEVER tell the tenant to touch gas valves, gas lines or pilot lights, open electrical panels or covers, touch wiring, reset breakers when there is water, sparks, smoke or a burning smell, move or pull out heavy appliances, climb on roofs or ladders, or use WD-40 or chemical cleaners
+- Do NOT suggest YouTube or any other videos or websites
+- Use metric units (°C, cm)`;
 
 function buildUserPrompt(
   step: GuidedStep,
@@ -55,7 +58,15 @@ export async function generateStepHelp(
     });
 
     const content = completion.choices[0]?.message?.content?.trim();
-    if (content) return content;
+    // Never-instruct post-filter: drop unsafe sentences; if that guts the
+    // answer, fall back to the plain restatement below.
+    if (content) {
+      const sentences = content.split(/(?<=[.!?])\s+/);
+      const safe = sentences.filter((sentence) => !isUnsafeInstruction(sentence));
+      if (safe.length === sentences.length || safe.length >= 2) {
+        return sanitizeReplyText(safe.join(" "));
+      }
+    }
   } catch (err) {
     console.error("[step-help] LLM call failed", {
       error: err instanceof Error ? err.message : String(err),

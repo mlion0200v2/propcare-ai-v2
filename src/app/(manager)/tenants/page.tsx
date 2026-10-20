@@ -6,7 +6,7 @@ export const metadata = {
 };
 
 export default async function TenantsPage() {
-  const supabase = await createServiceClient();
+  const supabase = createServiceClient();
 
   // Load all tenant profiles
   const { data: tenants, error: tenantsErr } = await supabase

@@ -23,6 +23,8 @@ import { testValidateGroundedResult } from "./integration/test-validate";
 import { testGuidedTroubleshooting, testHybridInterpretation } from "./integration/test-guided-troubleshooting";
 import { testPestTriage } from "./integration/test-pest-triage";
 import { testPlumbingEdgeCases } from "./integration/test-plumbing-edge-cases";
+import { testLaunchSafety } from "./integration/test-launch-safety";
+import { testRLSEscalation } from "./integration/test-rls-escalation";
 
 import { testSupabaseConnection, testTableSchema } from "./integration/test-supabase";
 import { testEnums } from "./integration/test-enums";
@@ -65,6 +67,8 @@ async function main() {
   merge(testGuidedTroubleshooting());
   merge(testPestTriage());
   merge(testPlumbingEdgeCases());
+  merge(testLaunchSafety());
+  merge(await testRLSEscalation());
 
   // ── Phase B: Integration tests (Supabase) ──
   console.log("\n\x1b[1m-- Phase B: Integration Tests (Supabase) --\x1b[0m");

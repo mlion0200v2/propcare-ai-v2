@@ -55,20 +55,10 @@ export default function SignUpPage() {
             autoComplete="new-password"
           />
 
-          <div className="space-y-1">
-            <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-              I am a...
-            </label>
-            <select
-              id="role"
-              name="role"
-              required
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="tenant">Tenant</option>
-              <option value="manager">Property Manager</option>
-            </select>
-          </div>
+          <p className="text-xs text-gray-500">
+            Accounts created here are for tenants. Property managers are set up by
+            Birchwood — contact us if you need manager access.
+          </p>
 
           <Button type="submit" disabled={isPending} className="w-full">
             {isPending ? "Creating account..." : "Create account"}

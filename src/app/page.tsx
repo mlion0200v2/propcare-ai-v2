@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getProfileRole } from "@/lib/supabase/server";
 
 export default async function Home() {
   const supabase = await createClient();
@@ -11,6 +11,6 @@ export default async function Home() {
     redirect("/login");
   }
 
-  const role = user.user_metadata?.role as string | undefined;
+  const role = await getProfileRole(supabase, user.id);
   redirect(role === "manager" ? "/dashboard" : "/submit");
 }

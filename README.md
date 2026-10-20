@@ -152,6 +152,14 @@ supabase db push
 #   supabase/migrations/002_nullable_unit_id.sql
 #   supabase/migrations/003_profiles_defaults.sql
 #   supabase/migrations/004_storage_policies.sql
+#   supabase/migrations/005_lock_down_roles.sql
+```
+
+Public sign-up only creates **tenant** accounts. To make someone a property
+manager, have them sign up, then run (SQL editor / service role):
+
+```sql
+update public.profiles set role = 'manager' where email = 'manager@example.com';
 ```
 
 ### 4. Seed the knowledge base

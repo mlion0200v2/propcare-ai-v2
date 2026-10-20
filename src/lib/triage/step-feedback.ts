@@ -14,23 +14,45 @@ import type {
   GuidedNextAction,
   TroubleshootingStepResult,
 } from "./types";
+import { detectEmergency, EMERGENCY_FOOTER } from "./emergency";
 
 // ── Feedback classification (keyword-based, no LLM) ──
 
+// Emergencies (gas, CO, fire/smoke, sparks, sewage, …) come from the shared
+// detector in ./emergency; these add non-emergency "stop, this feels unsafe".
 const UNSAFE_PATTERNS = [
   /\b(danger|dangerous|unsafe|scared|afraid)\b/i,
-  /\b(gas smell|smell gas|gas leak)\b/i,
-  /\b(spark|sparks|sparking|shock|shocked)\b/i,
+  /\b(shock|shocked)\b/i,
   /\b(flood|flooding|flooded|water everywhere)\b/i,
-  /\b(fire|smoke|smoking|burning)\b/i,
   /\b(collapse|collapsing|falling)\b/i,
-  /\b(can't breathe|hard to breathe|carbon monoxide)\b/i,
+  /\b(can'?t breathe|hard to breathe|dizzy|nauseous|headache)\b/i,
   /\b(getting worse|got worse|much worse|not safe)\b/i,
   /\bwater near (outlet|electric|wir)/i,
 ];
 
+// Qualified partial outcomes that contain a negation ("not completely fixed")
+// — checked before NEGATED_OUTCOME_PATTERNS so they stay "partial".
+const QUALIFIED_PARTIAL_PATTERNS = [
+  /\b(not completely|not fully|not entirely|not totally|still some|still a little|still a bit)\b/i,
+  /\b(improved but|better but|less but|slowed but)\b/i,
+  /\b(helped|better|improved|slowed( down)?)\s+(a little|a bit|some|somewhat|slightly)\b/i,
+  /\b(a little|a bit|somewhat|slightly) (better|less|slower)\b/i,
+];
+
+// Negated outcomes ("hasn't stopped", "still not fixed", "nothing worked",
+// "stopped working"). Checked BEFORE HELPED_PATTERNS, which would otherwise
+// match the bare "stopped" / "fixed" / "worked".
+const NEGATED_OUTCOME_PATTERNS = [
+  /\b(not|never|isn'?t|is not|wasn'?t|was not|hasn'?t|has not|haven'?t|have not|didn'?t|did not|doesn'?t|does not|won'?t|will not|can'?t|cannot|ain'?t)\s+(?:\w+\s+){0,2}?(work|works|worked|working|fix|fixes|fixed|resolve|resolved|solve|solved|stop|stops|stopped|stopping|help|helps|helped|helping|change|changed)\b/i,
+  /\bnothing\s+(?:\w+\s+)?(worked|helped|fixed|changed|stopped)\b/i,
+  /\bstopped (working|responding|heating|cooling|draining|spinning|flushing|turning on)\b/i,
+  /\bstill\s+(not|isn'?t|won'?t|doesn'?t|hasn'?t|leak\w*|drip\w*|running|broken|happening|there|wet|bad)\b/i,
+  /\b(no|not any) (better|different)\b/i,
+];
+
 const HELPED_PATTERNS = [
   /\b(worked|fixed|resolved|solved)\b/i,
+  /\bnot (leaking|dripping|running|making (the|that) (noise|sound)) (anymore|any more)\b/i,
   /\b(that (did it|helped|worked|fixed))\b/i,
   /\b(stopped|no more|all good|back to normal)\b/i,
   /\b(yes|yep|yeah)[\s,!.]*(?:it|that|this)?\s*(?:worked|helped|fixed|did it)/i,
@@ -110,7 +132,10 @@ const DID_NOT_TRY_PATTERNS = [
 /**
  * Classify tenant's feedback on a troubleshooting step.
  *
- * Priority order: unsafe > helped > partial > did_not_help > asking_how > unable_to_access > completed > did_not_try
+ * Priority order: unsafe > qualified partial > negated outcome (did_not_help)
+ *   > did_not_help > helped > partial > asking_how > unable_to_access > completed > did_not_try
+ * Negations are checked before "helped" so "hasn't stopped" / "still not fixed"
+ * are never read as fixed.
  * Step-kind-aware: bare "no" is interpreted based on step context.
  * Default: "unclear" (does NOT silently advance).
  */
@@ -120,10 +145,12 @@ export function classifyStepFeedback(
 ): TroubleshootingStepResult {
   const text = message.trim();
 
-  if (UNSAFE_PATTERNS.some((p) => p.test(text))) return "unsafe";
+  if (detectEmergency(text) || UNSAFE_PATTERNS.some((p) => p.test(text))) return "unsafe";
+  if (QUALIFIED_PARTIAL_PATTERNS.some((p) => p.test(text))) return "partial";
+  if (NEGATED_OUTCOME_PATTERNS.some((p) => p.test(text))) return "did_not_help";
+  if (DID_NOT_HELP_PATTERNS.some((p) => p.test(text))) return "did_not_help";
   if (HELPED_PATTERNS.some((p) => p.test(text))) return "helped";
   if (PARTIAL_PATTERNS.some((p) => p.test(text))) return "partial";
-  if (DID_NOT_HELP_PATTERNS.some((p) => p.test(text))) return "did_not_help";
   if (ASKING_HOW_PATTERNS.some((p) => p.test(text))) return "asking_how";
   if (UNABLE_TO_ACCESS_PATTERNS.some((p) => p.test(text))) return "unable_to_access";
   if (COMPLETED_PATTERNS.some((p) => p.test(text))) return "completed";
@@ -362,7 +389,9 @@ export function buildFeedbackReply(
       parts.push(
         "**I'm flagging this for your property manager right away.** Your safety comes first.",
         "",
-        "Please do not attempt any further steps. If you smell gas, contact the FortisBC gas emergency line. If there is a fire or smoke, call 911.",
+        "Please do not attempt any further steps.",
+        "",
+        EMERGENCY_FOOTER,
         "",
         "Your ticket has been escalated for urgent review. The property manager should contact you within 2 hours."
       );

@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# supabase CLI local state (project ref, pooler URL, versions)
+supabase/.temp/
+
+# internal planning documents — keep out of the repo
+Documents/

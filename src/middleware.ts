@@ -4,15 +4,23 @@ import { updateSession } from "@/lib/supabase/middleware";
 // Routes that don't require authentication
 const PUBLIC_ROUTES = ["/login", "/signup"];
 
+// Routes only property managers may open. Pages under (manager) also enforce
+// this in their layout, so a route missing here is still protected.
+const MANAGER_ROUTES = ["/dashboard", "/tickets", "/tenants", "/analytics", "/vendors"];
+
+function matchesRoute(pathname: string, route: string): boolean {
+  return pathname === route || pathname.startsWith(`${route}/`);
+}
+
 export async function middleware(request: NextRequest) {
-  const { supabaseResponse, user } = await updateSession(request);
+  // `role` is read from the profiles table, never from user_metadata.
+  const { supabaseResponse, user, role } = await updateSession(request);
   const { pathname } = request.nextUrl;
 
   // Allow public routes
   if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
     // If already logged in, redirect away from auth pages
     if (user) {
-      const role = user.user_metadata?.role as string | undefined;
       const redirect = role === "manager" ? "/dashboard" : "/submit";
       return NextResponse.redirect(new URL(redirect, request.url));
     }
@@ -26,18 +34,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
-  const role = user.user_metadata?.role as string | undefined;
-
   // Protect manager routes
-  if (pathname.startsWith("/dashboard") || pathname.startsWith("/tickets") || pathname.startsWith("/analytics") || pathname.startsWith("/vendors")) {
+  if (MANAGER_ROUTES.some((route) => matchesRoute(pathname, route))) {
     if (role !== "manager") {
       return NextResponse.redirect(new URL("/submit", request.url));
     }
   }
 
   // Protect tenant routes
-  if (pathname.startsWith("/submit")) {
-    if (role !== "tenant") {
+  if (matchesRoute(pathname, "/submit")) {
+    if (role === "manager") {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   }

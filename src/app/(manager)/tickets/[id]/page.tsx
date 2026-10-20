@@ -32,7 +32,7 @@ export default async function TicketDetailPage({
     .order("created_at", { ascending: true });
 
   // Load uploaded media — use service client to bypass storage RLS (folder = tenant uid)
-  const serviceClient = await createServiceClient();
+  const serviceClient = createServiceClient();
   const { data: mediaRecords } = await serviceClient
     .from("ticket_media")
     .select("id, file_path, file_type, mime_type, created_at")
