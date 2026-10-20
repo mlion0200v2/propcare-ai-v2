@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { MAX_UPLOAD_MB, MAX_VIDEO_SECONDS } from "@/lib/triage/guidance";
+import { AccessDetailsCard } from "@/components/intake/access-details";
 
 const DRAFT_TICKET_KEY = "propcare_draft_ticket_id";
 
@@ -57,6 +59,32 @@ function renderBotMarkdown(text: string): React.ReactNode {
   });
 }
 
+/** Size and (for videos) duration limits, checked in the browser. */
+async function checkMediaFile(file: File): Promise<string | null> {
+  if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+    return `That file is over ${MAX_UPLOAD_MB} MB. For videos, record ${MAX_VIDEO_SECONDS} seconds or less (720p is plenty).`;
+  }
+  if (!file.type.startsWith("video/")) return null;
+  const seconds = await new Promise<number>((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    const url = URL.createObjectURL(file);
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(video.duration);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(0);
+    };
+    video.src = url;
+  });
+  if (seconds > MAX_VIDEO_SECONDS + 1) {
+    return `That video is ${Math.round(seconds)} seconds. Please keep videos to ${MAX_VIDEO_SECONDS} seconds or less.`;
+  }
+  return null;
+}
+
 interface ChatMessage {
   id: string;
   body: string;
@@ -68,14 +96,19 @@ interface ChatMessage {
 export function TriageChat({
   tenancyId,
   afterComplete,
+  defaultPets,
 }: {
   /** The unit tenancy new tickets are filed under (tenant link flow). */
   tenancyId?: string;
   /** Shown under the completion banner, e.g. the optional-account offer. */
   afterComplete?: React.ReactNode;
+  /** Pre-fills "Pets at home" in the access card (from the unit profile). */
+  defaultPets?: string;
 } = {}) {
   // One in-progress draft per tenancy, so two homes never mix.
   const draftKey = tenancyId ? `${DRAFT_TICKET_KEY}:${tenancyId}` : DRAFT_TICKET_KEY;
+  // Tap-answers ("Which room?") and prevention notes from the unit profile.
+  const [hints, setHints] = useState<{ quickReplies: string[]; notes: string[] }>({ quickReplies: [], notes: [] });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [ticketId, setTicketId] = useState<string | null>(null);
@@ -194,8 +227,22 @@ export function TriageChat({
     resumeDraft();
   }, [resumeDraft]);
 
-  async function handleSend() {
-    const text = input.trim();
+  useEffect(() => {
+    if (!ticketId || isComplete) return;
+    let cancelled = false;
+    fetch(`/api/triage/hints?ticket_id=${ticketId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setHints({ quickReplies: data.quickReplies ?? [], notes: data.notes ?? [] });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [ticketId, triageState, messages.length, isComplete]);
+
+  async function handleSend(override?: string) {
+    const text = (override ?? input).trim();
     if (!text || isLoading || isComplete) return;
 
     setError(null);
@@ -357,8 +404,17 @@ export function TriageChat({
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !ticketId || isUploading) return;
+    e.target.value = "";
 
     setError(null);
+
+    // Check size and video length here, before a long upload fails.
+    const problem = await checkMediaFile(file);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+
     setIsUploading(true);
 
     // Show upload message
@@ -579,6 +635,11 @@ export function TriageChat({
           Triage complete. Your ticket has been submitted to your property manager.
         </div>
       )}
+      {isComplete && tenancyId && ticketId && (
+        <div className="mx-4 mb-3">
+          <AccessDetailsCard ticketId={ticketId} defaultPets={defaultPets} />
+        </div>
+      )}
       {isComplete && afterComplete && <div className="mx-4 mb-4">{afterComplete}</div>}
 
       {/* Confirm Profile buttons */}
@@ -634,9 +695,35 @@ export function TriageChat({
         </div>
       )}
 
+      {/* Prevention notes from the unit profile (e.g. water shut-off) */}
+      {!isComplete && hints.notes.length > 0 && (
+        <div className="mx-4 mb-2 space-y-1 border-l-4 border-gold bg-cream px-3 py-2 text-sm text-ink">
+          {hints.notes.map((note) => (
+            <p key={note}>{note}</p>
+          ))}
+        </div>
+      )}
+
       {/* Input */}
       {triageState !== "CONFIRM_PROFILE" && triageState !== "AWAITING_MEDIA" && (triageState !== "CONFIRM_SUMMARY" || summaryEditMode) && (
         <div className="border-t border-gray-200 p-4">
+          {!isComplete && !isLoading && !summaryEditMode && hints.quickReplies.length > 0 && (
+            <div role="group" aria-label="Quick answers" className="mb-2 flex flex-wrap gap-2">
+              {hints.quickReplies.map((reply) => (
+                <button
+                  key={reply}
+                  type="button"
+                  onClick={() => {
+                    setHints((h) => ({ ...h, quickReplies: [] }));
+                    handleSend(reply);
+                  }}
+                  className="min-h-9 rounded-full border border-pine bg-white px-3 py-1.5 text-sm text-pine hover:bg-sage"
+                >
+                  {reply}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex gap-2">
             <textarea
               value={input}
@@ -656,7 +743,7 @@ export function TriageChat({
               className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
             />
             <Button
-              onClick={handleSend}
+              onClick={() => handleSend()}
               disabled={!input.trim() || isLoading || isComplete}
               size="md"
             >

@@ -4,6 +4,7 @@ import { intakeLinkLimiter } from "@/lib/rate-limit";
 import { findUnitByToken, unitLabel } from "@/lib/intake/server";
 import { EmergencyNotice, TenantShell } from "@/components/intake/tenant-shell";
 import { IntakeForm } from "@/components/intake/intake-form";
+import { ConfirmHome } from "@/components/intake/confirm-home";
 
 export const metadata = {
   title: "Report a problem | PropCare",
@@ -42,7 +43,9 @@ export default async function TenantLinkPage({ params }: { params: Promise<{ tok
           No account needed. Your landlord gets your message, photos, and what you&apos;ve tried.
         </p>
         <EmergencyNotice />
-        <IntakeForm token={token} />
+        <ConfirmHome address={unitLabel(unit)}>
+          <IntakeForm token={token} />
+        </ConfirmHome>
         <p className="mt-auto pt-6 text-xs leading-normal text-muted">
           Your details are used only to handle repairs for this home.{" "}
           <Link href="/login?tenant=1" className="text-pine underline">

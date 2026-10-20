@@ -31,6 +31,9 @@ provider's settings.
 | `EMAIL_DRY_RUN` | no | `1` = never send email from the app |
 | `FALLBACK_MANAGER_EMAIL` | no | Last-resort recipient for ticket alerts when a workspace has no team email |
 | `APP_TIME_ZONE` | no | Time zone for vendor booking times; default `America/Vancouver` |
+| `DEMO_MODE` | no | `1` turns on try mode (`/try`, no sign-up). Off by default |
+| `DEMO_CHAT_TURN_LIMIT` | no | Chat messages per demo sandbox (OpenAI cost cap); default `40` |
+| `CRON_SECRET` | with `DEMO_MODE` | 16+ random characters; authorises `GET /api/demo/cleanup` (deletes sandboxes older than 24 h) |
 | `RETRIEVAL_MIN_SCORE`, `RETRIEVAL_TOP_K`, `RETRIEVAL_MAX_CHARS`, `VALIDATION_*` | no | Retrieval tuning |
 
 `openssl rand -base64 48` makes a good `INTAKE_CODE_SECRET`.
@@ -148,6 +151,41 @@ Never point a local `.env.local` at production while developing.
 10. **Before real tenants**: pick the final app domain before printing QR
     posters (links and posters use it), and make the GitHub repository
     private.
+
+## Try mode (demo, no sign-up)
+
+With `DEMO_MODE=1`, `/try` offers **"Report a problem as a tenant"** and
+**"See the manager's side"**. One click creates a private sandbox for that
+browser: workspace "Demo Rentals" (2 homes with unit profiles, a demo owner,
+vendor Westside Plumbing, and three requests: one waiting for the owner to
+approve a $340 quote, one emergency, one fixed in the chat). A bar at the top
+says "Demo — sample data" and switches **Tenant | Manager | Owner | Vendor**
+on the same request; each view uses that role's real permissions.
+
+- **Nothing is delivered.** Every email/WhatsApp/WeChat message from a demo
+  workspace is stored in the `outbox` table and shown on the request as
+  "Sent (demo, not delivered)" with the exact text. Demo users have
+  `@example.com` addresses, which the mailer never sends to.
+- **How the switcher signs in:** four demo users are created with the admin
+  API (`email_confirm: true`); switching generates a magic-link token
+  server-side and verifies it immediately. No email is sent and Supabase's
+  email confirmation setting doesn't matter. (Anonymous sign-ins are still
+  needed for real tenant links, not for the demo.)
+- **Guardrails:** 5 sandboxes per IP per hour (20 a day; in-memory, per
+  server instance), at most 500 live sandboxes, `DEMO_CHAT_TURN_LIMIT` chat
+  messages per sandbox (emergency messages are never blocked), sandboxes
+  expire after 24 hours.
+- **Cleanup:** call `GET /api/demo/cleanup` with
+  `Authorization: Bearer $CRON_SECRET` regularly (e.g. hourly): on Cloud Run,
+  a Cloud Scheduler HTTP job with that header. Expired sandboxes are already
+  unusable; cleanup deletes them and their demo users.
+- **Database:** needs migrations `20261021000000_demo_mode.sql`,
+  `20261021010000_approval_moves_stage.sql` and
+  `20261022000000_ticket_access.sql` (`npx supabase db push`). Locally,
+  `npx supabase db reset` applies them.
+
+To try it locally: add `DEMO_MODE=1` to `.env.local`, run `npm run dev`, open
+http://localhost:3000/try.
 
 ## Seed the SOP knowledge base (Pinecone)
 

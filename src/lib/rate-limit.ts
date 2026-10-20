@@ -127,3 +127,12 @@ export const commentLimiter = createRateLimiter([
   { limit: 30, windowMs: 10 * MINUTE },
   { limit: 200, windowMs: 24 * HOUR },
 ]);
+
+/** Try-mode sandboxes created per IP (each creates 4 demo users and sample data). */
+export const demoCreateLimiter = createRateLimiter([
+  { limit: 5, windowMs: HOUR },
+  { limit: 20, windowMs: 24 * HOUR },
+]);
+
+/** Vendor quote submissions per IP. */
+export const vendorQuoteLimiter = createRateLimiter([{ limit: 10, windowMs: HOUR }]);

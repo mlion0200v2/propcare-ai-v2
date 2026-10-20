@@ -37,6 +37,46 @@ migration and seed in an in-process Postgres (PGlite).
   verifications for that unit: old devices can't file new requests (they
   still see what they sent); tenants with an account keep access.
 
+## Links and unit profiles
+
+- One link and QR per unit (a house is one unit). No per-owner links: a
+  tenant would have to pick among an owner's addresses, which is error-prone
+  and shows them other addresses. The link page asks "Is the problem at
+  <address>, Unit <n>? Yes / This isn't my home"; tenants never type an
+  address.
+- Each unit has a profile (Homes > unit): named rooms, fixtures and
+  appliances with brand/model, main water shut-off, breaker panel, access
+  notes, pets. The chat offers the rooms and appliances as tap-answers and
+  shows the shut-off / breaker location for water and electrical problems;
+  vendors see the access notes and pets on their work order.
+
+## The tenant chat and dispatch
+
+1. **Safety first, every turn**: each message is checked for emergencies
+   before anything else.
+2. **Locate and describe**: one question at a time, with tap-answers from
+   the unit profile. Water leaks get a source deep-dive: where the water is,
+   how much, when it happens, and whether it's near anything electrical
+   (yes or "not sure" escalates as an emergency at once).
+3. **Damage prevention first** (shut-off from the unit profile, towels,
+   bucket, move valuables), then a **shot list** for photos/video (wide
+   shot, source, under the sink/behind the toilet, model label; videos up
+   to 60 s / 25 MB, checked before upload), then safe troubleshooting.
+4. **Summary** the tenant confirms or corrects, then **access details**:
+   entry permission, availability, pets.
+5. **Dispatch** from the manager's ticket, three versions of one request:
+   the manager summary; **Send to vendor** (work order with scope, address,
+   access window, entry permission, pets, photos; tenant phone only if
+   allowed; never rent or owner details; no-account link where the vendor
+   quotes); **Send to owner** (plain-language update with photos count,
+   quote vs limit and the approve/decline link).
+
+Channels: dashboard and email (Resend). WhatsApp and WeChat use the
+manager's own apps for now: **Send via WhatsApp** opens `wa.me` with the
+text and secure link prefilled, **Copy for WeChat** copies them. A WhatsApp
+Business API integration (templates, delivery status) can replace this
+later through the same `deliver()` function (`src/lib/delivery.ts`).
+
 ## Assumptions to confirm (all configurable)
 
 - **No billing yet.** The sign-up page has no price; workspace creation is

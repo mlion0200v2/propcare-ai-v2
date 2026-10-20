@@ -2,6 +2,7 @@ import "server-only";
 
 import { Resend } from "resend";
 import { logError, logWarn } from "@/lib/triage/logger";
+import { isReservedAddress } from "./reserved";
 
 let _resend: Resend | null = null;
 function getResend() {
@@ -31,6 +32,11 @@ export async function sendEmail(params: {
   kind: string;
 }): Promise<{ success: boolean; error?: string }> {
   const { to, subject, text, kind } = params;
+  // Reserved example domains (demo and test users) are never delivered.
+  if ((Array.isArray(to) ? to : [to]).every((addr) => isReservedAddress(addr))) {
+    logWarn("email_reserved_domain", "Email to a reserved example domain not sent", { kind });
+    return { success: true };
+  }
   if (isEmailDryRun()) {
     logWarn("email_dry_run", "Email not sent (dry run)", { kind, to, subject });
     if (process.env.NODE_ENV !== "production") {

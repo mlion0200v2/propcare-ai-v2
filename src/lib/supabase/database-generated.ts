@@ -99,6 +99,60 @@ export type Database = {
           },
         ]
       }
+      demo_sandboxes: {
+        Row: {
+          admin_id: string | null
+          chat_turns: number
+          created_at: string
+          expires_at: string
+          focus_ticket_id: string | null
+          id: string
+          neighbour_id: string | null
+          owner_id: string | null
+          tenant_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          admin_id?: string | null
+          chat_turns?: number
+          created_at?: string
+          expires_at?: string
+          focus_ticket_id?: string | null
+          id?: string
+          neighbour_id?: string | null
+          owner_id?: string | null
+          tenant_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          admin_id?: string | null
+          chat_turns?: number
+          created_at?: string
+          expires_at?: string
+          focus_ticket_id?: string | null
+          id?: string
+          neighbour_id?: string | null
+          owner_id?: string | null
+          tenant_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "demo_sandboxes_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "demo_sandboxes_focus_ticket_id_fkey"
+            columns: ["focus_ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       intake_codes: {
         Row: {
           attempts: number
@@ -269,6 +323,60 @@ export type Database = {
             columns: ["ticket_id"]
             isOneToOne: false
             referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      outbox: {
+        Row: {
+          body: string
+          channel: string
+          created_at: string
+          demo: boolean
+          id: string
+          kind: string
+          recipient_label: string
+          subject: string | null
+          ticket_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          body: string
+          channel: string
+          created_at?: string
+          demo?: boolean
+          id?: string
+          kind: string
+          recipient_label: string
+          subject?: string | null
+          ticket_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          body?: string
+          channel?: string
+          created_at?: string
+          demo?: boolean
+          id?: string
+          kind?: string
+          recipient_label?: string
+          subject?: string | null
+          ticket_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outbox_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "outbox_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -586,6 +694,10 @@ export type Database = {
           classification: Json | null
           created_at: string
           description: string
+          entry_permission: boolean | null
+          availability: string | null
+          tenant_pets: string | null
+          access_confirmed_at: string | null
           entry_notice: string | null
           id: string
           priority: Database["public"]["Enums"]["ticket_priority"]
@@ -611,6 +723,10 @@ export type Database = {
           category?: Database["public"]["Enums"]["ticket_category"]
           classification?: Json | null
           created_at?: string
+          entry_permission?: boolean | null
+          availability?: string | null
+          tenant_pets?: string | null
+          access_confirmed_at?: string | null
           description: string
           entry_notice?: string | null
           id?: string
@@ -637,6 +753,10 @@ export type Database = {
           category?: Database["public"]["Enums"]["ticket_category"]
           classification?: Json | null
           created_at?: string
+          entry_permission?: boolean | null
+          availability?: string | null
+          tenant_pets?: string | null
+          access_confirmed_at?: string | null
           description?: string
           entry_notice?: string | null
           id?: string
@@ -703,6 +823,7 @@ export type Database = {
           intake_token: string
           link_active: boolean
           link_rotated_at: string | null
+          profile: Json
           property_id: string
           status: Database["public"]["Enums"]["unit_status"]
           unit_number: string | null
@@ -715,6 +836,7 @@ export type Database = {
           intake_token?: string
           link_active?: boolean
           link_rotated_at?: string | null
+          profile?: Json
           property_id: string
           status?: Database["public"]["Enums"]["unit_status"]
           unit_number?: string | null
@@ -727,6 +849,7 @@ export type Database = {
           intake_token?: string
           link_active?: boolean
           link_rotated_at?: string | null
+          profile?: Json
           property_id?: string
           status?: Database["public"]["Enums"]["unit_status"]
           unit_number?: string | null
@@ -797,12 +920,95 @@ export type Database = {
           },
         ]
       }
+      work_orders: {
+        Row: {
+          access_window: string | null
+          created_at: string
+          created_by: string | null
+          entry_permission: boolean | null
+          id: string
+          include_tenant_phone: boolean
+          pets: string | null
+          quote_cents: number | null
+          quote_note: string | null
+          quoted_at: string | null
+          scope: string
+          status: string
+          ticket_id: string
+          token: string
+          vendor_id: string | null
+          vendor_name: string
+          workspace_id: string
+        }
+        Insert: {
+          access_window?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_permission?: boolean | null
+          id?: string
+          include_tenant_phone?: boolean
+          pets?: string | null
+          quote_cents?: number | null
+          quote_note?: string | null
+          quoted_at?: string | null
+          scope: string
+          status?: string
+          ticket_id: string
+          token?: string
+          vendor_id?: string | null
+          vendor_name: string
+          workspace_id?: string
+        }
+        Update: {
+          access_window?: string | null
+          created_at?: string
+          created_by?: string | null
+          entry_permission?: boolean | null
+          id?: string
+          include_tenant_phone?: boolean
+          pets?: string | null
+          quote_cents?: number | null
+          quote_note?: string | null
+          quoted_at?: string | null
+          scope?: string
+          status?: string
+          ticket_id?: string
+          token?: string
+          vendor_id?: string | null
+          vendor_name?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "work_orders_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "work_orders_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspaces: {
         Row: {
           approval_limit_cents: number
           created_at: string
           created_by: string | null
           id: string
+          is_demo: boolean
           kind: Database["public"]["Enums"]["workspace_kind"]
           name: string
           updated_at: string
@@ -812,6 +1018,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          is_demo?: boolean
           kind: Database["public"]["Enums"]["workspace_kind"]
           name: string
           updated_at?: string
@@ -821,6 +1028,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          is_demo?: boolean
           kind?: Database["public"]["Enums"]["workspace_kind"]
           name?: string
           updated_at?: string
@@ -844,6 +1052,10 @@ export type Database = {
         }
         Returns: string
       }
+      create_demo_sandbox: {
+        Args: { p_admin: string; p_neighbour: string; p_owner: string; p_tenant: string }
+        Returns: string
+      }
       decide_approval: {
         Args: {
           p_approval: string
@@ -851,6 +1063,10 @@ export type Database = {
           p_note?: string
         }
         Returns: undefined
+      }
+      demo_take_chat_turn: {
+        Args: { p_limit?: number; p_user: string }
+        Returns: string
       }
       intake_unit_for_token: {
         Args: { p_token: string }
@@ -902,6 +1118,7 @@ export type Database = {
       ticket_stage:
         | "new"
         | "waiting_for_owner"
+        | "approved"
         | "vendor_booked"
         | "fixed"
         | "closed"
@@ -1065,7 +1282,7 @@ export const Constants = {
         "other",
       ],
       ticket_priority: ["low", "medium", "high", "emergency"],
-      ticket_stage: ["new", "waiting_for_owner", "vendor_booked", "fixed", "closed"],
+      ticket_stage: ["new", "waiting_for_owner", "approved", "vendor_booked", "fixed", "closed"],
       ticket_status: [
         "open",
         "in_progress",

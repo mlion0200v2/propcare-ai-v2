@@ -26,6 +26,12 @@ export function IntakeForm({ token }: { token: string }) {
         <p className="text-sm leading-relaxed text-muted">
           We sent a 6-digit code to <b className="text-ink">{sendState.masked}</b>. It works for 10 minutes.
         </p>
+        {sendState.demoPreview && (
+          <div className="border border-dashed border-gold bg-cream p-3 text-[13px]">
+            <p className="font-semibold text-brass">Sent (demo, not delivered)</p>
+            <pre className="mt-1 whitespace-pre-wrap font-sans text-ink">{sendState.demoPreview}</pre>
+          </div>
+        )}
         <label className="text-sm font-medium">
           Code
           <input

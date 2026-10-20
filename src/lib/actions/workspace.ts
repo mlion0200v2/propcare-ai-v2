@@ -21,9 +21,10 @@ import {
 } from "@/lib/utils/validation";
 import { inviteLimiter } from "@/lib/rate-limit";
 import { appUrl } from "@/lib/app-url";
-import { sendEmail } from "@/lib/email/mailer";
+import { deliver } from "@/lib/delivery";
 import { buildInvitationEmail } from "@/lib/email/templates";
 import { logError } from "@/lib/triage/logger";
+import { profileFromForm } from "@/lib/units/profile";
 
 export type FormState = { error: string | null; ok?: string | null };
 
@@ -189,8 +190,21 @@ export async function inviteMember(_prev: FormState, formData: FormData): Promis
     link: appUrl(`/invite/${token}`),
     expiresInDays: INVITE_DAYS,
   });
-  const sent = await sendEmail({ to: parsed.data.email, ...email, kind: "invitation" });
+  const sent = await deliver({
+    workspaceId: membership.workspaceId,
+    channel: "email",
+    to: parsed.data.email,
+    recipientLabel: parsed.data.email,
+    subject: email.subject,
+    text: email.text,
+    kind: "invitation",
+  });
   revalidatePath("/team");
+  if (sent.demo) return { error: null, ok: `Sent (demo, not delivered). The email would read:
+
+${email.subject}
+
+${email.text}` };
   if (!sent.success) return { error: "Invitation saved, but the email could not be sent. Revoke it and try again." };
   return { error: null, ok: `Invitation sent to ${parsed.data.email}` };
 }
@@ -311,4 +325,28 @@ export async function endTenancy(formData: FormData): Promise<void> {
     .eq("id", String(formData.get("tenancy_id")))
     .eq("unit_id", unitId);
   revalidatePath(`/units/${unitId}`);
+}
+
+// ── Unit profile ──
+
+export async function saveUnitProfile(_prev: FormState, formData: FormData): Promise<FormState> {
+  await requireTeam();
+  const unitId = String(formData.get("unit_id") ?? "");
+  if (!/^[0-9a-f-]{36}$/i.test(unitId)) return { error: "Invalid unit" };
+  const parsed = profileFromForm({
+    rooms: String(formData.get("rooms") ?? ""),
+    fixtures: String(formData.get("fixtures") ?? ""),
+    water_shutoff: String(formData.get("water_shutoff") ?? ""),
+    breaker_panel: String(formData.get("breaker_panel") ?? ""),
+    access_notes: String(formData.get("access_notes") ?? ""),
+    pets: String(formData.get("pets") ?? ""),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Please check the profile" };
+
+  const supabase = await createClient();
+  // RLS: only the unit's workspace team can update it.
+  const { data, error } = await supabase.from("units").update({ profile: parsed.data }).eq("id", unitId).select("id");
+  if (error || !data?.length) return { error: "Could not save the profile" };
+  revalidatePath(`/units/${unitId}`);
+  return { error: null, ok: "Saved. The tenant chat uses it from now on." };
 }

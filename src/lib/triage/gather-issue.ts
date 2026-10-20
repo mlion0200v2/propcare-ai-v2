@@ -1,8 +1,9 @@
 /**
  * Phase 2B — Extended issue detail gathering.
  *
- * Adds current_status (always) and brand_model (conditional: appliance/hvac)
- * on top of the base 4 fields collected by step().
+ * Adds current_status (always), a water-leak source deep-dive (leaks only:
+ * where, how much, when, electrical nearby) and brand_model (conditional:
+ * appliance/hvac) on top of the base 4 fields collected by step().
  *
  * isGatherComplete() is the SINGLE source of truth for whether all
  * required issue details have been collected.
@@ -19,10 +20,55 @@ const EXTENDED_QUESTIONS: Record<string, string> = {
     "What is the current status of the issue? (e.g., still happening, comes and goes, getting worse)",
   brand_model:
     "What is the brand and model of the equipment, if known? (e.g., GE Profile dishwasher, Carrier AC unit). If unknown, reply \"unknown\".",
+  leak_where:
+    "Where is the water? (the ceiling, a wall, the floor, under the sink, or around an appliance)",
+  leak_amount:
+    "How much water is there right now? (a few drops, a small puddle, or spreading)",
+  leak_timing:
+    "When does it leak? (all the time, only when the shower or bath is used, when the toilet is flushed, or when an appliance runs)",
+  leak_electrical:
+    "Is the water near an outlet, a light, or anything plugged in? (yes / no / not sure)",
 };
 
+const LEAK_FIELDS = ["leak_where", "leak_amount", "leak_timing", "leak_electrical"] as const;
+
+const LEAK_WORDS =
+  /\b(leak|leaks|leaking|leaked|drip|drips|dripping|water (?:is )?(?:coming|pouring|on the floor|everywhere)|puddle|flood|flooding|flooded|overflow|overflowing|burst|seeping|wet (?:ceiling|wall|floor)|water stain)\b/i;
+
+/** True when the report is about water escaping somewhere (asks the leak deep-dive). */
+export function isWaterLeak(text: string): boolean {
+  return LEAK_WORDS.test(text);
+}
+
+const LEAK_WHERE_PATTERNS: [RegExp, string][] = [
+  [/\bceiling\b/i, "Ceiling"],
+  [/\b(under|underneath|below) (the )?(kitchen |bathroom )?sink\b|\bsink\b.*\b(underneath|under it|below it|cabinet)\b/i, "Under the sink"],
+  [/\b(behind|around|base of|under) (the )?toilet\b|\btoilet (is )?(leak|leaking|overflow)/i, "Around the toilet"],
+  [/\b(dishwasher|washing machine|washer|fridge|refrigerator|water heater|hot water tank)\b/i, "Around an appliance"],
+  [/\bwalls?\b/i, "Wall"],
+  [/\bfloor\b/i, "Floor"],
+];
+
+/** Where the water is, if the tenant already said it ("dripping from the ceiling" → Ceiling). */
+export function extractLeakWhere(text: string): string | null {
+  for (const [pattern, label] of LEAK_WHERE_PATTERNS) if (pattern.test(text)) return label;
+  return null;
+}
+
+/** "yes" | "no" | "not sure" from a free-text answer. Anything unclear is "not sure". */
+export function normaliseYesNo(answer: string): "yes" | "no" | "not sure" {
+  const a = answer.trim().toLowerCase();
+  // Explicit "no outlet / nothing electrical" first.
+  if (/\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\w*)\b/.test(a)) return "no";
+  // Any mention of electricity counts as yes, even after "no, but…" (safer).
+  if (/\b(outlets?|lights?|plugs?|plugged|sockets?|electric\w*|switch(es)?|wires?|wiring|power bar|extension cord)\b/.test(a)) return "yes";
+  if (/^(no|nope|nah|n)\b/.test(a)) return "no";
+  if (/^(yes|yeah|yep|y|it is|close|near)\b/.test(a)) return "yes";
+  return "not sure";
+}
+
 // Extended fields asked in this order (after base 4 are complete)
-const EXTENDED_FIELD_ORDER = ["current_status", "brand_model"] as const;
+const EXTENDED_FIELD_ORDER = ["current_status", ...LEAK_FIELDS, "brand_model"] as const;
 
 /**
  * Check whether the given field name is an extended field (not handled by step()).
@@ -57,6 +103,11 @@ export function isGatherComplete(gathered: GatheredInfo): boolean {
     return false;
   }
 
+  // Extended: leak deep-dive for water leaks
+  if (gathered.leak_details_needed && LEAK_FIELDS.some((f) => gathered[f] == null)) {
+    return false;
+  }
+
   // Extended: brand_model required for appliance/hvac
   if (needsBrandModel(gathered.category) && gathered.brand_model === null) {
     return false;
@@ -73,6 +124,11 @@ export function isGatherComplete(gathered: GatheredInfo): boolean {
 export function getNextExtendedQuestion(gathered: GatheredInfo): string | null {
   if (gathered.current_status === null) {
     return "current_status";
+  }
+
+  if (gathered.leak_details_needed) {
+    const missing = LEAK_FIELDS.find((f) => gathered[f] == null);
+    if (missing) return missing;
   }
 
   if (needsBrandModel(gathered.category) && gathered.brand_model === null) {
@@ -108,6 +164,18 @@ export function processExtendedAnswer(
     case "brand_model":
       updated.brand_model = trimmed.toLowerCase() === "unknown" ? "unknown" : trimmed;
       break;
+    case "leak_where":
+    case "leak_amount":
+    case "leak_timing":
+      updated[field] = trimmed.slice(0, 200);
+      break;
+    case "leak_electrical": {
+      const answer = normaliseYesNo(trimmed);
+      updated.leak_electrical = answer;
+      // Water near electricity (or can't tell) is treated as an emergency.
+      if (answer !== "no") updated.is_emergency = true;
+      break;
+    }
   }
 
   return updated;
