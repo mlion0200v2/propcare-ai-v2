@@ -68,3 +68,49 @@ old policies are gone.
 All of it is enforced by RLS (`is_workspace_member`, `ticket_access`, …), and
 tested in `tests/integration/test-workspace-rls.ts` against the real
 migrations in an in-process Postgres (PGlite).
+
+## Setup before go-live (Supabase, Resend, env)
+
+1. **Supabase Auth**
+   - Email confirmations **on** (Auth → Providers → Email → Confirm email).
+   - **Anonymous sign-ins on** (Auth → Providers → Anonymous). Tenants on the
+     link get a guest session; RLS gives it nothing until a one-time code is
+     confirmed. Turn on CAPTCHA (Auth → Bot protection) and keep the default
+     anonymous sign-in rate limit.
+   - **URL configuration**: Site URL = `NEXT_PUBLIC_APP_URL`; add
+     `<app>/auth/confirm` to Redirect URLs.
+   - **Email templates** (Auth → Email templates): Confirm signup, Magic link
+     and Change email address should link to `{{ .ConfirmationURL }}` (the
+     default) — it lands on `/auth/confirm`. Brand the text ("PropCare by
+     Birchwood"); use custom SMTP (Resend) so they don't come from Supabase.
+2. **Resend**: verify the sending domain (e.g. `propcare.birchwoodcorp.com`)
+   and set `EMAIL_FROM`. Without `RESEND_API_KEY` (or with
+   `EMAIL_DRY_RUN=1`) nothing is sent; emails are only logged.
+3. **Environment** (Cloud Run / hosting): `NEXT_PUBLIC_APP_URL`,
+   `INTAKE_CODE_SECRET` (32+ random characters, required in production),
+   `EMAIL_FROM`, `RESEND_API_KEY`, optional `APP_TIME_ZONE`
+   (default `America/Vancouver`). See `.env.example`.
+4. **Domain**: point the app's domain (e.g. `propcare.birchwoodcorp.com`) at
+   the deployment; tenant links and QR posters use it, so pick it before
+   printing posters.
+5. **Repository**: it is public; make it private before real tenant data
+   flows (the code has no secrets, but the roadmap and data model are visible).
+
+## Assumptions to confirm (all configurable)
+
+- **No billing yet.** The sign-up page has no price; workspace creation is
+  capped at 5 per user (`create_workspace`).
+- **Birchwood is just one workspace** ("Birchwood Management", company),
+  created by the data-migration script; existing managers become admins.
+- **Tenant links live on the app's own domain** (`NEXT_PUBLIC_APP_URL/r/<token>`).
+- **Email codes only.** Phone numbers are accepted by the parser but the form
+  asks for email until an SMS provider (e.g. Twilio Verify) implements
+  `CodeSender` in `src/lib/intake/senders.ts`. "Text it to the tenant" opens
+  the manager's own phone messaging app; the server sends no texts.
+- **Owners can comment ("team and owner") and approve/decline quotes, but
+  cannot message tenants or change status.**
+- Managers see every request in the workspace (per-home assignment for
+  managers is not built).
+- Approval limit defaults to $300 per workspace (Settings).
+- One time zone for display/entry (`APP_TIME_ZONE`); note current tz data
+  has BC on permanent daylight time from late 2026.

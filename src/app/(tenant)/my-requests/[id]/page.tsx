@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/workspace/server";
 import { STAGE_LABELS } from "@/lib/utils/constants";
+import { formatDateTime } from "@/lib/utils/time";
+import { TenantReplyForm } from "@/components/tickets/ticket-forms";
 
 export const metadata = {
   title: "Your request | PropCare",
@@ -23,6 +25,13 @@ export default async function MyRequestPage({ params }: { params: Promise<{ id: 
     .eq("id", id)
     .maybeSingle();
   if (!ticket) notFound();
+
+  // RLS: tenants only ever receive "to tenant" comments.
+  const { data: comments } = await supabase
+    .from("ticket_comments")
+    .select("id, author_name, author_role, body, created_at")
+    .eq("ticket_id", id)
+    .order("created_at", { ascending: true });
 
   return (
     <div className="space-y-6 px-4 py-8">
@@ -51,6 +60,26 @@ export default async function MyRequestPage({ params }: { params: Promise<{ id: 
           </p>
         </section>
       )}
+      <section className="border border-line bg-white p-5">
+        <h2 className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Messages</h2>
+        {!comments || comments.length === 0 ? (
+          <p className="mt-3 text-sm text-muted">No replies yet. Your landlord usually replies within one business day.</p>
+        ) : (
+          <ol className="mt-3 space-y-3">
+            {comments.map((c) => (
+              <li key={c.id} className={`p-3 text-sm ${c.author_role === "tenant" ? "bg-paper" : "bg-sage"}`}>
+                <p className="text-xs text-muted">
+                  {c.author_role === "tenant" ? "You" : c.author_name} · {formatDateTime(c.created_at)}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
+              </li>
+            ))}
+          </ol>
+        )}
+        <div className="mt-5">
+          <TenantReplyForm ticketId={ticket.id} />
+        </div>
+      </section>
     </div>
   );
 }

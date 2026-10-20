@@ -121,3 +121,9 @@ export const magicLinkLimiter = createRateLimiter([
   { limit: 5, windowMs: 10 * MINUTE },
   { limit: 20, windowMs: 24 * HOUR },
 ]);
+
+/** Ticket comments and replies, per user (each "to tenant" comment sends an email). */
+export const commentLimiter = createRateLimiter([
+  { limit: 30, windowMs: 10 * MINUTE },
+  { limit: 200, windowMs: 24 * HOUR },
+]);

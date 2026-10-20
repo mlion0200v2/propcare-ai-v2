@@ -1,13 +1,52 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { requireMembership } from "@/lib/workspace/server";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { isTeamRole, requireMembership } from "@/lib/workspace/server";
+import { decideApproval } from "@/lib/actions/tickets";
+import { formatCents } from "@/lib/workspace/tokens";
+import { appTimeZone, formatDateTime, utcToZonedLocal } from "@/lib/utils/time";
+import {
+  ApprovalRequestForm,
+  CommentComposer,
+  StageSelect,
+  VendorForm,
+} from "@/components/tickets/ticket-forms";
 import type { GatheredInfo, TenantInfo } from "@/lib/triage/types";
 
 export const metadata = {
-  title: "Ticket Details | PropCare-AI",
+  title: "Request | PropCare",
 };
+
+const VISIBILITY_LABEL: Record<string, string> = {
+  team: "Team only",
+  team_owner: "Team and owner",
+  tenant: "To tenant",
+};
+
+const ROLE_LABEL: Record<string, string> = {
+  admin: "manager",
+  manager: "manager",
+  owner: "owner",
+  tenant: "tenant",
+};
+
+const PRIORITY_LABEL: Record<string, string> = {
+  emergency: "Emergency",
+  high: "High priority",
+  medium: "Normal priority",
+  low: "Low priority",
+};
+
+function initials(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase())
+      .join("") || "?"
+  );
+}
 
 export default async function TicketDetailPage({
   params,
@@ -15,7 +54,8 @@ export default async function TicketDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  await requireMembership();
+  const membership = await requireMembership();
+  const team = isTeamRole(membership.role);
   const supabase = await createClient();
 
   // Loaded with the user's session: RLS returns the ticket only to its
@@ -23,247 +63,325 @@ export default async function TicketDetailPage({
   // service-role media lookup below.
   const { data: ticket, error } = await supabase
     .from("tickets")
-    .select("*")
+    .select("*, units(id, unit_number, property_id, properties(address_line1)), tenancies(name, email, phone)")
     .eq("id", id)
     .single();
 
   if (error || !ticket) notFound();
 
-  // Load messages
-  const { data: messages } = await supabase
-    .from("messages")
-    .select("id, body, is_bot_reply, created_at, sender_id")
-    .eq("ticket_id", id)
-    .order("created_at", { ascending: true });
+  const [{ data: comments }, { data: approvals }, { data: messages }, { data: owners }] = await Promise.all([
+    // RLS filters comments by visibility (owners never get "team only").
+    supabase
+      .from("ticket_comments")
+      .select("id, author_name, author_role, visibility, body, created_at, delivered_at, delivery_error")
+      .eq("ticket_id", id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("approvals")
+      .select("id, amount_cents, limit_cents, description, decision, decided_at, decided_by, decision_note, created_at")
+      .eq("ticket_id", id)
+      .order("created_at", { ascending: false }),
+    // Owners get nothing here (chat is between tenant and team).
+    supabase
+      .from("messages")
+      .select("id, body, is_bot_reply, created_at")
+      .eq("ticket_id", id)
+      .order("created_at", { ascending: true }),
+    ticket.units?.property_id
+      ? supabase.from("owner_property_access").select("user_id").eq("property_id", ticket.units.property_id)
+      : Promise.resolve({ data: [] as { user_id: string }[] }),
+  ]);
 
-  // Load uploaded media — service client bypasses storage RLS (folder = tenant
-  // uid); only reached after the RLS ticket read above succeeded.
-  const serviceClient = await createServiceClient();
+  const ownerIds = (owners ?? []).map((o) => o.user_id);
+  const { data: ownerMembers } = ownerIds.length
+    ? await supabase
+        .from("memberships")
+        .select("user_id, display_name")
+        .eq("workspace_id", membership.workspaceId)
+        .in("user_id", ownerIds)
+    : { data: [] as { user_id: string; display_name: string | null }[] };
+  const ownerNames = (ownerMembers ?? []).map((m) => m.display_name ?? "Owner");
+  const deciderName = (userId: string | null) =>
+    (ownerMembers ?? []).find((m) => m.user_id === userId)?.display_name ?? (userId ? "an admin" : "");
+
+  // Media: service client bypasses storage RLS (folder = tenant uid); only
+  // reached after the RLS ticket read above succeeded.
+  const serviceClient = createServiceClient();
   const { data: mediaRecords } = await serviceClient
     .from("ticket_media")
     .select("id, file_path, file_type, mime_type, created_at")
     .eq("ticket_id", id)
     .order("created_at", { ascending: true });
-
-  let media: Array<{ id: string; file_type: string; mime_type: string; signed_url: string; created_at: string }> = [];
-  if (mediaRecords && mediaRecords.length > 0) {
-    const urls = await Promise.all(
-      mediaRecords.map(async (m) => {
-        const { data } = await serviceClient.storage
-          .from("ticket-media")
-          .createSignedUrl(m.file_path, 3600);
-        return {
-          id: m.id,
-          file_type: m.file_type,
-          mime_type: m.mime_type,
-          signed_url: data?.signedUrl ?? "",
-          created_at: m.created_at,
-        };
+  const media = (
+    await Promise.all(
+      (mediaRecords ?? []).map(async (m) => {
+        const { data } = await serviceClient.storage.from("ticket-media").createSignedUrl(m.file_path, 3600);
+        return { ...m, signed_url: data?.signedUrl ?? "" };
       })
-    );
-    media = urls.filter((m) => m.signed_url);
-  }
+    )
+  ).filter((m) => m.signed_url);
 
-  const classification = ticket.classification as { gathered?: GatheredInfo; tenant_info?: TenantInfo; summary?: string } | null;
+  const classification = ticket.classification as {
+    gathered?: GatheredInfo;
+    tenant_info?: TenantInfo;
+    summary?: string;
+    emergency?: { kind?: string; manager_notified?: boolean };
+  } | null;
   const gathered = classification?.gathered;
   const tenantInfo = classification?.tenant_info;
-  const summary = classification?.summary;
-
-  const priorityColors: Record<string, string> = {
-    emergency: "bg-red-100 text-red-800",
-    high: "bg-orange-100 text-orange-800",
-    medium: "bg-yellow-100 text-yellow-800",
-    low: "bg-green-100 text-green-800",
-  };
+  const tz = appTimeZone();
+  const address = ticket.units?.properties?.address_line1 ?? tenantInfo?.reported_address ?? "No unit on file";
+  const unitLabel = ticket.units?.unit_number ? `, Unit ${ticket.units.unit_number}` : "";
+  const tenantName = ticket.tenancies?.name;
+  const pendingApproval = (approvals ?? []).find((a) => a.decision === "pending");
+  const canDecide = membership.role === "owner" || membership.role === "admin";
+  const company = membership.kind === "company";
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Link
-          href="/dashboard"
-          className="text-sm text-blue-600 hover:text-blue-500"
-        >
-          &larr; Back to Dashboard
-        </Link>
+    <div>
+      <p className="text-[13px] text-muted">
+        <Link href="/dashboard" className="underline">
+          Requests
+        </Link>{" "}
+        / {ticket.title.slice(0, 40)}
+      </p>
+      <div className="mt-2.5 flex flex-wrap items-center justify-between gap-4">
+        <div className="min-w-0">
+          <h1 className="font-display text-[32px] leading-tight">{ticket.title}</h1>
+          <p className="mt-1.5 text-sm text-muted">
+            {address}
+            {unitLabel}
+            {tenantName ? ` · ${tenantName}` : ""} · reported {formatDateTime(ticket.created_at, tz)}
+            {ownerNames.length > 0 ? ` · owner: ${ownerNames.join(", ")}` : ""}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <StageSelect ticketId={ticket.id} stage={ticket.stage} editable={team} />
+          <span
+            className={`px-2.5 py-1.5 text-xs font-semibold ${
+              ticket.priority === "emergency" ? "bg-brick text-white" : "bg-sage text-pine"
+            }`}
+          >
+            {PRIORITY_LABEL[ticket.priority] ?? ticket.priority}
+          </span>
+        </div>
       </div>
 
-      {/* Ticket header */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div>
-              <CardTitle>{ticket.title}</CardTitle>
-              <p className="mt-1 text-sm text-gray-500">
-                Created {new Date(ticket.created_at).toLocaleString()}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${priorityColors[ticket.priority] ?? "bg-gray-100"}`}>
-                {ticket.priority}
-              </span>
-              <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-800">
-                {ticket.status.replace("_", " ")}
-              </span>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <h4 className="text-sm font-semibold text-gray-900">Description</h4>
-            <p className="mt-1 text-sm text-gray-700">{ticket.description}</p>
-          </div>
-
-          {gathered && (
-            <div className="grid grid-cols-2 gap-4 rounded-lg bg-gray-50 p-4">
-              <div>
-                <p className="text-xs font-medium text-gray-600">Category</p>
-                <p className="text-sm font-medium text-gray-900">{gathered.category ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-600">Location</p>
-                <p className="text-sm font-medium text-gray-900">{gathered.location_in_unit ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-600">Started when</p>
-                <p className="text-sm font-medium text-gray-900">{gathered.started_when ?? "—"}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-600">Emergency</p>
-                <p className="text-sm font-medium text-gray-900">
-                  {gathered.is_emergency === null
-                    ? "—"
-                    : gathered.is_emergency
-                    ? "Yes"
-                    : "No"}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {tenantInfo && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <h4 className="text-sm font-semibold text-gray-900">Reported Tenant Info (no unit on file)</h4>
-              <div className="mt-2 grid grid-cols-3 gap-4">
-                <div>
-                  <p className="text-xs font-medium text-gray-600">Address</p>
-                  <p className="text-sm font-medium text-gray-900">{tenantInfo.reported_address ?? "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-600">Phone</p>
-                  <p className="text-sm font-medium text-gray-900">{tenantInfo.contact_phone ?? "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-600">Email</p>
-                  <p className="text-sm font-medium text-gray-900">{tenantInfo.contact_email ?? "—"}</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {ticket.troubleshooting_steps && (
-            <div>
-              <h4 className="text-sm font-semibold text-gray-900">Troubleshooting Steps</h4>
-              <ul className="mt-2 space-y-1">
-                {(ticket.troubleshooting_steps as Array<{ step: number; description: string }>).map(
-                  (s) => (
-                    <li key={s.step} className="text-sm text-gray-700">
-                      {s.step}. {s.description}
-                    </li>
-                  )
-                )}
-              </ul>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Property Manager Summary */}
-      {summary && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Property Manager Summary</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <pre className="whitespace-pre-wrap text-sm text-gray-700 font-sans">{summary}</pre>
-          </CardContent>
-        </Card>
+      {ticket.triage_state === "EMERGENCY" && (
+        <p role="alert" className="mt-5 bg-brick px-4 py-3 text-sm text-white">
+          Possible emergency{classification?.emergency?.kind ? ` (${classification.emergency.kind.replace(/_/g, " ")})` : ""}: the
+          tenant was told to leave if unsafe. Contact them now.
+        </p>
       )}
 
-      {/* Uploaded Media */}
-      {media.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Uploaded Media ({media.length})</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-              {media.map((m) => (
-                <div key={m.id} className="space-y-1">
-                  {m.file_type === "photo" ? (
-                    <a href={m.signed_url} target="_blank" rel="noopener noreferrer">
+      <div className="mt-7 grid gap-7 xl:grid-cols-[5fr_6fr]">
+        <div className="flex min-w-0 flex-col gap-5">
+          <section className="border border-line bg-white p-5 sm:p-6">
+            <h2 className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">From the chat</h2>
+            <dl className="mt-3.5 grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] gap-x-3.5 gap-y-2.5 text-sm leading-normal">
+              <dt className="text-muted">Problem</dt>
+              <dd>{ticket.description}</dd>
+              {gathered?.location_in_unit && (
+                <>
+                  <dt className="text-muted">Where</dt>
+                  <dd>{gathered.location_in_unit}</dd>
+                </>
+              )}
+              {gathered?.started_when && (
+                <>
+                  <dt className="text-muted">Started</dt>
+                  <dd>{gathered.started_when}</dd>
+                </>
+              )}
+              <dt className="text-muted">Likely trade</dt>
+              <dd className="capitalize">{(gathered?.category ?? ticket.category).replace(/_/g, " ")}</dd>
+              <dt className="text-muted">Safety</dt>
+              <dd>{gathered?.is_emergency ? "Possible emergency reported" : "No hazards reported"}</dd>
+              {tenantInfo && team && (
+                <>
+                  <dt className="text-muted">Reported contact</dt>
+                  <dd>{[tenantInfo.contact_phone, tenantInfo.contact_email].filter(Boolean).join(" · ") || "—"}</dd>
+                </>
+              )}
+              {team && ticket.tenancies && (
+                <>
+                  <dt className="text-muted">Tenant</dt>
+                  <dd>{[ticket.tenancies.name, ticket.tenancies.phone, ticket.tenancies.email].filter(Boolean).join(" · ")}</dd>
+                </>
+              )}
+            </dl>
+            {classification?.summary && (
+              <details className="mt-4 text-sm">
+                <summary className="cursor-pointer text-pine underline">Summary for the property manager</summary>
+                <pre className="mt-2 whitespace-pre-wrap font-sans text-muted">{classification.summary}</pre>
+              </details>
+            )}
+            {media.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2.5">
+                {media.map((m) =>
+                  m.file_type === "photo" ? (
+                    <a key={m.id} href={m.signed_url} target="_blank" rel="noopener noreferrer">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={m.signed_url}
-                        alt="Uploaded photo"
-                        className="h-40 w-full rounded-lg border object-cover transition-opacity hover:opacity-80"
-                      />
+                      <img src={m.signed_url} alt="Photo from the tenant" className="h-[72px] w-24 object-cover" />
                     </a>
                   ) : (
-                    <video
-                      controls
-                      className="h-40 w-full rounded-lg border object-cover"
-                      preload="metadata"
-                    >
+                    <video key={m.id} controls preload="metadata" className="h-[72px] w-32">
                       <source src={m.signed_url} type={m.mime_type} />
                     </video>
-                  )}
-                  <div className="flex items-center gap-2">
-                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      m.file_type === "photo"
-                        ? "bg-blue-100 text-blue-800"
-                        : "bg-purple-100 text-purple-800"
-                    }`}>
-                      {m.file_type}
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      {new Date(m.created_at).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Conversation */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Conversation</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {messages && messages.length > 0 ? (
-            messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`rounded-lg p-3 text-sm ${
-                  msg.is_bot_reply
-                    ? "bg-gray-50 text-gray-700"
-                    : "bg-blue-50 text-blue-900"
-                }`}
-              >
-                <p className="mb-1 text-xs font-medium text-gray-500">
-                  {msg.is_bot_reply ? "Bot" : "Tenant"} &middot;{" "}
-                  {new Date(msg.created_at).toLocaleTimeString()}
-                </p>
-                <p className="whitespace-pre-wrap">{msg.body}</p>
+                  )
+                )}
               </div>
-            ))
-          ) : (
-            <p className="text-sm text-gray-500">No messages yet.</p>
+            )}
+            {team && messages && messages.length > 0 && (
+              <details className="mt-4 text-sm">
+                <summary className="cursor-pointer text-pine underline">Read the whole conversation</summary>
+                <ol className="mt-3 space-y-2">
+                  {messages.map((msg) => (
+                    <li key={msg.id} className={`p-2.5 ${msg.is_bot_reply ? "bg-paper" : "bg-sage"}`}>
+                      <p className="text-xs text-muted">
+                        {msg.is_bot_reply ? "PropCare" : tenantName ?? "Tenant"} · {formatDateTime(msg.created_at, tz)}
+                      </p>
+                      <p className="mt-1 whitespace-pre-wrap">{msg.body}</p>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            )}
+          </section>
+
+          <section className="border border-line bg-white p-5 sm:p-6">
+            <h2 className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Vendor</h2>
+            {ticket.vendor_name || ticket.vendor_booked_for ? (
+              <p className="mt-3 text-[15px]">
+                {ticket.vendor_name ?? "Vendor"}
+                {ticket.vendor_booked_for ? ` · ${formatDateTime(ticket.vendor_booked_for, tz)}` : ""}
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-muted">No vendor booked yet.</p>
+            )}
+            {ticket.entry_notice && <p className="mt-1.5 text-sm text-muted">{ticket.entry_notice}</p>}
+            {team && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm text-pine underline">
+                  {ticket.vendor_name ? "Change vendor or time" : "Book a vendor"}
+                </summary>
+                <VendorForm
+                  ticketId={ticket.id}
+                  vendorName={ticket.vendor_name ?? ""}
+                  bookedForLocal={ticket.vendor_booked_for ? utcToZonedLocal(ticket.vendor_booked_for, tz) : ""}
+                  entryNotice={ticket.entry_notice ?? ""}
+                />
+              </details>
+            )}
+          </section>
+
+          {(company || (approvals ?? []).length > 0) && (
+            <section className="border border-gold bg-cream p-5 sm:p-6">
+              <h2 className="text-xs font-semibold uppercase tracking-[1.5px] text-brass">Owner approval</h2>
+              {(approvals ?? []).length === 0 && <p className="mt-3 text-sm text-muted">No quotes need approval.</p>}
+              <ul className="mt-1 space-y-3">
+                {(approvals ?? []).map((a) => (
+                  <li key={a.id} className="pt-2">
+                    <p className="text-[15px]">
+                      Quote {formatCents(a.amount_cents)}
+                      {a.amount_cents > a.limit_cents ? `, over the ${formatCents(a.limit_cents)} limit` : ""}
+                    </p>
+                    {a.description && <p className="mt-1 text-sm text-muted">{a.description}</p>}
+                    <p className="mt-1.5 text-sm text-muted">
+                      {a.decision === "pending"
+                        ? "Waiting for the owner"
+                        : `${a.decision === "approved" ? "Approved" : "Declined"} by ${deciderName(a.decided_by)}${
+                            a.decided_at ? `, ${formatDateTime(a.decided_at, tz)}` : ""
+                          }`}
+                      {a.decision_note ? ` · “${a.decision_note}”` : ""}
+                    </p>
+                    {a.decision === "pending" && canDecide && (
+                      <form action={decideApproval} className="mt-3 flex flex-wrap items-end gap-2.5">
+                        <input type="hidden" name="approval_id" value={a.id} />
+                        <input type="hidden" name="ticket_id" value={ticket.id} />
+                        <label className="text-sm">
+                          <span className="sr-only">Note</span>
+                          <input name="note" maxLength={1000} placeholder="Note (optional)" className="border border-line bg-white px-3 py-2.5 text-sm" />
+                        </label>
+                        <button type="submit" name="decision" value="approved" className="bg-pine px-4 py-2.5 text-sm text-white">
+                          Approve
+                        </button>
+                        <button type="submit" name="decision" value="declined" className="border border-brick px-4 py-2.5 text-sm text-brick">
+                          Decline
+                        </button>
+                      </form>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              {team && company && !pendingApproval && (
+                <details className="mt-3">
+                  <summary className="cursor-pointer text-sm text-pine underline">Ask the owner to approve a quote</summary>
+                  <ApprovalRequestForm ticketId={ticket.id} limitLabel={formatCents(membership.approvalLimitCents)} />
+                </details>
+              )}
+            </section>
           )}
-        </CardContent>
-      </Card>
+        </div>
+
+        <section className="flex min-w-0 flex-col border border-line bg-white p-5 sm:p-6">
+          <h2 className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Activity</h2>
+          <ol className="mt-4 flex flex-col gap-3.5 text-sm leading-normal">
+            <li className="flex gap-3">
+              <span aria-hidden="true" className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-pine text-xs text-white">
+                AI
+              </span>
+              <div>
+                <b>PropCare</b> <span className="text-muted">· {formatDateTime(ticket.created_at, tz)}</span>
+                <br />
+                Created the request from {tenantName ? `${tenantName}'s` : "the tenant's"} chat.
+              </div>
+            </li>
+            {(comments ?? []).map((c) => (
+              <li key={c.id} className="flex gap-3">
+                <span
+                  aria-hidden="true"
+                  className={`flex h-8 w-8 flex-none items-center justify-center rounded-full text-xs ${
+                    c.author_role === "system"
+                      ? "bg-pine text-white"
+                      : c.author_role === "owner"
+                        ? "bg-brass text-white"
+                        : c.author_role === "tenant"
+                          ? "bg-line text-ink"
+                          : "bg-gold text-ink"
+                  }`}
+                >
+                  {c.author_role === "system" ? "AI" : initials(c.author_name)}
+                </span>
+                <div className={`min-w-0 flex-1 p-2.5 ${c.visibility === "tenant" ? "bg-sage" : "bg-paper"}`}>
+                  <b>
+                    {c.author_name}
+                    {c.author_role !== "system" ? ` (${ROLE_LABEL[c.author_role] ?? c.author_role})` : ""}
+                  </b>{" "}
+                  <span className="text-[11px] font-semibold uppercase tracking-[1px] text-muted">
+                    {c.visibility === "tenant" && c.author_role !== "tenant"
+                      ? c.delivered_at
+                        ? "Sent to tenant by email"
+                        : c.delivery_error
+                          ? "To tenant · not emailed"
+                          : "To tenant"
+                      : VISIBILITY_LABEL[c.visibility]}
+                  </span>
+                  <span className="text-xs text-muted"> · {formatDateTime(c.created_at, tz)}</span>
+                  <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
+                  {c.delivery_error && team && <p className="mt-1 text-xs text-brick">{c.delivery_error}</p>}
+                </div>
+              </li>
+            ))}
+          </ol>
+          <div className="mt-auto pt-5">
+            <CommentComposer
+              ticketId={ticket.id}
+              allowed={team ? (company ? ["team", "team_owner", "tenant"] : ["team", "tenant"]) : ["team_owner"]}
+            />
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
