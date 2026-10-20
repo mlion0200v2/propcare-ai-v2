@@ -12,7 +12,7 @@ import {
   requireTeam,
 } from "@/lib/workspace/server";
 import { ensureProfile } from "@/lib/workspace/onboarding";
-import { dollarsToCents, generateToken, hashToken } from "@/lib/workspace/tokens";
+import { dollarsToCents, generateIntakeToken, generateToken, hashToken } from "@/lib/workspace/tokens";
 import {
   inviteSchema,
   workspacePropertySchema,
@@ -276,4 +276,39 @@ export async function acceptInvitation(_prev: FormState, formData: FormData): Pr
   if (error || !data) return { error: error?.message ?? "This invitation is no longer valid" };
   await setActiveCookie(data);
   redirect("/dashboard");
+}
+
+// ── Tenant links ──
+
+export async function setUnitLinkActive(formData: FormData): Promise<void> {
+  await requireTeam();
+  const unitId = String(formData.get("unit_id"));
+  const supabase = await createClient();
+  // Turning it off also clears devices confirmed through it (DB trigger).
+  await supabase.from("units").update({ link_active: formData.get("active") === "on" }).eq("id", unitId);
+  revalidatePath(`/units/${unitId}`);
+}
+
+export async function regenerateUnitLink(formData: FormData): Promise<void> {
+  await requireTeam();
+  const unitId = String(formData.get("unit_id"));
+  const supabase = await createClient();
+  // The old link stops working at once; devices confirmed through it must confirm again.
+  await supabase
+    .from("units")
+    .update({ intake_token: generateIntakeToken(), link_active: true })
+    .eq("id", unitId);
+  revalidatePath(`/units/${unitId}`);
+}
+
+export async function endTenancy(formData: FormData): Promise<void> {
+  await requireTeam();
+  const unitId = String(formData.get("unit_id"));
+  const supabase = await createClient();
+  await supabase
+    .from("tenancies")
+    .update({ ended_at: new Date().toISOString() })
+    .eq("id", String(formData.get("tenancy_id")))
+    .eq("unit_id", unitId);
+  revalidatePath(`/units/${unitId}`);
 }

@@ -65,7 +65,17 @@ interface ChatMessage {
   mediaType?: "photo" | "video";
 }
 
-export function TriageChat() {
+export function TriageChat({
+  tenancyId,
+  afterComplete,
+}: {
+  /** The unit tenancy new tickets are filed under (tenant link flow). */
+  tenancyId?: string;
+  /** Shown under the completion banner, e.g. the optional-account offer. */
+  afterComplete?: React.ReactNode;
+} = {}) {
+  // One in-progress draft per tenancy, so two homes never mix.
+  const draftKey = tenancyId ? `${DRAFT_TICKET_KEY}:${tenancyId}` : DRAFT_TICKET_KEY;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [ticketId, setTicketId] = useState<string | null>(null);
@@ -87,20 +97,20 @@ export function TriageChat() {
   // Persist ticket_id to localStorage whenever it changes
   useEffect(() => {
     if (ticketId) {
-      localStorage.setItem(DRAFT_TICKET_KEY, ticketId);
+      localStorage.setItem(draftKey, ticketId);
     }
-  }, [ticketId]);
+  }, [ticketId, draftKey]);
 
   // Clear draft when triage completes
   useEffect(() => {
     if (isComplete) {
-      localStorage.removeItem(DRAFT_TICKET_KEY);
+      localStorage.removeItem(draftKey);
     }
-  }, [isComplete]);
+  }, [isComplete, draftKey]);
 
   // On mount: check for an in-progress draft and resume
   const resumeDraft = useCallback(async () => {
-    const savedId = localStorage.getItem(DRAFT_TICKET_KEY);
+    const savedId = localStorage.getItem(draftKey);
     if (!savedId) return;
 
     setIsResuming(true);
@@ -108,7 +118,7 @@ export function TriageChat() {
       const res = await fetch(`/api/triage/chat?ticket_id=${savedId}`);
       if (!res.ok) {
         // Draft ticket no longer accessible — clear stale reference
-        localStorage.removeItem(DRAFT_TICKET_KEY);
+        localStorage.removeItem(draftKey);
         return;
       }
 
@@ -116,7 +126,7 @@ export function TriageChat() {
 
       // If triage was already completed, clear draft and start fresh
       if (data.is_complete) {
-        localStorage.removeItem(DRAFT_TICKET_KEY);
+        localStorage.removeItem(draftKey);
         return;
       }
 
@@ -174,11 +184,11 @@ export function TriageChat() {
       setMessages(chatMessages);
     } catch {
       // Network error on resume — clear stale draft
-      localStorage.removeItem(DRAFT_TICKET_KEY);
+      localStorage.removeItem(draftKey);
     } finally {
       setIsResuming(false);
     }
-  }, []);
+  }, [draftKey]);
 
   useEffect(() => {
     resumeDraft();
@@ -204,7 +214,9 @@ export function TriageChat() {
       const res = await fetch("/api/triage/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, ticket_id: ticketId }),
+        body: JSON.stringify(
+          ticketId ? { message: text, ticket_id: ticketId } : { message: text, tenancy_id: tenancyId }
+        ),
       });
 
       const data = await res.json();
@@ -567,6 +579,7 @@ export function TriageChat() {
           Triage complete. Your ticket has been submitted to your property manager.
         </div>
       )}
+      {isComplete && afterComplete && <div className="mx-4 mb-4">{afterComplete}</div>}
 
       {/* Confirm Profile buttons */}
       {triageState === "CONFIRM_PROFILE" && !isComplete && !isLoading && (

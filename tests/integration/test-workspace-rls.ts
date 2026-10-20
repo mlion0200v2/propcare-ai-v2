@@ -306,6 +306,7 @@ export async function testWorkspaceRLS(): Promise<TestResult> {
     "Devices confirmed through a revoked link cannot file new tickets"
   );
   check((await count(db, tina, "select id from tickets")) === 1, "...but still see the request they already made");
+  check((await count(db, tina, "select id from tenancies")) === 0, "...and can no longer open the tenancy's chat");
   await queryAs(db, alice, "update units set link_active = true where id = $1", [ids.u1]);
   const rotated = await one<{ intake_token: string; link_rotated_at: string | null }>(
     db,

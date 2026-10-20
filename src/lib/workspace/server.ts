@@ -72,7 +72,7 @@ export async function homePathForUser(): Promise<string> {
   const membership = await getActiveMembership();
   if (membership) return "/dashboard";
   const user = await getSessionUser();
-  if (!user || user.is_anonymous) return "/submit";
+  if (!user || user.is_anonymous) return "/my-requests";
   // Tenants with an account hold a tenancy; anyone else confirmed their
   // email without a workspace (e.g. opened the link on another device).
   const supabase = await createClient();
@@ -80,7 +80,7 @@ export async function homePathForUser(): Promise<string> {
     .from("tenancies")
     .select("id", { count: "exact", head: true })
     .eq("tenant_user_id", user.id);
-  return (count ?? 0) > 0 ? "/submit" : "/welcome";
+  return (count ?? 0) > 0 ? "/my-requests" : "/welcome";
 }
 
 /**
@@ -94,7 +94,7 @@ export async function requireMembership(
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const membership = await getActiveMembership();
-  if (!membership) redirect("/submit");
+  if (!membership) redirect("/my-requests");
   if (!roles.includes(membership.role)) redirect("/dashboard");
   return { ...membership, userId: user.id };
 }

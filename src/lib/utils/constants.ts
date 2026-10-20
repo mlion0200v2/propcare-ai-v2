@@ -77,3 +77,14 @@ export const MAX_PHOTO_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 export const MAX_VIDEO_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB
 export const ALLOWED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/heic", "image/webp"];
 export const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/quicktime"];
+
+// Workspace ticket stages (what managers, owners and tenants see)
+export const TICKET_STAGES = ["new", "waiting_for_owner", "vendor_booked", "fixed", "closed"] as const;
+
+export const STAGE_LABELS: Record<(typeof TICKET_STAGES)[number], string> = {
+  new: "New",
+  waiting_for_owner: "Waiting for owner",
+  vendor_booked: "Vendor booked",
+  fixed: "Fixed",
+  closed: "Closed",
+};

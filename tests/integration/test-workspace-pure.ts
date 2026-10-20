@@ -9,6 +9,8 @@ import { dollarsToCents, generateToken, hashToken } from "../../src/lib/workspac
 import { safeNextPath } from "../../src/lib/app-url";
 import { buildInvitationEmail } from "../../src/lib/email/templates";
 import { inviteSchema } from "../../src/lib/utils/validation";
+import { codeMatches, generateCode, hashCode, maskDestination, parseContact } from "../../src/lib/intake/codes";
+import { createRateLimiter } from "../../src/lib/rate-limit";
 
 const SRC = join(__dirname, "..", "..", "src");
 
@@ -56,10 +58,47 @@ export function testWorkspacePure(): TestResult {
   check(offenders.length === 0, "no access decision reads user_metadata.role", offenders);
   const tenantsSrc = readFileSync(join(SRC, "app", "(manager)", "tenants", "page.tsx"), "utf8");
   check(!/createServiceClient/.test(tenantsSrc) && /requireTeam\(\)/.test(tenantsSrc), "/tenants uses the user's session and a team check");
-  for (const page of ["homes/page.tsx", "homes/[id]/page.tsx", "team/page.tsx", "settings/page.tsx", "dashboard/page.tsx", "tickets/[id]/page.tsx"]) {
+  for (const page of ["homes/page.tsx", "homes/[id]/page.tsx", "team/page.tsx", "settings/page.tsx", "dashboard/page.tsx", "tickets/[id]/page.tsx", "units/[id]/page.tsx"]) {
     const src = readFileSync(join(SRC, "app", "(manager)", page), "utf8");
     check(/require(Team|Admin|Membership)\(\)/.test(src), `server-side membership check on (manager)/${page}`);
   }
+
+  // Tenant link: contacts and one-time codes
+  check(JSON.stringify(parseContact(" Jamie@Example.com ")) === JSON.stringify({ channel: "email", destination: "jamie@example.com" }), "contact: email is normalised");
+  check(parseContact("604-555-0142")?.destination === "+16045550142" && parseContact("604-555-0142")?.channel === "sms", "contact: NA phone → E.164 sms");
+  check(parseContact("+44 20 7946 0958")?.destination === "+442079460958", "contact: international phone kept");
+  check(parseContact("hello") === null && parseContact("123") === null && parseContact("a@b") === null, "contact: junk rejected");
+  check(maskDestination("email", "jamie@example.com") === "j••••@example.com" && maskDestination("sms", "+16045550142") === "•••-•••-0142", "contacts are masked on screen");
+  const codes = new Set(Array.from({ length: 200 }, () => generateCode()));
+  check([...codes].every((c) => /^\d{6}$/.test(c)) && codes.size > 190, "codes are 6 random digits");
+  const h = hashCode("123456", "unit-a", "jamie@example.com");
+  check(codeMatches("123456", "unit-a", "jamie@example.com", h), "code matches its unit and destination");
+  check(
+    !codeMatches("123457", "unit-a", "jamie@example.com", h) &&
+      !codeMatches("123456", "unit-b", "jamie@example.com", h) &&
+      !codeMatches("123456", "unit-a", "eve@example.com", h) &&
+      !codeMatches("12345", "unit-a", "jamie@example.com", h),
+    "code is bound to unit + destination and must be exact"
+  );
+  check(!h.includes("123456") && h.length === 64, "only an HMAC of the code is stored");
+
+  // Rate limits on the tenant link: a destination gets at most 3 codes per 10 minutes
+  {
+    let now = 0;
+    const perDestination = createRateLimiter([{ limit: 3, windowMs: 10 * 60_000 }, { limit: 10, windowMs: 86_400_000 }], () => now);
+    const firstThree = [1, 2, 3].map(() => perDestination.check("jamie@example.com").allowed);
+    const fourth = perDestination.check("jamie@example.com").allowed;
+    now = 11 * 60_000;
+    check(firstThree.every(Boolean) && !fourth && perDestination.check("jamie@example.com").allowed, "code sends are throttled per destination");
+  }
+  const intakeSrc = readFileSync(join(SRC, "lib", "actions", "intake.ts"), "utf8");
+  check(
+    ["intakeCodeIpLimiter", "intakeCodeLinkLimiter", "intakeCodeDestinationLimiter", "intakeVerifyLimiter", "magicLinkLimiter"].every((l) => intakeSrc.includes(`${l}.check(`)),
+    "intake actions apply IP, link, destination, verify and magic-link rate limits"
+  );
+  check(/MAX_CODE_ATTEMPTS/.test(intakeSrc) && /\.is\("consumed_at", null\)/.test(intakeSrc), "codes have an attempt cap and are single-use");
+  const linkPage = readFileSync(join(SRC, "app", "r", "[token]", "page.tsx"), "utf8");
+  check(/intakeLinkLimiter\.check\(/.test(linkPage) && /findUnitByToken/.test(linkPage), "opening a tenant link is rate-limited and only resolves active links");
 
   return result;
 }

@@ -5,6 +5,11 @@ export function generateToken(bytes = 24): string {
   return randomBytes(bytes).toString("base64url");
 }
 
+/** New unit link token: 128 random bits, hex (same shape as the DB default). */
+export function generateIntakeToken(): string {
+  return randomBytes(16).toString("hex");
+}
+
 /** sha256 hex — matches `encode(sha256(convert_to(token, 'UTF8')), 'hex')` in SQL. */
 export function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");

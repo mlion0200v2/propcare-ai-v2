@@ -1,13 +1,7 @@
-import { TriageChat } from "@/components/triage/chat";
+import { redirect } from "next/navigation";
 
-export const metadata = {
-  title: "Submit Issue | PropCare-AI",
-};
-
+// Requests now start from the unit's link (/r/<token>); signed-in tenants
+// find theirs on /my-requests.
 export default function SubmitPage() {
-  return (
-    <div className="h-[calc(100vh-57px)]">
-      <TriageChat />
-    </div>
-  );
+  redirect("/my-requests");
 }
