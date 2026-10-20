@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { requireMembership } from "@/lib/workspace/server";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { GatheredInfo, TenantInfo } from "@/lib/triage/types";
 
@@ -14,8 +15,12 @@ export default async function TicketDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  await requireMembership();
   const supabase = await createClient();
 
+  // Loaded with the user's session: RLS returns the ticket only to its
+  // workspace team or the owner of its property. That check gates the
+  // service-role media lookup below.
   const { data: ticket, error } = await supabase
     .from("tickets")
     .select("*")
@@ -31,7 +36,8 @@ export default async function TicketDetailPage({
     .eq("ticket_id", id)
     .order("created_at", { ascending: true });
 
-  // Load uploaded media — use service client to bypass storage RLS (folder = tenant uid)
+  // Load uploaded media — service client bypasses storage RLS (folder = tenant
+  // uid); only reached after the RLS ticket read above succeeded.
   const serviceClient = await createServiceClient();
   const { data: mediaRecords } = await serviceClient
     .from("ticket_media")

@@ -371,7 +371,7 @@ export function testLaunchSafety(): TestResult {
     check(/triageMediaLimiter\.check\(user\.id\)/.test(mediaSrc), "media route applies the per-user rate limit");
     check(!mediaSrc.includes("String(err)"), "media route returns generic errors");
     const emailSrc = readFileSync(join(__dirname, "..", "..", "src", "lib", "email", "send-ticket-email.ts"), "utf8");
-    check(/escapeLikePattern\(streetAddress\)/.test(emailSrc), "manager lookup escapes the reported address in ilike");
+    check(!/ilike\(/.test(emailSrc) && /workspace_id/.test(emailSrc), "manager lookup goes through the ticket's workspace, never an address match");
   }
 
   return result;

@@ -136,6 +136,8 @@ export const triageChatRequestSchema = z.object({
     .max(MAX_TRIAGE_MESSAGE_LENGTH, `Message must be ${MAX_TRIAGE_MESSAGE_LENGTH} characters or fewer`)
     .optional(),
   ticket_id: z.string().uuid("Invalid ticket").optional(),
+  /** New tickets only: the tenancy (unit link) to file under. */
+  tenancy_id: z.string().uuid("Invalid tenancy").optional(),
   confirm_profile: z.enum(["yes", "change"]).optional(),
   media_action: z.string().max(50).optional(),
   confirm_summary: z.string().max(MAX_TRIAGE_MESSAGE_LENGTH).optional(),

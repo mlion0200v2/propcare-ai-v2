@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { requireMembership } from "@/lib/workspace/server";
 import { Card, CardContent } from "@/components/ui/card";
 
 export const metadata = {
@@ -7,16 +8,11 @@ export const metadata = {
 };
 
 export default async function DashboardPage() {
+  const membership = await requireMembership();
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
 
-  if (!user) return null;
-
-  // Get tickets for properties managed by this user (includes unassigned unit_id tickets)
-  // Two queries: assigned tickets (via unit join) + unassigned tickets (unit_id IS NULL)
-  const { data: assignedTickets } = await supabase
+  // RLS limits this to the caller's workspace (owners: their properties only).
+  const { data: tickets } = await supabase
     .from("tickets")
     .select(`
       id,
@@ -28,41 +24,16 @@ export default async function DashboardPage() {
       created_at,
       unit_id,
       classification,
-      units!inner(
+      units(
         unit_number,
-        properties!inner(
-          address_line1,
-          manager_id
+        properties(
+          address_line1
         )
       )
     `)
-    .eq("units.properties.manager_id", user.id)
+    .eq("workspace_id", membership.workspaceId)
     .order("created_at", { ascending: false })
     .limit(50);
-
-  const { data: unassignedTickets } = await supabase
-    .from("tickets")
-    .select(`
-      id,
-      title,
-      category,
-      priority,
-      status,
-      triage_state,
-      created_at,
-      unit_id,
-      classification
-    `)
-    .is("unit_id", null)
-    .order("created_at", { ascending: false })
-    .limit(50);
-
-  // Merge and sort by created_at descending
-  const tickets = [
-    ...(assignedTickets ?? []),
-    ...(unassignedTickets ?? []),
-  ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-   .slice(0, 50);
 
   const priorityColors: Record<string, string> = {
     emergency: "bg-red-100 text-red-800",

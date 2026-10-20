@@ -1,45 +1,38 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-// Routes that don't require authentication
-const PUBLIC_ROUTES = ["/login", "/signup"];
+// Sign-in pages: signed-in users are sent home instead.
+const AUTH_ROUTES = ["/login", "/signup"];
 
+// Reachable without signing in. /r/<token> is the tenant link, /auth/* the
+// email-confirmation callback, /invite/<token> an invitation landing page.
+const PUBLIC_PREFIXES = ["/r/", "/auth/", "/invite/"];
+
+/**
+ * Middleware only answers "is anyone signed in?". Which workspace and role a
+ * user has is checked server-side in the layouts and pages (memberships
+ * table, via RLS); user_metadata is user-editable and never trusted for that.
+ */
 export async function middleware(request: NextRequest) {
   const { supabaseResponse, user } = await updateSession(request);
   const { pathname } = request.nextUrl;
 
-  // Allow public routes
-  if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
-    // If already logged in, redirect away from auth pages
-    if (user) {
-      const role = user.user_metadata?.role as string | undefined;
-      const redirect = role === "manager" ? "/dashboard" : "/submit";
-      return NextResponse.redirect(new URL(redirect, request.url));
+  if (AUTH_ROUTES.some((route) => pathname.startsWith(route))) {
+    // Guest (anonymous) tenant sessions may still sign in or sign up properly.
+    if (user && !user.is_anonymous) {
+      return NextResponse.redirect(new URL("/", request.url));
     }
     return supabaseResponse;
   }
 
-  // All other routes require authentication
+  if (PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))) {
+    return supabaseResponse;
+  }
+
   if (!user) {
     const redirectUrl = new URL("/login", request.url);
     redirectUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(redirectUrl);
-  }
-
-  const role = user.user_metadata?.role as string | undefined;
-
-  // Protect manager routes
-  if (pathname.startsWith("/dashboard") || pathname.startsWith("/tickets") || pathname.startsWith("/analytics") || pathname.startsWith("/vendors")) {
-    if (role !== "manager") {
-      return NextResponse.redirect(new URL("/submit", request.url));
-    }
-  }
-
-  // Protect tenant routes
-  if (pathname.startsWith("/submit")) {
-    if (role !== "tenant") {
-      return NextResponse.redirect(new URL("/dashboard", request.url));
-    }
   }
 
   return supabaseResponse;

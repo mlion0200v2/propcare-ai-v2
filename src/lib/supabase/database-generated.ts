@@ -39,6 +39,198 @@ export type Database = {
   }
   public: {
     Tables: {
+      approvals: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision: Database["public"]["Enums"]["approval_decision"]
+          decision_note: string | null
+          description: string | null
+          id: string
+          limit_cents: number
+          requested_by: string | null
+          ticket_id: string
+          workspace_id: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: Database["public"]["Enums"]["approval_decision"]
+          decision_note?: string | null
+          description?: string | null
+          id?: string
+          limit_cents: number
+          requested_by?: string | null
+          ticket_id: string
+          workspace_id?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision?: Database["public"]["Enums"]["approval_decision"]
+          decision_note?: string | null
+          description?: string | null
+          id?: string
+          limit_cents?: number
+          requested_by?: string | null
+          ticket_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "approvals_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "approvals_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      intake_codes: {
+        Row: {
+          attempts: number
+          channel: string
+          code_hash: string
+          consumed_at: string | null
+          created_at: string
+          destination: string
+          expires_at: string
+          id: string
+          name: string
+          unit_id: string
+        }
+        Insert: {
+          attempts?: number
+          channel: string
+          code_hash: string
+          consumed_at?: string | null
+          created_at?: string
+          destination: string
+          expires_at: string
+          id?: string
+          name: string
+          unit_id: string
+        }
+        Update: {
+          attempts?: number
+          channel?: string
+          code_hash?: string
+          consumed_at?: string | null
+          created_at?: string
+          destination?: string
+          expires_at?: string
+          id?: string
+          name?: string
+          unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "intake_codes_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invitations: {
+        Row: {
+          accepted_at: string | null
+          accepted_by: string | null
+          created_at: string
+          email: string
+          expires_at: string
+          id: string
+          invited_by: string | null
+          property_ids: string[]
+          revoked_at: string | null
+          role: Database["public"]["Enums"]["membership_role"]
+          token_hash: string
+          workspace_id: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          property_ids?: string[]
+          revoked_at?: string | null
+          role: Database["public"]["Enums"]["membership_role"]
+          token_hash: string
+          workspace_id: string
+        }
+        Update: {
+          accepted_at?: string | null
+          accepted_by?: string | null
+          created_at?: string
+          email?: string
+          expires_at?: string
+          id?: string
+          invited_by?: string | null
+          property_ids?: string[]
+          revoked_at?: string | null
+          role?: Database["public"]["Enums"]["membership_role"]
+          token_hash?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invitations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      memberships: {
+        Row: {
+          created_at: string
+          display_name: string | null
+          role: Database["public"]["Enums"]["membership_role"]
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          display_name?: string | null
+          role: Database["public"]["Enums"]["membership_role"]
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          display_name?: string | null
+          role?: Database["public"]["Enums"]["membership_role"]
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "memberships_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
           body: string
@@ -81,13 +273,42 @@ export type Database = {
           },
         ]
       }
+      owner_property_access: {
+        Row: {
+          created_at: string
+          property_id: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          property_id: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          property_id?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "owner_property_access_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
           created_at: string
           default_property_address: string | null
           default_unit_number: string | null
-          email: string
+          email: string | null
           full_name: string
           id: string
           phone: string | null
@@ -99,7 +320,7 @@ export type Database = {
           created_at?: string
           default_property_address?: string | null
           default_unit_number?: string | null
-          email: string
+          email?: string | null
           full_name: string
           id: string
           phone?: string | null
@@ -111,7 +332,7 @@ export type Database = {
           created_at?: string
           default_property_address?: string | null
           default_unit_number?: string | null
-          email?: string
+          email?: string | null
           full_name?: string
           id?: string
           phone?: string | null
@@ -127,10 +348,11 @@ export type Database = {
           city: string
           created_at: string
           id: string
-          manager_id: string
+          manager_id: string | null
           property_type: Database["public"]["Enums"]["property_type"]
           state: string
           updated_at: string
+          workspace_id: string | null
           zip: string
         }
         Insert: {
@@ -139,10 +361,11 @@ export type Database = {
           city: string
           created_at?: string
           id?: string
-          manager_id: string
+          manager_id?: string | null
           property_type?: Database["public"]["Enums"]["property_type"]
           state: string
           updated_at?: string
+          workspace_id?: string | null
           zip: string
         }
         Update: {
@@ -151,10 +374,11 @@ export type Database = {
           city?: string
           created_at?: string
           id?: string
-          manager_id?: string
+          manager_id?: string | null
           property_type?: Database["public"]["Enums"]["property_type"]
           state?: string
           updated_at?: string
+          workspace_id?: string | null
           zip?: string
         }
         Relationships: [
@@ -163,6 +387,156 @@ export type Database = {
             columns: ["manager_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "properties_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenancies: {
+        Row: {
+          created_at: string
+          email: string | null
+          ended_at: string | null
+          id: string
+          name: string
+          phone: string | null
+          tenant_user_id: string | null
+          unit_id: string
+          updated_at: string
+          verified_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          ended_at?: string | null
+          id?: string
+          name: string
+          phone?: string | null
+          tenant_user_id?: string | null
+          unit_id: string
+          updated_at?: string
+          verified_at?: string | null
+          workspace_id?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          ended_at?: string | null
+          id?: string
+          name?: string
+          phone?: string | null
+          tenant_user_id?: string | null
+          unit_id?: string
+          updated_at?: string
+          verified_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenancies_unit_id_fkey"
+            columns: ["unit_id"]
+            isOneToOne: false
+            referencedRelation: "units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenancies_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenancy_verifications: {
+        Row: {
+          channel: string
+          tenancy_id: string
+          user_id: string
+          verified_at: string
+        }
+        Insert: {
+          channel: string
+          tenancy_id: string
+          user_id: string
+          verified_at?: string
+        }
+        Update: {
+          channel?: string
+          tenancy_id?: string
+          user_id?: string
+          verified_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenancy_verifications_tenancy_id_fkey"
+            columns: ["tenancy_id"]
+            isOneToOne: false
+            referencedRelation: "tenancies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_comments: {
+        Row: {
+          author_id: string | null
+          author_name: string
+          author_role: string
+          body: string
+          created_at: string
+          delivered_at: string | null
+          delivery_error: string | null
+          id: string
+          ticket_id: string
+          visibility: Database["public"]["Enums"]["comment_visibility"]
+          workspace_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          author_name: string
+          author_role: string
+          body: string
+          created_at?: string
+          delivered_at?: string | null
+          delivery_error?: string | null
+          id?: string
+          ticket_id: string
+          visibility: Database["public"]["Enums"]["comment_visibility"]
+          workspace_id?: string
+        }
+        Update: {
+          author_id?: string | null
+          author_name?: string
+          author_role?: string
+          body?: string
+          created_at?: string
+          delivered_at?: string | null
+          delivery_error?: string | null
+          id?: string
+          ticket_id?: string
+          visibility?: Database["public"]["Enums"]["comment_visibility"]
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ticket_comments_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -225,12 +599,15 @@ export type Database = {
           classification: Json | null
           created_at: string
           description: string
+          entry_notice: string | null
           id: string
           priority: Database["public"]["Enums"]["ticket_priority"]
           resolved_at: string | null
           safety_assessment: Json | null
           similar_issues: Json | null
+          stage: Database["public"]["Enums"]["ticket_stage"]
           status: Database["public"]["Enums"]["ticket_status"]
+          tenancy_id: string | null
           tenant_id: string
           title: string
           trace_id: string | null
@@ -238,6 +615,9 @@ export type Database = {
           troubleshooting_steps: Json | null
           unit_id: string | null
           updated_at: string
+          vendor_booked_for: string | null
+          vendor_name: string | null
+          workspace_id: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -245,12 +625,15 @@ export type Database = {
           classification?: Json | null
           created_at?: string
           description: string
+          entry_notice?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["ticket_priority"]
           resolved_at?: string | null
           safety_assessment?: Json | null
           similar_issues?: Json | null
+          stage?: Database["public"]["Enums"]["ticket_stage"]
           status?: Database["public"]["Enums"]["ticket_status"]
+          tenancy_id?: string | null
           tenant_id: string
           title: string
           trace_id?: string | null
@@ -258,6 +641,9 @@ export type Database = {
           troubleshooting_steps?: Json | null
           unit_id?: string | null
           updated_at?: string
+          vendor_booked_for?: string | null
+          vendor_name?: string | null
+          workspace_id?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -265,19 +651,25 @@ export type Database = {
           classification?: Json | null
           created_at?: string
           description?: string
+          entry_notice?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["ticket_priority"]
           resolved_at?: string | null
           safety_assessment?: Json | null
           similar_issues?: Json | null
+          stage?: Database["public"]["Enums"]["ticket_stage"]
           status?: Database["public"]["Enums"]["ticket_status"]
+          tenancy_id?: string | null
           tenant_id?: string
           title?: string
           trace_id?: string | null
           triage_state?: string
           troubleshooting_steps?: Json | null
-          unit_id?: string
+          unit_id?: string | null
           updated_at?: string
+          vendor_booked_for?: string | null
+          vendor_name?: string | null
+          workspace_id?: string | null
         }
         Relationships: [
           {
@@ -285,6 +677,13 @@ export type Database = {
             columns: ["assigned_to"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_tenancy_id_fkey"
+            columns: ["tenancy_id"]
+            isOneToOne: false
+            referencedRelation: "tenancies"
             referencedColumns: ["id"]
           },
           {
@@ -301,35 +700,54 @@ export type Database = {
             referencedRelation: "units"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "tickets_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
         ]
       }
       units: {
         Row: {
           created_at: string
           id: string
+          intake_token: string
+          link_active: boolean
+          link_rotated_at: string | null
           property_id: string
           status: Database["public"]["Enums"]["unit_status"]
           tenant_id: string | null
           unit_number: string | null
           updated_at: string
+          workspace_id: string | null
         }
         Insert: {
           created_at?: string
           id?: string
+          intake_token?: string
+          link_active?: boolean
+          link_rotated_at?: string | null
           property_id: string
           status?: Database["public"]["Enums"]["unit_status"]
           tenant_id?: string | null
           unit_number?: string | null
           updated_at?: string
+          workspace_id?: string | null
         }
         Update: {
           created_at?: string
           id?: string
+          intake_token?: string
+          link_active?: boolean
+          link_rotated_at?: string | null
           property_id?: string
           status?: Database["public"]["Enums"]["unit_status"]
           tenant_id?: string | null
           unit_number?: string | null
           updated_at?: string
+          workspace_id?: string | null
         }
         Relationships: [
           {
@@ -346,6 +764,13 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "units_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
         ]
       }
       vendors: {
@@ -353,37 +778,40 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
-          manager_id: string
+          manager_id: string | null
           name: string
           notes: string | null
           phone: string | null
           rating: number | null
           trade: Database["public"]["Enums"]["ticket_category"]
           updated_at: string
+          workspace_id: string | null
         }
         Insert: {
           created_at?: string
           email?: string | null
           id?: string
-          manager_id: string
+          manager_id?: string | null
           name: string
           notes?: string | null
           phone?: string | null
           rating?: number | null
           trade: Database["public"]["Enums"]["ticket_category"]
           updated_at?: string
+          workspace_id?: string | null
         }
         Update: {
           created_at?: string
           email?: string | null
           id?: string
-          manager_id?: string
+          manager_id?: string | null
           name?: string
           notes?: string | null
           phone?: string | null
           rating?: number | null
           trade?: Database["public"]["Enums"]["ticket_category"]
           updated_at?: string
+          workspace_id?: string | null
         }
         Relationships: [
           {
@@ -393,17 +821,101 @@ export type Database = {
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "vendors_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      workspaces: {
+        Row: {
+          approval_limit_cents: number
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: Database["public"]["Enums"]["workspace_kind"]
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          approval_limit_cents?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind: Database["public"]["Enums"]["workspace_kind"]
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          approval_limit_cents?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["workspace_kind"]
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      accept_invitation: {
+        Args: { p_display_name?: string; p_token: string }
+        Returns: string
+      }
+      create_workspace: {
+        Args: {
+          p_display_name?: string
+          p_kind: Database["public"]["Enums"]["workspace_kind"]
+          p_name: string
+        }
+        Returns: string
+      }
+      decide_approval: {
+        Args: {
+          p_approval: string
+          p_decision: Database["public"]["Enums"]["approval_decision"]
+          p_note?: string
+        }
+        Returns: undefined
+      }
+      intake_unit_for_token: {
+        Args: { p_token: string }
+        Returns: {
+          address_line1: string
+          city: string
+          property_id: string
+          unit_id: string
+          unit_number: string | null
+          workspace_id: string
+          workspace_name: string
+        }[]
+      }
+      remove_member: {
+        Args: { p_user: string; p_workspace: string }
+        Returns: undefined
+      }
+      set_member_role: {
+        Args: {
+          p_role: Database["public"]["Enums"]["membership_role"]
+          p_user: string
+          p_workspace: string
+        }
+        Returns: undefined
+      }
+      ticket_access: { Args: { tid: string }; Returns: string | null }
     }
     Enums: {
+      approval_decision: "pending" | "approved" | "declined"
+      comment_visibility: "team" | "team_owner" | "tenant"
       media_type: "photo" | "video"
+      membership_role: "admin" | "manager" | "owner"
       property_type: "single_family" | "multi_unit" | "condo" | "commercial"
       ticket_category:
         | "plumbing"
@@ -420,6 +932,12 @@ export type Database = {
         | "general"
         | "other"
       ticket_priority: "low" | "medium" | "high" | "emergency"
+      ticket_stage:
+        | "new"
+        | "waiting_for_owner"
+        | "vendor_booked"
+        | "fixed"
+        | "closed"
       ticket_status:
         | "open"
         | "in_progress"
@@ -429,6 +947,7 @@ export type Database = {
         | "closed"
       unit_status: "occupied" | "vacant" | "maintenance"
       user_role: "tenant" | "manager"
+      workspace_kind: "individual" | "company"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -559,7 +1078,10 @@ export const Constants = {
   },
   public: {
     Enums: {
+      approval_decision: ["pending", "approved", "declined"],
+      comment_visibility: ["team", "team_owner", "tenant"],
       media_type: ["photo", "video"],
+      membership_role: ["admin", "manager", "owner"],
       property_type: ["single_family", "multi_unit", "condo", "commercial"],
       ticket_category: [
         "plumbing",
@@ -577,6 +1099,7 @@ export const Constants = {
         "other",
       ],
       ticket_priority: ["low", "medium", "high", "emergency"],
+      ticket_stage: ["new", "waiting_for_owner", "vendor_booked", "fixed", "closed"],
       ticket_status: [
         "open",
         "in_progress",
@@ -587,6 +1110,7 @@ export const Constants = {
       ],
       unit_status: ["occupied", "vacant", "maintenance"],
       user_role: ["tenant", "manager"],
+      workspace_kind: ["individual", "company"],
     },
   },
 } as const
