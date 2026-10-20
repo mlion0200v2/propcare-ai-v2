@@ -694,6 +694,10 @@ export type Database = {
           classification: Json | null
           created_at: string
           description: string
+          entry_permission: boolean | null
+          availability: string | null
+          tenant_pets: string | null
+          access_confirmed_at: string | null
           entry_notice: string | null
           id: string
           priority: Database["public"]["Enums"]["ticket_priority"]
@@ -719,6 +723,10 @@ export type Database = {
           category?: Database["public"]["Enums"]["ticket_category"]
           classification?: Json | null
           created_at?: string
+          entry_permission?: boolean | null
+          availability?: string | null
+          tenant_pets?: string | null
+          access_confirmed_at?: string | null
           description: string
           entry_notice?: string | null
           id?: string
@@ -745,6 +753,10 @@ export type Database = {
           category?: Database["public"]["Enums"]["ticket_category"]
           classification?: Json | null
           created_at?: string
+          entry_permission?: boolean | null
+          availability?: string | null
+          tenant_pets?: string | null
+          access_confirmed_at?: string | null
           description?: string
           entry_notice?: string | null
           id?: string

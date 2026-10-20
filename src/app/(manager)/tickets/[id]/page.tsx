@@ -5,8 +5,9 @@ import { isTeamRole, requireMembership } from "@/lib/workspace/server";
 import { decideApproval } from "@/lib/actions/tickets";
 import { formatCents } from "@/lib/workspace/tokens";
 import { appUrl } from "@/lib/app-url";
-import { buildVendorWorkOrderMessage, whatsappLink } from "@/lib/messages";
-import { SendToVendorForm, ShareButtons } from "@/components/tickets/dispatch";
+import { buildOwnerUpdate, buildVendorWorkOrderMessage, whatsappLink } from "@/lib/messages";
+import { OwnerUpdateForm, SendToVendorForm, ShareButtons } from "@/components/tickets/dispatch";
+import { STAGE_LABELS } from "@/lib/utils/constants";
 import { appTimeZone, formatDateTime, utcToZonedLocal } from "@/lib/utils/time";
 import {
   ApprovalRequestForm,
@@ -168,6 +169,24 @@ export default async function TicketDetailPage({
   const pendingApproval = (approvals ?? []).find((a) => a.decision === "pending");
   const canDecide = membership.role === "owner" || membership.role === "admin";
   const company = membership.kind === "company";
+  const quotedOrder = (workOrders ?? []).find((w) => w.quote_cents);
+  const ownerUpdate = buildOwnerUpdate({
+    workspaceName: membership.workspaceName,
+    ownerName: ownerNames[0] ?? null,
+    title: ticket.title,
+    address: `${address}${unitLabel}`,
+    whatHappened: ticket.description.slice(0, 400),
+    stageLabel: STAGE_LABELS[ticket.stage],
+    photos: media.filter((m) => m.file_type === "photo").length,
+    pendingQuote: pendingApproval
+      ? {
+          amount: formatCents(pendingApproval.amount_cents),
+          limit: formatCents(pendingApproval.limit_cents),
+          vendor: quotedOrder?.vendor_name ?? null,
+        }
+      : null,
+    link: appUrl(`/tickets/${ticket.id}`),
+  });
 
   return (
     <div>
@@ -227,6 +246,20 @@ export default async function TicketDetailPage({
               )}
               <dt className="text-muted">Likely trade</dt>
               <dd className="capitalize">{(gathered?.category ?? ticket.category).replace(/_/g, " ")}</dd>
+              {(ticket.entry_permission !== null || ticket.availability || ticket.tenant_pets) && (
+                <>
+                  <dt className="text-muted">Access</dt>
+                  <dd>
+                    {ticket.entry_permission === true
+                      ? "Entry permitted if nobody is home"
+                      : ticket.entry_permission === false
+                        ? "Tenant must be home"
+                        : "Entry not asked"}
+                    {ticket.availability ? ` · ${ticket.availability}` : ""}
+                    {ticket.tenant_pets ? ` · Pets: ${ticket.tenant_pets}` : ""}
+                  </dd>
+                </>
+              )}
               <dt className="text-muted">Safety</dt>
               <dd>{gathered?.is_emergency ? "Possible emergency reported" : "No hazards reported"}</dd>
               {tenantInfo && team && (
@@ -350,7 +383,25 @@ export default async function TicketDetailPage({
                   ticketId={ticket.id}
                   vendors={vendors ?? []}
                   defaultScope={(classification?.summary ?? ticket.description).slice(0, 4000)}
-                  defaultPets={unitProfile.pets ?? ""}
+                  defaultPets={ticket.tenant_pets ?? unitProfile.pets ?? ""}
+                  defaultAccessWindow={ticket.availability ?? ""}
+                  defaultEntry={ticket.entry_permission}
+                />
+              </details>
+            </section>
+          )}
+
+          {team && company && ownerNames.length > 0 && (
+            <section className="border border-line bg-white p-5 sm:p-6">
+              <h2 className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Send to owner</h2>
+              <p className="mt-2 text-sm text-muted">A plain-language update for {ownerNames.join(", ")}, with the approve/decline link.</p>
+              <details className="mt-1">
+                <summary className="cursor-pointer text-sm text-pine underline">Write the update</summary>
+                <OwnerUpdateForm
+                  ticketId={ticket.id}
+                  subject={ownerUpdate.subject}
+                  text={ownerUpdate.text}
+                  whatsappHref={whatsappLink(ownerUpdate.text)}
                 />
               </details>
             </section>

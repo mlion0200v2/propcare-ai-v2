@@ -18,6 +18,16 @@ export interface GatheredInfo {
   entry_point: string | null;
   equipment: string | null;
   equipment_candidates?: string[] | null;
+  /** Water leak: ask the source deep-dive (set from the first message). */
+  leak_details_needed?: boolean;
+  /** Where the water is: ceiling / wall / floor / under the sink / around an appliance. */
+  leak_where?: string | null;
+  /** How much: a few drops / small puddle / spreading. */
+  leak_amount?: string | null;
+  /** When: all the time / when the shower or toilet or an appliance is used. */
+  leak_timing?: string | null;
+  /** Water near an outlet, light or anything plugged in: "yes" | "no" | "not sure". */
+  leak_electrical?: string | null;
 }
 
 export interface TriageContext {

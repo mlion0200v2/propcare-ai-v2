@@ -39,6 +39,24 @@ export function buildChatHints(params: {
     case "current_status":
       quickReplies.push("Still happening", "Comes and goes", "Getting worse", "It stopped");
       break;
+    case "leak_where":
+      quickReplies.push("Ceiling", "Wall", "Floor", "Under the sink", "Around an appliance", "Around the toilet");
+      break;
+    case "leak_amount":
+      quickReplies.push("A few drops", "A small puddle", "It's spreading");
+      break;
+    case "leak_timing":
+      quickReplies.push(
+        "All the time",
+        "When the shower or bath is used",
+        "When the toilet is flushed",
+        "When an appliance runs",
+        "Not sure"
+      );
+      break;
+    case "leak_electrical":
+      quickReplies.push("No", "Yes", "Not sure");
+      break;
     case "brand_model": {
       const relevant = profile.fixtures.filter((f) => f.brand || f.model);
       quickReplies.push(...relevant.slice(0, 6).map(fixtureLabel), "Unknown");

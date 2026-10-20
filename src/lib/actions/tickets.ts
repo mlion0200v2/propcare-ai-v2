@@ -14,7 +14,7 @@ import { dollarsToCents, formatCents } from "@/lib/workspace/tokens";
 import { appTimeZone, zonedLocalToUtc } from "@/lib/utils/time";
 import { commentLimiter } from "@/lib/rate-limit";
 import { appUrl } from "@/lib/app-url";
-import { deliver } from "@/lib/delivery";
+import { deliver, isDemoWorkspace } from "@/lib/delivery";
 import { buildVendorWorkOrderMessage } from "@/lib/messages";
 import { buildTenantReplyEmail } from "@/lib/email/templates";
 import { logError } from "@/lib/triage/logger";
@@ -328,4 +328,47 @@ export async function sendToVendor(_prev: TicketFormState, formData: FormData): 
   }
   revalidatePath(`/tickets/${ticketId}`);
   return { error: null, ok: "Work order ready" };
+}
+
+/** "Send to owner": plain-language update by email to the property's owners (demo: preview). */
+export async function sendOwnerUpdate(_prev: TicketFormState, formData: FormData): Promise<TicketFormState> {
+  const membership = await requireTeam();
+  const ticketId = String(formData.get("ticket_id") ?? "");
+  const text = String(formData.get("text") ?? "").trim().slice(0, 4000);
+  const subject = String(formData.get("subject") ?? "").trim().slice(0, 200) || "Update from your property manager";
+  if (!/^[0-9a-f-]{36}$/i.test(ticketId) || !text) return { error: "Nothing to send" };
+
+  const supabase = await createClient();
+  const { data: ticket } = await supabase.from("tickets").select("id, units(property_id)").eq("id", ticketId).maybeSingle();
+  if (!ticket?.units?.property_id) return { error: "Request not found" };
+  const { data: access } = await supabase
+    .from("owner_property_access")
+    .select("user_id")
+    .eq("property_id", ticket.units.property_id);
+  const ownerIds = (access ?? []).map((a) => a.user_id);
+  if (ownerIds.length === 0) return { error: "No owner is linked to this home yet (Team and owners)." };
+
+  const { data: owners } = await createServiceClient().from("profiles").select("full_name, email").in("id", ownerIds);
+  const demoWorkspace = await isDemoWorkspace(membership.workspaceId);
+  let demo = false;
+  let sent = 0;
+  for (const owner of owners ?? []) {
+    const to = owner.email ?? "";
+    if (!to && !demoWorkspace) continue;
+    const result = await deliver({
+      workspaceId: membership.workspaceId,
+      ticketId,
+      channel: "email",
+      to,
+      recipientLabel: `${owner.full_name} (owner)${to ? ` · ${to}` : ""}`,
+      subject,
+      text,
+      kind: "owner_update",
+    });
+    demo ||= result.demo;
+    if (result.success) sent++;
+  }
+  await logActivity(ticketId, `${await actorName()} sent the owner an update${demo ? " (demo, not delivered)" : " by email"}.`);
+  revalidatePath(`/tickets/${ticketId}`);
+  return sent > 0 ? { error: null, ok: demo ? "Sent (demo, not delivered)" : "Sent to the owner" } : { error: "The email could not be sent" };
 }

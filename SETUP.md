@@ -180,8 +180,9 @@ on the same request; each view uses that role's real permissions.
   daily on Vercel (Hobby plans allow daily crons only); expired sandboxes are
   already unusable, cleanup just deletes them. Elsewhere use any scheduler,
   e.g. Google Cloud Scheduler hitting the URL with that header.
-- **Database:** needs migration `20261021000000_demo_mode.sql`
-  (`npx supabase db push`). Locally, `npx supabase db reset` applies it.
+- **Database:** needs migrations `20261021000000_demo_mode.sql` and
+  `20261022000000_ticket_access.sql` (`npx supabase db push`). Locally,
+  `npx supabase db reset` applies them.
 
 To try it locally: add `DEMO_MODE=1` to `.env.local`, run `npm run dev`, open
 http://localhost:3000/try.

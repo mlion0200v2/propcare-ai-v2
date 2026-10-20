@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { sendToVendor, type TicketFormState } from "@/lib/actions/tickets";
+import { sendOwnerUpdate, sendToVendor, type TicketFormState } from "@/lib/actions/tickets";
 
 const initial: TicketFormState = { error: null, ok: null };
 const field =
@@ -12,11 +12,17 @@ export function SendToVendorForm({
   vendors,
   defaultScope,
   defaultPets,
+  defaultAccessWindow = "",
+  defaultEntry = null,
 }: {
   ticketId: string;
   vendors: { id: string; name: string; email: string | null }[];
   defaultScope: string;
   defaultPets: string;
+  /** From the tenant's availability answer. */
+  defaultAccessWindow?: string;
+  /** From the tenant's entry-permission answer. */
+  defaultEntry?: boolean | null;
 }) {
   const [state, action, pending] = useActionState(sendToVendor, initial);
   return (
@@ -47,7 +53,7 @@ export function SendToVendorForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="text-sm font-medium">
           Access window
-          <input name="access_window" maxLength={300} className={field} placeholder="Weekdays 9 a.m. to 5 p.m." />
+          <input name="access_window" maxLength={300} defaultValue={defaultAccessWindow} className={field} placeholder="Weekdays 9 a.m. to 5 p.m." />
         </label>
         <label className="text-sm font-medium">
           Pets
@@ -57,13 +63,13 @@ export function SendToVendorForm({
       <fieldset className="flex flex-wrap gap-4 text-sm">
         <legend className="mb-1 font-medium">Entry if no one is home</legend>
         <label className="flex items-center gap-1.5">
-          <input type="radio" name="entry_permission" value="yes" className="accent-pine" /> Permitted
+          <input type="radio" name="entry_permission" value="yes" defaultChecked={defaultEntry === true} className="accent-pine" /> Permitted
         </label>
         <label className="flex items-center gap-1.5">
-          <input type="radio" name="entry_permission" value="no" className="accent-pine" /> Tenant must be home
+          <input type="radio" name="entry_permission" value="no" defaultChecked={defaultEntry === false} className="accent-pine" /> Tenant must be home
         </label>
         <label className="flex items-center gap-1.5">
-          <input type="radio" name="entry_permission" value="" defaultChecked className="accent-pine" /> Not asked yet
+          <input type="radio" name="entry_permission" value="" defaultChecked={defaultEntry === null} className="accent-pine" /> Not asked yet
         </label>
       </fieldset>
       <label className="flex items-center gap-2 text-sm">
@@ -115,5 +121,36 @@ export function ShareButtons({ text, whatsappHref }: { text: string; whatsappHre
         {copied ? "Copied" : "Copy for WeChat"}
       </button>
     </div>
+  );
+}
+
+/** Preview + send of the owner update; WhatsApp/WeChat share the same text. */
+export function OwnerUpdateForm({ ticketId, subject, text, whatsappHref }: { ticketId: string; subject: string; text: string; whatsappHref: string }) {
+  const [state, action, pending] = useActionState(sendOwnerUpdate, initial);
+  return (
+    <form action={action} className="mt-3 space-y-3">
+      <input type="hidden" name="ticket_id" value={ticketId} />
+      <input type="hidden" name="subject" value={subject} />
+      <label className="block text-sm font-medium">
+        Message to the owner (edit before sending)
+        <textarea name="text" rows={8} defaultValue={text} maxLength={4000} className={field} />
+      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" disabled={pending} className="bg-pine px-5 py-3 text-sm text-white hover:bg-ink disabled:opacity-60">
+          {pending ? "Sending…" : "Email the owner"}
+        </button>
+        <ShareButtons text={text} whatsappHref={whatsappHref} />
+      </div>
+      {state.error && (
+        <p role="alert" className="text-sm text-brick">
+          {state.error}
+        </p>
+      )}
+      {state.ok && (
+        <p role="status" className="text-sm text-pine">
+          {state.ok}
+        </p>
+      )}
+    </form>
   );
 }
