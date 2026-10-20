@@ -8,6 +8,8 @@ import { endTenancy } from "@/lib/actions/workspace";
 import { STAGE_LABELS } from "@/lib/utils/constants";
 import { CopyLinkField, LinkToggle, RegenerateLinkButton } from "@/components/workspace/link-controls";
 import { secondaryButton } from "@/components/workspace/forms";
+import { UnitProfileForm } from "@/components/workspace/unit-profile-form";
+import { fixtureLines, readUnitProfile } from "@/lib/units/profile";
 
 export const metadata = {
   title: "Unit | PropCare",
@@ -21,7 +23,7 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
   // RLS: only the workspace team can read the unit (and its link token).
   const { data: unit } = await supabase
     .from("units")
-    .select("id, unit_number, intake_token, link_active, link_rotated_at, properties(id, address_line1)")
+    .select("id, unit_number, intake_token, link_active, link_rotated_at, profile, properties(id, address_line1)")
     .eq("id", id)
     .maybeSingle();
   if (!unit) notFound();
@@ -42,6 +44,7 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
   ]);
 
   const link = appUrl(`/r/${unit.intake_token}`);
+  const profile = readUnitProfile(unit.profile);
   const qr = await qrSvg(link);
   const unitName = unit.unit_number ? `Unit ${unit.unit_number}` : "Whole home";
   const address = unit.properties?.address_line1 ?? "";
@@ -120,6 +123,25 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
           </div>
         </section>
       </div>
+
+      <section className="border border-line bg-white p-6 sm:p-7">
+        <h2 className="text-lg font-semibold">Unit profile</h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-muted">
+          Entered once. The tenant chat offers these rooms as tap-answers and tells tenants where to shut off the
+          water or find the breakers. Vendors see the access notes and pets.
+        </p>
+        <div className="mt-4">
+          <UnitProfileForm
+            unitId={unit.id}
+            rooms={profile.rooms.join("\n")}
+            fixtures={fixtureLines(profile.fixtures)}
+            waterShutoff={profile.water_shutoff ?? ""}
+            breakerPanel={profile.breaker_panel ?? ""}
+            accessNotes={profile.access_notes ?? ""}
+            pets={profile.pets ?? ""}
+          />
+        </div>
+      </section>
 
       <div className="grid gap-7 xl:grid-cols-[2fr_3fr]">
         <section className="border border-line bg-white p-6 sm:p-7">

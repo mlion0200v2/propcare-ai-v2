@@ -37,6 +37,19 @@ migration and seed in an in-process Postgres (PGlite).
   verifications for that unit: old devices can't file new requests (they
   still see what they sent); tenants with an account keep access.
 
+## Links and unit profiles
+
+- One link and QR per unit (a house is one unit). No per-owner links: a
+  tenant would have to pick among an owner's addresses, which is error-prone
+  and shows them other addresses. The link page asks "Is the problem at
+  <address>, Unit <n>? Yes / This isn't my home"; tenants never type an
+  address.
+- Each unit has a profile (Homes > unit): named rooms, fixtures and
+  appliances with brand/model, main water shut-off, breaker panel, access
+  notes, pets. The chat offers the rooms and appliances as tap-answers and
+  shows the shut-off / breaker location for water and electrical problems;
+  vendors see the access notes and pets on their work order.
+
 ## Assumptions to confirm (all configurable)
 
 - **No billing yet.** The sign-up page has no price; workspace creation is
