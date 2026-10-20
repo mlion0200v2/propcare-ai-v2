@@ -25,6 +25,7 @@ import { testPestTriage } from "./integration/test-pest-triage";
 import { testPlumbingEdgeCases } from "./integration/test-plumbing-edge-cases";
 import { testLaunchSafety } from "./integration/test-launch-safety";
 import { testWorkspaceRLS } from "./integration/test-workspace-rls";
+import { testWorkspacePure } from "./integration/test-workspace-pure";
 
 import { testSupabaseConnection, testTableSchema } from "./integration/test-supabase";
 
@@ -62,6 +63,7 @@ async function main() {
   merge(testPestTriage());
   merge(testPlumbingEdgeCases());
   merge(testLaunchSafety());
+  merge(testWorkspacePure());
   merge(await testWorkspaceRLS()); // in-process Postgres (PGlite), no network
 
   // ── Phase B: Integration tests (Supabase) ──

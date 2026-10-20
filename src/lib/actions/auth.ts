@@ -1,18 +1,18 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { signInSchema, signUpSchema } from "@/lib/utils/validation";
+import { createClient } from "@/lib/supabase/server";
+import { inviteSignUpSchema, signInSchema, signUpSchema } from "@/lib/utils/validation";
+import { appUrl, safeNextPath } from "@/lib/app-url";
 
 export type AuthState = {
   error: string | null;
+  /** Set after sign-up: the address the confirmation email went to. */
+  sentTo?: string | null;
 };
 
-/** Only same-site relative paths are allowed as a post-sign-in destination. */
-function safeNextPath(value: FormDataEntryValue | null): string | null {
-  if (typeof value !== "string") return null;
-  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;
-  return value;
+function firstIssue(error: { issues: { message: string }[] }): string {
+  return error.issues[0]?.message ?? "Please check the form";
 }
 
 export async function signIn(
@@ -26,7 +26,7 @@ export async function signIn(
 
   const parsed = signInSchema.safeParse(raw);
   if (!parsed.success) {
-    return { error: parsed.error.message };
+    return { error: firstIssue(parsed.error) };
   }
 
   const supabase = await createClient();
@@ -36,91 +36,72 @@ export async function signIn(
     return { error: error.message };
   }
 
-  // Workspace members go to their requests, everyone else to the tenant
-  // area. The role comes from memberships (RLS), never user_metadata.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { count } = await supabase
-    .from("memberships")
-    .select("workspace_id", { count: "exact", head: true })
-    .eq("user_id", user?.id ?? "");
-
-  redirect(safeNextPath(formData.get("next")) ?? ((count ?? 0) > 0 ? "/dashboard" : "/submit"));
+  // "/" decides between workspace pages and the tenant area from the
+  // memberships table (never from user_metadata).
+  redirect(safeNextPath(formData.get("next")) ?? "/");
 }
 
+/**
+ * Landlord / property-manager sign-up. The workspace is created only after
+ * the email is confirmed (/auth/confirm), by the create_workspace RPC, with
+ * the user as its admin. The chosen name and kind ride along in
+ * user_metadata; they never grant a role by themselves.
+ */
 export async function signUp(
   _prev: AuthState,
   formData: FormData
 ): Promise<AuthState> {
-  const raw = {
-    email: formData.get("email") as string,
-    password: formData.get("password") as string,
-    full_name: formData.get("full_name") as string,
-    role: formData.get("role") as string,
+  const inviteToken = formData.get("invite");
+  const isInvite = typeof inviteToken === "string" && inviteToken.length > 0;
+
+  const base = {
+    email: formData.get("email"),
+    password: formData.get("password"),
+    full_name: formData.get("full_name"),
+    accept_terms: formData.get("accept_terms") ?? undefined,
   };
 
-  const parsed = signUpSchema.safeParse(raw);
-  if (!parsed.success) {
-    return { error: parsed.error.message };
+  let metadata: Record<string, string>;
+  let email: string;
+  let password: string;
+  if (isInvite) {
+    const parsed = inviteSignUpSchema.safeParse(base);
+    if (!parsed.success) return { error: firstIssue(parsed.error) };
+    ({ email, password } = parsed.data);
+    metadata = { full_name: parsed.data.full_name };
+  } else {
+    const parsed = signUpSchema.safeParse({
+      ...base,
+      workspace_kind: formData.get("workspace_kind"),
+      workspace_name: formData.get("workspace_name"),
+    });
+    if (!parsed.success) return { error: firstIssue(parsed.error) };
+    ({ email, password } = parsed.data);
+    metadata = {
+      full_name: parsed.data.full_name,
+      signup_workspace_name: parsed.data.workspace_name,
+      signup_workspace_kind: parsed.data.workspace_kind,
+    };
   }
 
+  const next = isInvite ? `/invite/${encodeURIComponent(inviteToken)}` : "/homes?welcome=1";
   const supabase = await createClient();
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email: parsed.data.email,
-    password: parsed.data.password,
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
     options: {
-      data: {
-        full_name: parsed.data.full_name,
-        role: parsed.data.role,
-      },
+      data: metadata,
+      emailRedirectTo: appUrl(`/auth/confirm?next=${encodeURIComponent(next)}`),
     },
   });
 
-  if (authError) {
-    return { error: authError.message };
+  if (error) {
+    return { error: error.message };
   }
 
-  if (!authData.user) {
-    return { error: "Sign-up failed. Please try again." };
-  }
-
-  // Create profile via service client (no INSERT RLS policy on profiles).
-  // Use upsert so duplicate signups (same auth user) don't fail on the
-  // unique PK constraint — the profile is simply updated to match.
-  const serviceClient = await createServiceClient();
-  const { error: profileError } = await serviceClient
-    .from("profiles")
-    .upsert(
-      {
-        id: authData.user.id,
-        email: parsed.data.email,
-        full_name: parsed.data.full_name,
-      },
-      { onConflict: "id" }
-    );
-
-  if (profileError) {
-    console.error("Profile upsert failed:", {
-      message: profileError.message,
-      code: profileError.code,
-      details: profileError.details,
-      hint: profileError.hint,
-    });
-
-    if (profileError.code === "23505") {
-      if (profileError.message?.includes("profiles_email_key")) {
-        return { error: "An account with this email already exists. Please sign in or reset your password." };
-      }
-      if (profileError.message?.includes("profiles_pkey")) {
-        return { error: "This account is already registered. Please sign in." };
-      }
-    }
-
-    return { error: "Account created but profile setup failed. Please contact support." };
-  }
-
-  redirect("/");
+  // Same answer whether or not the address already has an account, so the
+  // form can't be used to discover who is registered.
+  return { error: null, sentTo: email };
 }
 
 export async function signOut(): Promise<void> {

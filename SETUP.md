@@ -12,7 +12,8 @@ How access works is described in [docs/workspaces.md](docs/workspaces.md).
 
 ## Environment variables
 
-Put these in `.env.local` (local) or in the hosting provider's settings.
+Put these in `.env.local` (local; start from `.env.example`) or in the hosting
+provider's settings.
 
 | Variable | Needed | What it is |
 |---|---|---|

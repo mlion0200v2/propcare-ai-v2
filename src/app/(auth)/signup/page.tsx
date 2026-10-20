@@ -1,87 +1,36 @@
-"use client";
+import { SignUpForm } from "./signup-form";
 
-import { useActionState } from "react";
-import Link from "next/link";
-import { signUp, type AuthState } from "@/lib/actions/auth";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+export const metadata = {
+  title: "Sign up | PropCare",
+};
 
-const initialState: AuthState = { error: null };
-
-export default function SignUpPage() {
-  const [state, formAction, isPending] = useActionState(signUp, initialState);
+export default async function SignUpPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ invite?: string; email?: string }>;
+}) {
+  const { invite, email } = await searchParams;
+  const inviteToken = typeof invite === "string" && /^[A-Za-z0-9_-]{16,64}$/.test(invite) ? invite : undefined;
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Create your account</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <form action={formAction} className="space-y-4">
-          {state.error && (
-            <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-              {state.error}
-            </div>
-          )}
-
-          <Input
-            id="full_name"
-            name="full_name"
-            type="text"
-            label="Full name"
-            placeholder="Jane Doe"
-            required
-          />
-
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            label="Email"
-            placeholder="you@example.com"
-            required
-            autoComplete="email"
-          />
-
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            label="Password"
-            placeholder="At least 8 characters"
-            required
-            minLength={8}
-            autoComplete="new-password"
-          />
-
-          <div className="space-y-1">
-            <label htmlFor="role" className="block text-sm font-medium text-gray-700">
-              I am a...
-            </label>
-            <select
-              id="role"
-              name="role"
-              required
-              className="block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            >
-              <option value="tenant">Tenant</option>
-              <option value="manager">Property Manager</option>
-            </select>
-          </div>
-
-          <Button type="submit" disabled={isPending} className="w-full">
-            {isPending ? "Creating account..." : "Create account"}
-          </Button>
-
-          <p className="text-center text-sm text-gray-600">
-            Already have an account?{" "}
-            <Link href="/login" className="font-medium text-blue-600 hover:text-blue-500">
-              Sign in
-            </Link>
-          </p>
-        </form>
-      </CardContent>
-    </Card>
+    <div className="grid min-h-screen lg:grid-cols-[5fr_7fr]">
+      <aside className="flex flex-col justify-between gap-10 bg-pine p-8 text-white sm:p-16">
+        <div>
+          <p className="font-display text-[22px] tracking-[2px] text-gold">PropCare</p>
+          <p className="mt-2 text-xs uppercase tracking-[1.5px] text-[#cad7cf]">by Birchwood Management</p>
+          <h1 className="mt-12 font-display text-4xl leading-tight sm:mt-16 sm:text-[44px]">
+            A maintenance desk that never sleeps, for your rentals.
+          </h1>
+          <ul className="mt-8 list-disc space-y-2 pl-5 text-base text-[#e0e5d9]">
+            <li>Tenants report through a link. No app, no password.</li>
+            <li>Danger checked first; emergencies go to your phone.</li>
+            <li>Tickets arrive with photos and what was tried.</li>
+          </ul>
+        </div>
+      </aside>
+      <section className="flex flex-col justify-center px-4 py-12 sm:px-12 lg:px-24">
+        <SignUpForm invite={inviteToken} inviteEmail={typeof email === "string" ? email : undefined} />
+      </section>
+    </div>
   );
 }

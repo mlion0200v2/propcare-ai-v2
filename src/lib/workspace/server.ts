@@ -70,7 +70,17 @@ export const getActiveMembership = cache(async (): Promise<WorkspaceMembership |
 /** Where a signed-in user belongs after sign-in. */
 export async function homePathForUser(): Promise<string> {
   const membership = await getActiveMembership();
-  return membership ? "/dashboard" : "/submit";
+  if (membership) return "/dashboard";
+  const user = await getSessionUser();
+  if (!user || user.is_anonymous) return "/submit";
+  // Tenants with an account hold a tenancy; anyone else confirmed their
+  // email without a workspace (e.g. opened the link on another device).
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("tenancies")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_user_id", user.id);
+  return (count ?? 0) > 0 ? "/submit" : "/welcome";
 }
 
 /**
