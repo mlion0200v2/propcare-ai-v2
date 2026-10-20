@@ -21,6 +21,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { logError } from "@/lib/triage/logger";
+import { triageMediaLimiter } from "@/lib/rate-limit";
 import type { Database } from "@/lib/supabase/database-generated";
 
 const BUCKET = "ticket-media";
@@ -41,6 +42,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const limit = triageMediaLimiter.check(user.id);
+    if (!limit.allowed) {
+      return NextResponse.json(
+        { error: "Too many uploads. Please wait a few minutes and try again." },
+        { status: 429, headers: { "Retry-After": String(limit.retryAfterSeconds) } }
+      );
+    }
+
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
     const ticketId = formData.get("ticket_id") as string | null;
@@ -55,7 +64,7 @@ export async function POST(request: NextRequest) {
     // Validate file type
     if (!ALLOWED_TYPES.includes(file.type)) {
       return NextResponse.json(
-        { error: `Unsupported file type: ${file.type}. Allowed: JPEG, PNG, WebP, HEIC, MP4, MOV, WebM` },
+        { error: "Unsupported file type. Allowed: JPEG, PNG, WebP, HEIC, MP4, MOV, WebM" },
         { status: 400 }
       );
     }
@@ -185,7 +194,7 @@ export async function POST(request: NextRequest) {
   } catch (err: unknown) {
     logError("media_fatal", err);
     return NextResponse.json(
-      { error: "upload_failed", details: String(err) },
+      { error: "upload_failed" },
       { status: 500 }
     );
   }

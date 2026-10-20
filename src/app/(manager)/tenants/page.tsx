@@ -5,6 +5,11 @@ export const metadata = {
   title: "Tenants | PropCare-AI",
 };
 
+// Always render per request: this page reads tenant PII with the service-role
+// client (which no longer touches request cookies), so without this Next would
+// prerender it at build time and bake the data into the static output.
+export const dynamic = "force-dynamic";
+
 export default async function TenantsPage() {
   const supabase = await createServiceClient();
 

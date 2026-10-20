@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { logTriageStep, logError, logWarn } from "@/lib/triage/logger";
 import { createServiceClient } from "@/lib/supabase/server";
+import { escapeLikePattern } from "@/lib/utils/escape-like";
 
 let _resend: Resend | null = null;
 function getResend() {
@@ -62,7 +63,7 @@ export async function getManagerEmailForTicket(
   // the manager's profile row, so the unit → property → manager join fails.
   let supabase;
   try {
-    supabase = await createServiceClient();
+    supabase = createServiceClient();
   } catch (err) {
     logError("email_resolve_manager", err, { ticketId, reason: "service_client_init_failed" });
     // Fall through to fallback env var below
@@ -111,7 +112,7 @@ export async function getManagerEmailForTicket(
         const { data } = await supabase
           .from("properties")
           .select("manager_id, profiles:manager_id(email)")
-          .ilike("address_line1", `%${streetAddress}%`)
+          .ilike("address_line1", `%${escapeLikePattern(streetAddress)}%`)
           .limit(1)
           .maybeSingle();
 
