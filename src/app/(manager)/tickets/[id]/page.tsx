@@ -4,6 +4,9 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isTeamRole, requireMembership } from "@/lib/workspace/server";
 import { decideApproval } from "@/lib/actions/tickets";
 import { formatCents } from "@/lib/workspace/tokens";
+import { appUrl } from "@/lib/app-url";
+import { buildVendorWorkOrderMessage, whatsappLink } from "@/lib/messages";
+import { SendToVendorForm, ShareButtons } from "@/components/tickets/dispatch";
 import { appTimeZone, formatDateTime, utcToZonedLocal } from "@/lib/utils/time";
 import {
   ApprovalRequestForm,
@@ -63,13 +66,21 @@ export default async function TicketDetailPage({
   // service-role media lookup below.
   const { data: ticket, error } = await supabase
     .from("tickets")
-    .select("*, units(id, unit_number, property_id, properties(address_line1)), tenancies(name, email, phone)")
+    .select("*, units(id, unit_number, property_id, profile, properties(address_line1)), tenancies(name, email, phone)")
     .eq("id", id)
     .single();
 
   if (error || !ticket) notFound();
 
-  const [{ data: comments }, { data: approvals }, { data: messages }, { data: owners }] = await Promise.all([
+  const [
+    { data: comments },
+    { data: approvals },
+    { data: messages },
+    { data: owners },
+    { data: outbox },
+    { data: workOrders },
+    { data: vendors },
+  ] = await Promise.all([
     // RLS filters comments by visibility (owners never get "team only").
     supabase
       .from("ticket_comments")
@@ -90,7 +101,28 @@ export default async function TicketDetailPage({
     ticket.units?.property_id
       ? supabase.from("owner_property_access").select("user_id").eq("property_id", ticket.units.property_id)
       : Promise.resolve({ data: [] as { user_id: string }[] }),
+    // Team only (RLS): messages the app sent, or in a demo would have sent.
+    supabase
+      .from("outbox")
+      .select("id, channel, recipient_label, subject, body, demo, created_at")
+      .eq("ticket_id", id)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("work_orders")
+      .select("id, vendor_name, token, status, quote_cents, quote_note, created_at")
+      .eq("ticket_id", id)
+      .order("created_at", { ascending: false }),
+    supabase.from("vendors").select("id, name, email").eq("workspace_id", membership.workspaceId).order("name"),
   ]);
+
+  type ActivityItem =
+    | { kind: "comment"; at: string; c: NonNullable<typeof comments>[number] }
+    | { kind: "outbox"; at: string; o: NonNullable<typeof outbox>[number] };
+  const activity: ActivityItem[] = [
+    ...(comments ?? []).map((c) => ({ kind: "comment" as const, at: c.created_at, c })),
+    ...(outbox ?? []).map((o) => ({ kind: "outbox" as const, at: o.created_at, o })),
+  ].sort((a, b) => a.at.localeCompare(b.at));
+  const unitProfile = (ticket.units?.profile ?? {}) as { pets?: string };
 
   const ownerIds = (owners ?? []).map((o) => o.user_id);
   const { data: ownerMembers } = ownerIds.length
@@ -275,6 +307,55 @@ export default async function TicketDetailPage({
             )}
           </section>
 
+          {team && (
+            <section className="border border-line bg-white p-5 sm:p-6">
+              <h2 className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Send to vendor</h2>
+              {(workOrders ?? []).length > 0 && (
+                <ul className="mt-3 space-y-3">
+                  {(workOrders ?? []).map((w) => {
+                    const share = buildVendorWorkOrderMessage({
+                      workspaceName: membership.workspaceName,
+                      vendorName: w.vendor_name,
+                      title: ticket.title,
+                      address: `${address}${unitLabel}`,
+                      link: appUrl(`/v/${w.token}`),
+                    }).text;
+                    return (
+                      <li key={w.id} className="space-y-2 border-b border-line pb-3 last:border-b-0">
+                        <p className="text-[15px]">
+                          {w.vendor_name}{" "}
+                          <span className="text-sm text-muted">
+                            ·{" "}
+                            {w.status === "quoted" && w.quote_cents
+                              ? `quoted ${formatCents(w.quote_cents)}${w.quote_note ? ` (${w.quote_note})` : ""}`
+                              : w.status === "cancelled"
+                                ? "cancelled"
+                                : "waiting for a quote"}
+                          </span>
+                        </p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <a href={`/v/${w.token}`} target="_blank" rel="noopener" className="text-[13px] text-pine underline">
+                            Open the vendor&apos;s view
+                          </a>
+                          <ShareButtons text={share} whatsappHref={whatsappLink(share)} />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <details className="mt-3" open={(workOrders ?? []).length === 0}>
+                <summary className="cursor-pointer text-sm text-pine underline">New work order</summary>
+                <SendToVendorForm
+                  ticketId={ticket.id}
+                  vendors={vendors ?? []}
+                  defaultScope={(classification?.summary ?? ticket.description).slice(0, 4000)}
+                  defaultPets={unitProfile.pets ?? ""}
+                />
+              </details>
+            </section>
+          )}
+
           {(company || (approvals ?? []).length > 0) && (
             <section className="border border-gold bg-cream p-5 sm:p-6">
               <h2 className="text-xs font-semibold uppercase tracking-[1.5px] text-brass">Owner approval</h2>
@@ -337,42 +418,29 @@ export default async function TicketDetailPage({
                 Created the request from {tenantName ? `${tenantName}'s` : "the tenant's"} chat.
               </div>
             </li>
-            {(comments ?? []).map((c) => (
-              <li key={c.id} className="flex gap-3">
-                <span
-                  aria-hidden="true"
-                  className={`flex h-8 w-8 flex-none items-center justify-center rounded-full text-xs ${
-                    c.author_role === "system"
-                      ? "bg-pine text-white"
-                      : c.author_role === "owner"
-                        ? "bg-brass text-white"
-                        : c.author_role === "tenant"
-                          ? "bg-line text-ink"
-                          : "bg-gold text-ink"
-                  }`}
-                >
-                  {c.author_role === "system" ? "AI" : initials(c.author_name)}
-                </span>
-                <div className={`min-w-0 flex-1 p-2.5 ${c.visibility === "tenant" ? "bg-sage" : "bg-paper"}`}>
-                  <b>
-                    {c.author_name}
-                    {c.author_role !== "system" ? ` (${ROLE_LABEL[c.author_role] ?? c.author_role})` : ""}
-                  </b>{" "}
-                  <span className="text-[11px] font-semibold uppercase tracking-[1px] text-muted">
-                    {c.visibility === "tenant" && c.author_role !== "tenant"
-                      ? c.delivered_at
-                        ? "Sent to tenant by email"
-                        : c.delivery_error
-                          ? "To tenant · not emailed"
-                          : "To tenant"
-                      : VISIBILITY_LABEL[c.visibility]}
+            {activity.map((item) =>
+              item.kind === "outbox" ? (
+                <li key={item.o.id} className="flex gap-3">
+                  <span aria-hidden="true" className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-cream text-[10px] text-brass">
+                    {item.o.channel === "email" ? "@" : item.o.channel === "whatsapp" ? "WA" : "Msg"}
                   </span>
-                  <span className="text-xs text-muted"> · {formatDateTime(c.created_at, tz)}</span>
-                  <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
-                  {c.delivery_error && team && <p className="mt-1 text-xs text-brick">{c.delivery_error}</p>}
-                </div>
-              </li>
-            ))}
+                  <div className="min-w-0 flex-1 border border-dashed border-gold bg-cream p-2.5">
+                    <b>{item.o.demo ? "Sent (demo, not delivered)" : "Sent"}</b>{" "}
+                    <span className="text-xs text-muted">
+                      · {item.o.channel} to {item.o.recipient_label} · {formatDateTime(item.o.created_at, tz)}
+                    </span>
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-[13px] text-pine underline">
+                        {item.o.subject ?? "Show the exact message"}
+                      </summary>
+                      <pre className="mt-1.5 whitespace-pre-wrap break-words font-sans text-[13px] text-ink">{item.o.body}</pre>
+                    </details>
+                  </div>
+                </li>
+              ) : (
+                <CommentItem key={item.c.id} c={item.c} tz={tz} team={team} />
+              )
+            )}
           </ol>
           <div className="mt-auto pt-5">
             <CommentComposer
@@ -383,5 +451,65 @@ export default async function TicketDetailPage({
         </section>
       </div>
     </div>
+  );
+}
+
+function CommentItem({
+  c,
+  tz,
+  team,
+}: {
+  c: {
+    id: string;
+    author_name: string;
+    author_role: string;
+    visibility: string;
+    body: string;
+    created_at: string;
+    delivered_at: string | null;
+    delivery_error: string | null;
+  };
+  tz: string;
+  team: boolean;
+}) {
+  return (
+    <li className="flex gap-3">
+      <span
+        aria-hidden="true"
+        className={`flex h-8 w-8 flex-none items-center justify-center rounded-full text-xs ${
+          c.author_role === "system"
+            ? "bg-pine text-white"
+            : c.author_role === "owner"
+              ? "bg-brass text-white"
+              : c.author_role === "tenant"
+                ? "bg-line text-ink"
+                : "bg-gold text-ink"
+        }`}
+      >
+        {c.author_role === "system" ? "AI" : initials(c.author_name)}
+      </span>
+      <div className={`min-w-0 flex-1 p-2.5 ${c.visibility === "tenant" ? "bg-sage" : "bg-paper"}`}>
+        <b>
+          {c.author_name}
+          {c.author_role !== "system" ? ` (${ROLE_LABEL[c.author_role] ?? c.author_role})` : ""}
+        </b>{" "}
+        <span className="text-[11px] font-semibold uppercase tracking-[1px] text-muted">
+          {c.visibility === "tenant" && c.author_role !== "tenant"
+            ? c.delivered_at
+              ? "Sent to tenant by email"
+              : c.delivery_error === "demo"
+                ? "To tenant · sent (demo, not delivered)"
+                : c.delivery_error
+                  ? "To tenant · not emailed"
+                : "To tenant"
+            : VISIBILITY_LABEL[c.visibility]}
+        </span>
+        <span className="text-xs text-muted"> · {formatDateTime(c.created_at, tz)}</span>
+        <p className="mt-1 whitespace-pre-wrap break-words">{c.body}</p>
+        {c.delivery_error && c.delivery_error !== "demo" && team && (
+          <p className="mt-1 text-xs text-brick">{c.delivery_error}</p>
+        )}
+      </div>
+    </li>
   );
 }

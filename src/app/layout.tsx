@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, Montserrat, Prata } from "next/font/google";
 import "./globals.css";
+import { DemoBarSlot } from "@/components/demo/demo-bar-slot";
+import { SiteFooter } from "@/components/site-footer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,8 +27,9 @@ const prata = Prata({
 });
 
 export const metadata: Metadata = {
-  title: "PropCare-AI",
-  description: "AI-powered property maintenance triage",
+  title: "PropCare by Birchwood Management",
+  description: "A maintenance desk that never sleeps, for your rentals.",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
 };
 
 export default function RootLayout({
@@ -39,7 +42,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${montserrat.variable} ${prata.variable} antialiased`}
       >
+        <DemoBarSlot />
         {children}
+        <SiteFooter />
       </body>
     </html>
   );

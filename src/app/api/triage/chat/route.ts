@@ -16,7 +16,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { demoChatTurnLimit, isDemoMode } from "@/lib/demo/config";
 import {
   step,
   buildInitialReply,
@@ -236,6 +237,26 @@ export async function POST(request: NextRequest) {
         );
       }
     }
+    // Try-mode sandboxes share a small budget of chat turns (OpenAI cost).
+    // Real workspaces are unaffected ('not_demo').
+    if (isDemoMode() && !isEmergencyMessage) {
+      const { data: turn } = await createServiceClient().rpc("demo_take_chat_turn", {
+        p_user: user.id,
+        p_limit: demoChatTurnLimit(),
+      });
+      if (turn === "limit" || turn === "expired") {
+        return NextResponse.json(
+          {
+            error:
+              turn === "limit"
+                ? "This demo has used its chat messages. Switch to the Manager view to see what happens next, or start a new demo tomorrow."
+                : "This demo has expired. Start a new one at /try.",
+          },
+          { status: 429 }
+        );
+      }
+    }
+
     // message is required unless this is a confirm_profile, media_action, or confirm_summary
     if (!message && !body.confirm_profile && !body.media_action && !body.confirm_summary) {
       return NextResponse.json(

@@ -1,14 +1,6 @@
-import { Resend } from "resend";
 import { logTriageStep, logError, logWarn } from "@/lib/triage/logger";
 import { createServiceClient } from "@/lib/supabase/server";
-
-let _resend: Resend | null = null;
-function getResend() {
-  if (!_resend) {
-    _resend = new Resend(process.env.RESEND_API_KEY);
-  }
-  return _resend;
-}
+import { deliver, workspaceOfTicket } from "@/lib/delivery";
 
 export async function sendTicketSummaryEmail(params: {
   to: string | string[];
@@ -21,19 +13,24 @@ export async function sendTicketSummaryEmail(params: {
   const { to, ticketId, ticketTitle, summary, isEmergency, category } = params;
 
   const prefix = isEmergency ? "[EMERGENCY] " : "";
-  const subject = `${prefix}[PropCare-AI] New ticket: ${ticketTitle}`;
+  const subject = `${prefix}[PropCare] New request: ${ticketTitle}`;
 
   try {
-    const { error } = await getResend().emails.send({
-      from: "PropCare-AI <noreply@simoneliu.com>",
+    // Through deliver(): dry-run aware, and demo workspaces never send.
+    const result = await deliver({
+      workspaceId: await workspaceOfTicket(ticketId),
+      ticketId,
+      channel: "email",
       to,
+      recipientLabel: "Workspace team",
       subject,
       text: summary,
+      kind: isEmergency ? "ticket_emergency" : "ticket_summary",
     });
 
-    if (error) {
-      logError("email_send", error, { ticketId, to, category });
-      return { success: false, error: error.message };
+    if (!result.success) {
+      logError("email_send", result.error, { ticketId, category });
+      return { success: false, error: result.error };
     }
 
     logTriageStep({
@@ -43,12 +40,12 @@ export async function sendTicketSummaryEmail(params: {
       action: "email_sent",
       latency_ms: 0,
       timestamp: new Date().toISOString(),
-      metadata: { to, category, isEmergency },
+      metadata: { category, isEmergency, demo: result.demo },
     });
 
     return { success: true };
   } catch (err) {
-    logError("email_send", err, { ticketId, to, category });
+    logError("email_send", err, { ticketId, category });
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }

@@ -118,7 +118,7 @@ export function testWorkspacePure(): TestResult {
   const reply = buildTenantReplyEmail({ workspaceName: "Birchwood", authorName: "Simone", ticketTitle: "Sink", body: "Plumber Tuesday 9-11", link: null });
   check(reply.text.includes("Plumber Tuesday 9-11") && !reply.text.includes("See your request"), "tenant reply email carries the message; no link for guests");
   const ticketActions = readFileSync(join(SRC, "lib", "actions", "tickets.ts"), "utf8");
-  check(/visibility === "tenant"[\s\S]*emailTenant/.test(ticketActions) && /sendEmail\(/.test(ticketActions), "only 'to tenant' comments are emailed, through the dry-run-aware mailer");
+  check(/visibility === "tenant"[\s\S]*emailTenant/.test(ticketActions) && /deliver\(/.test(ticketActions), "only 'to tenant' comments are emailed, through deliver() (dry-run and demo aware)");
   check(/commentLimiter\.check\(/.test(ticketActions), "comments are rate-limited");
   check(/from\("ticket_comments"\)\s*\.insert/.test(ticketActions) && /await createClient\(\)/.test(ticketActions), "comments are written with the user's session (RLS decides visibility rights)");
 
