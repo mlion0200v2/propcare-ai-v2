@@ -252,7 +252,7 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      return handleFirstMessage(supabase, user.id, message, start);
+      return handleFirstMessage(supabase, user.id, message, start, body.tenancy_id);
     }
 
     // ── Subsequent message — advance state machine ──
@@ -295,21 +295,47 @@ function getNextGatherQuestion(
   return null;
 }
 
+/**
+ * The tenancy a new ticket is filed under: the one the client names, or the
+ * caller's most recent one. RLS only returns tenancies the caller holds or
+ * confirmed with a one-time code through the unit's (still active) link, and
+ * re-checks the same on insert.
+ */
+async function resolveTenancy(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  tenancyId: string | undefined
+): Promise<{ id: string; unit_id: string } | null> {
+  let query = supabase
+    .from("tenancies")
+    .select("id, unit_id")
+    .is("ended_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (tenancyId) query = query.eq("id", tenancyId);
+  const { data } = await query.maybeSingle();
+  return data ?? null;
+}
+
 async function handleFirstMessage(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   message: string,
-  start: number
+  start: number,
+  tenancyId?: string
 ) {
-  // Look up tenant's unit
-  const { data: unit } = await supabase
-    .from("units")
-    .select("id")
-    .eq("tenant_id", userId)
-    .limit(1)
-    .single();
-
-  const hasUnit = !!unit;
+  // Every ticket belongs to a unit's tenancy, and through it to one workspace.
+  const tenancy = await resolveTenancy(supabase, tenancyId);
+  if (!tenancy) {
+    return NextResponse.json(
+      {
+        error: "Please open the report link your landlord sent you to start a request.",
+        code: "no_tenancy",
+      },
+      { status: 400 }
+    );
+  }
+  const unit = { id: tenancy.unit_id };
+  const hasUnit = true;
 
   // ── Auto-classify issue ──
   const classification_result = classifyIssue(message);
@@ -558,7 +584,8 @@ async function handleFirstMessage(
     title: message.slice(0, 200),
     description: message,
     tenant_id: userId,
-    unit_id: hasUnit ? unit.id : null,
+    unit_id: unit.id,
+    tenancy_id: tenancy.id,
     triage_state: triageState,
     classification: triageClassification as unknown as Json,
   };

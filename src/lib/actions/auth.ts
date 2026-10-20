@@ -8,6 +8,13 @@ export type AuthState = {
   error: string | null;
 };
 
+/** Only same-site relative paths are allowed as a post-sign-in destination. */
+function safeNextPath(value: FormDataEntryValue | null): string | null {
+  if (typeof value !== "string") return null;
+  if (!value.startsWith("/") || value.startsWith("//") || value.includes("\\")) return null;
+  return value;
+}
+
 export async function signIn(
   _prev: AuthState,
   formData: FormData
@@ -29,13 +36,17 @@ export async function signIn(
     return { error: error.message };
   }
 
-  // Get user role for redirect
+  // Workspace members go to their requests, everyone else to the tenant
+  // area. The role comes from memberships (RLS), never user_metadata.
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  const role = user?.user_metadata?.role as string | undefined;
+  const { count } = await supabase
+    .from("memberships")
+    .select("workspace_id", { count: "exact", head: true })
+    .eq("user_id", user?.id ?? "");
 
-  redirect(role === "manager" ? "/dashboard" : "/submit");
+  redirect(safeNextPath(formData.get("next")) ?? ((count ?? 0) > 0 ? "/dashboard" : "/submit"));
 }
 
 export async function signUp(
@@ -85,7 +96,6 @@ export async function signUp(
         id: authData.user.id,
         email: parsed.data.email,
         full_name: parsed.data.full_name,
-        role: parsed.data.role as "tenant" | "manager",
       },
       { onConflict: "id" }
     );
@@ -110,7 +120,7 @@ export async function signUp(
     return { error: "Account created but profile setup failed. Please contact support." };
   }
 
-  redirect(parsed.data.role === "manager" ? "/dashboard" : "/submit");
+  redirect("/");
 }
 
 export async function signOut(): Promise<void> {
