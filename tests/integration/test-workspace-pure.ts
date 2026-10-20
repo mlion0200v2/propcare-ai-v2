@@ -11,6 +11,9 @@ import { buildInvitationEmail } from "../../src/lib/email/templates";
 import { inviteSchema } from "../../src/lib/utils/validation";
 import { codeMatches, generateCode, hashCode, maskDestination, parseContact } from "../../src/lib/intake/codes";
 import { createRateLimiter } from "../../src/lib/rate-limit";
+import { utcToZonedLocal, zonedLocalToUtc } from "../../src/lib/utils/time";
+import { buildTenantReplyEmail } from "../../src/lib/email/templates";
+import { ticketCommentSchema } from "../../src/lib/utils/validation";
 
 const SRC = join(__dirname, "..", "..", "src");
 
@@ -99,6 +102,25 @@ export function testWorkspacePure(): TestResult {
   check(/MAX_CODE_ATTEMPTS/.test(intakeSrc) && /\.is\("consumed_at", null\)/.test(intakeSrc), "codes have an attempt cap and are single-use");
   const linkPage = readFileSync(join(SRC, "app", "r", "[token]", "page.tsx"), "utf8");
   check(/intakeLinkLimiter\.check\(/.test(linkPage) && /findUnitByToken/.test(linkPage), "opening a tenant link is rate-limited and only resolves active links");
+
+  // Ticket collaboration
+  check(zonedLocalToUtc("2026-10-21T09:00", "America/Vancouver")?.toISOString() === "2026-10-21T16:00:00.000Z", "vendor time: Vancouver summer time → UTC");
+  // (BC is on permanent daylight time from late 2026 in current tz data, so DST is checked with Toronto.)
+  check(
+    zonedLocalToUtc("2026-07-01T09:00", "America/Toronto")?.toISOString() === "2026-07-01T13:00:00.000Z" &&
+      zonedLocalToUtc("2026-12-01T09:00", "America/Toronto")?.toISOString() === "2026-12-01T14:00:00.000Z",
+    "vendor time follows daylight-saving changes"
+  );
+  check(utcToZonedLocal("2026-10-21T16:00:00.000Z", "America/Vancouver") === "2026-10-21T09:00", "vendor time round-trips for the form");
+  check(zonedLocalToUtc("tomorrow", "America/Vancouver") === null, "vendor time rejects junk");
+  check(!ticketCommentSchema.safeParse({ ticket_id: "00000000-0000-4000-8000-000000000000", visibility: "public", body: "x" }).success, "comment visibility is one of team / team_owner / tenant");
+  check(!ticketCommentSchema.safeParse({ ticket_id: "00000000-0000-4000-8000-000000000000", visibility: "team", body: "   " }).success, "empty comments are rejected");
+  const reply = buildTenantReplyEmail({ workspaceName: "Birchwood", authorName: "Simone", ticketTitle: "Sink", body: "Plumber Tuesday 9-11", link: null });
+  check(reply.text.includes("Plumber Tuesday 9-11") && !reply.text.includes("See your request"), "tenant reply email carries the message; no link for guests");
+  const ticketActions = readFileSync(join(SRC, "lib", "actions", "tickets.ts"), "utf8");
+  check(/visibility === "tenant"[\s\S]*emailTenant/.test(ticketActions) && /sendEmail\(/.test(ticketActions), "only 'to tenant' comments are emailed, through the dry-run-aware mailer");
+  check(/commentLimiter\.check\(/.test(ticketActions), "comments are rate-limited");
+  check(/from\("ticket_comments"\)\s*\.insert/.test(ticketActions) && /await createClient\(\)/.test(ticketActions), "comments are written with the user's session (RLS decides visibility rights)");
 
   return result;
 }

@@ -36,3 +36,22 @@ migration and seed in an in-process Postgres (PGlite).
 - Turning a unit's link off, or making a new one, removes the device
   verifications for that unit: old devices can't file new requests (they
   still see what they sent); tenants with an account keep access.
+
+## Assumptions to confirm (all configurable)
+
+- **No billing yet.** The sign-up page has no price; workspace creation is
+  capped at 5 per user (`create_workspace`).
+- **Birchwood is just one workspace**: it signs up like any other company
+  ("I manage rentals for owners") and invites its team and owners.
+- **Tenant links live on the app's own domain** (`NEXT_PUBLIC_APP_URL/r/<token>`).
+- **Email codes only.** Phone numbers are accepted by the parser but the form
+  asks for email until an SMS provider (e.g. Twilio Verify) implements
+  `CodeSender` in `src/lib/intake/senders.ts`. "Text it to the tenant" opens
+  the manager's own phone messaging app; the server sends no texts.
+- **Owners can comment ("team and owner") and approve/decline quotes, but
+  cannot message tenants or change status.**
+- Managers see every request in the workspace (per-home assignment for
+  managers is not built).
+- Approval limit defaults to $300 per workspace (Settings).
+- One time zone for display/entry (`APP_TIME_ZONE`); current tz data has BC
+  on permanent daylight time from late 2026.

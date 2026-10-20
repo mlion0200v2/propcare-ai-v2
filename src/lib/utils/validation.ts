@@ -189,6 +189,31 @@ export const inviteSchema = z.object({
   property_ids: z.array(z.string().uuid()).max(200),
 });
 
+export const ticketCommentSchema = z.object({
+  ticket_id: z.string().uuid("Invalid ticket"),
+  visibility: z.enum(["team", "team_owner", "tenant"]),
+  body: z.string().trim().min(1, "Write a note first").max(5000),
+});
+
+export const ticketStageSchema = z.object({
+  ticket_id: z.string().uuid("Invalid ticket"),
+  stage: z.enum(["new", "waiting_for_owner", "vendor_booked", "fixed", "closed"]),
+});
+
+export const ticketVendorSchema = z.object({
+  ticket_id: z.string().uuid("Invalid ticket"),
+  vendor_name: z.string().trim().max(200),
+  /** datetime-local value, interpreted in the workspace's time zone. */
+  vendor_booked_for: z.string().trim().max(30),
+  entry_notice: z.string().trim().max(1000),
+});
+
+export const approvalRequestSchema = z.object({
+  ticket_id: z.string().uuid("Invalid ticket"),
+  amount: z.string().trim().min(1, "Enter the quote amount").max(12),
+  description: z.string().trim().max(1000),
+});
+
 export const workspaceSettingsSchema = z.object({
   name: z.string().trim().min(1, "Workspace name is required").max(120),
   approval_limit: z.string().trim().max(12),

@@ -145,6 +145,9 @@ Never point a local `.env.local` at production while developing.
    `ticket-media` bucket and its policies; check it under Storage.
 9. **First workspace**: sign up at `<app URL>/signup`, confirm the email, add
    homes and units, invite the team.
+10. **Before real tenants**: pick the final app domain before printing QR
+    posters (links and posters use it), and make the GitHub repository
+    private.
 
 ## Seed the SOP knowledge base (Pinecone)
 

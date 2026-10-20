@@ -282,6 +282,16 @@ export async function testWorkspaceRLS(): Promise<TestResult> {
   check(denied(await tryAs(db, tina, "update tenancies set tenant_user_id = $1 where id = $2", [ids.tina, ids.t1])), "Tenant cannot claim a tenancy account");
   check((await count(db, tina, "select id from units")) === 1, "Tenant reads only their unit");
 
+  // System activity entries (service role) are team-and-owner only.
+  await queryAs(db, { kind: "service" }, "insert into ticket_comments (ticket_id, workspace_id, author_name, author_role, visibility, body) values ($1, $2, 'PropCare', 'system', 'team_owner', 'Status set to Vendor booked')", [ids.ticket1, ids.wsA]);
+  check((await count(db, olive, "select id from ticket_comments where author_role = 'system'")) === 1, "Owner sees system activity");
+  check((await count(db, tina, "select id from ticket_comments where author_role = 'system'")) === 0, "Tenant does not see internal activity");
+  check(
+    denied(await tryAs(db, alice, "update ticket_comments set body = 'edited' where ticket_id = $1", [ids.ticket1])) &&
+      denied(await tryAs(db, alice, "delete from ticket_comments where ticket_id = $1", [ids.ticket1])),
+    "Comments cannot be edited or deleted through the API"
+  );
+
   // ── Approvals ──
   const appr = await tryAs(db, mark, "insert into approvals (ticket_id, amount_cents, limit_cents) values ($1, 34000, 1) returning id, limit_cents, decision", [ids.ticket1]);
   check(appr.ok && appr.rows[0]?.limit_cents === 30000, "Manager requests approval; limit comes from workspace settings", appr);
