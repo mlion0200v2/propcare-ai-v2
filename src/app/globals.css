@@ -10,6 +10,22 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-prata), Georgia, serif;
+  --font-brand: var(--font-montserrat), Arial, sans-serif;
+}
+
+/* Birchwood / PropCare palette (design canvas). */
+@theme {
+  --color-pine: #003d2a;
+  --color-ink: #183b30;
+  --color-muted: #5c6861;
+  --color-line: #d7dcd3;
+  --color-paper: #f7f7f2;
+  --color-sage: #ecefe8;
+  --color-brass: #80653f;
+  --color-gold: #bc9968;
+  --color-cream: #fbf4e4;
+  --color-brick: #8a2c1b;
 }
 
 @media (prefers-color-scheme: dark) {

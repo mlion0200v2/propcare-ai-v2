@@ -147,11 +147,51 @@ export const triageChatRequestSchema = z.object({
 // Auth
 // ============================================================
 
+/** Landlord / property-manager sign-up: creates a workspace after email confirmation. */
 export const signUpSchema = z.object({
-  email: z.string().email("Invalid email"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
-  full_name: z.string().min(1, "Name is required").max(100),
-  role: z.enum(["tenant", "manager"]),
+  email: z.string().trim().toLowerCase().email("Invalid email").max(254),
+  password: z.string().min(8, "Password must be at least 8 characters").max(72),
+  full_name: z.string().trim().min(1, "Name is required").max(100),
+  workspace_kind: z.enum(["individual", "company"], { message: "Choose which describes you" }),
+  workspace_name: z.string().trim().min(1, "Workspace name is required").max(120),
+  accept_terms: z.literal("on", { message: "Please accept the terms to continue" }),
+});
+
+/** Sign-up from an invitation link: no workspace of their own. */
+export const inviteSignUpSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Invalid email").max(254),
+  password: z.string().min(8, "Password must be at least 8 characters").max(72),
+  full_name: z.string().trim().min(1, "Name is required").max(100),
+  accept_terms: z.literal("on", { message: "Please accept the terms to continue" }),
+});
+
+// ============================================================
+// Workspace management
+// ============================================================
+
+export const workspacePropertySchema = z.object({
+  address_line1: z.string().trim().min(1, "Address is required").max(200),
+  address_line2: z.string().trim().max(200).optional(),
+  city: z.string().trim().min(1, "City is required").max(100),
+  province: z.string().trim().min(2, "Province is required").max(50),
+  postal_code: z.string().trim().min(3, "Postal code is required").max(12),
+  property_type: z.enum(PROPERTY_TYPES),
+});
+
+export const workspaceUnitSchema = z.object({
+  property_id: z.string().uuid("Invalid property"),
+  unit_number: z.string().trim().max(20).optional(),
+});
+
+export const inviteSchema = z.object({
+  email: z.string().trim().toLowerCase().email("Invalid email").max(254),
+  role: z.enum(["manager", "owner"]),
+  property_ids: z.array(z.string().uuid()).max(200),
+});
+
+export const workspaceSettingsSchema = z.object({
+  name: z.string().trim().min(1, "Workspace name is required").max(120),
+  approval_limit: z.string().trim().max(12),
 });
 
 export const signInSchema = z.object({
@@ -170,5 +210,6 @@ export type CreateUnitInput = z.infer<typeof createUnitSchema>;
 export type CreateMessageInput = z.infer<typeof createMessageSchema>;
 export type CreateVendorInput = z.infer<typeof createVendorSchema>;
 export type SignUpInput = z.infer<typeof signUpSchema>;
+export type InviteInput = z.infer<typeof inviteSchema>;
 export type SignInInput = z.infer<typeof signInSchema>;
 export type TriageChatRequest = z.infer<typeof triageChatRequestSchema>;

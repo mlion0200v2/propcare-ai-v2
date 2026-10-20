@@ -82,3 +82,9 @@ export const triageMediaLimiter = createRateLimiter([
   { limit: 10, windowMs: 10 * MINUTE },
   { limit: 40, windowMs: HOUR },
 ]);
+
+/** Invitation emails sent by one admin. */
+export const inviteLimiter = createRateLimiter([
+  { limit: 20, windowMs: HOUR },
+  { limit: 60, windowMs: 24 * HOUR },
+]);

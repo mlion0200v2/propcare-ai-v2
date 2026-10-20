@@ -135,25 +135,22 @@ export function testValidation(): TestResult {
     rating: 0,
   });
 
-  // ── signUpSchema ──
-  expectValid("signUp: valid input", signUpSchema, {
+  // ── signUpSchema (landlord / manager workspace sign-up) ──
+  const signUpBase = {
     email: "newuser@example.com",
     password: "securepass123",
     full_name: "Jane Doe",
-    role: "tenant",
-  });
-  expectInvalid("signUp: short password", signUpSchema, {
-    email: "newuser@example.com",
-    password: "short",
-    full_name: "Jane Doe",
-    role: "tenant",
-  });
-  expectInvalid("signUp: invalid email", signUpSchema, {
-    email: "not-an-email",
-    password: "securepass123",
-    full_name: "Jane Doe",
-    role: "tenant",
-  });
+    workspace_kind: "individual",
+    workspace_name: "Main Street rentals",
+    accept_terms: "on",
+  };
+  expectValid("signUp: valid input", signUpSchema, signUpBase);
+  expectValid("signUp: company workspace", signUpSchema, { ...signUpBase, workspace_kind: "company" });
+  expectInvalid("signUp: short password", signUpSchema, { ...signUpBase, password: "short" });
+  expectInvalid("signUp: invalid email", signUpSchema, { ...signUpBase, email: "not-an-email" });
+  expectInvalid("signUp: no global manager role any more", signUpSchema, { ...signUpBase, workspace_kind: "manager" });
+  expectInvalid("signUp: terms not accepted", signUpSchema, { ...signUpBase, accept_terms: undefined });
+  expectInvalid("signUp: workspace name required", signUpSchema, { ...signUpBase, workspace_name: "  " });
 
   // ── signInSchema ──
   expectValid("signIn: valid input", signInSchema, {
