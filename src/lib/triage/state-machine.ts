@@ -22,6 +22,7 @@ import type {
   TriageStateName,
 } from "./types";
 import { getFallbackSOP } from "./sop-fallback";
+import { hasEmergencyKeywords, EMERGENCY_FOOTER } from "./emergency";
 import {
   tenantInfoPhoneSchema,
   tenantInfoEmailSchema,
@@ -58,24 +59,6 @@ const FIELD_ORDER = [
   "location_in_unit",
   "started_when",
 ] as const;
-
-// ── Emergency keywords (auto-detect in any message) ──
-
-const EMERGENCY_KEYWORDS = [
-  "gas leak",
-  "gas smell",
-  "smell gas",
-  "fire",
-  "smoke",
-  "carbon monoxide",
-  "exposed wire",
-  "sparking",
-  "sewage",
-  "collapse",
-  "ceiling fell",
-  // NOTE: "mold", "flooding", "flooded", "no heat", "no hot water" removed —
-  // these are category+severity dependent, not automatic emergencies.
-];
 
 // ── Tenant info collection (no-unit flow) ──
 
@@ -434,10 +417,9 @@ export function getNextMissingField(gathered: GatheredInfo): string | null {
   return null;
 }
 
-export function hasEmergencyKeywords(text: string): boolean {
-  const lower = text.toLowerCase();
-  return EMERGENCY_KEYWORDS.some((k) => lower.includes(k));
-}
+// Emergency detection lives in ./emergency (one shared detector); re-exported
+// here for existing callers.
+export { hasEmergencyKeywords };
 
 function formatCompletionReply(
   isEmergency: boolean,
@@ -448,10 +430,8 @@ function formatCompletionReply(
       "**SAFETY ALERT**: Your issue has been flagged as a potential emergency.",
       "",
       "**IMMEDIATE ACTIONS:**",
-      "1. If you smell gas, leave the unit immediately and contact the FortisBC gas emergency line.",
-      "2. If there's flooding, turn off the main water valve if it is safe to do so.",
-      "3. If there's a fire or smoke, evacuate and call 911.",
-      "4. Do NOT re-enter the unit until cleared by emergency services or your property manager.",
+      EMERGENCY_FOOTER,
+      "- Do NOT re-enter the unit until cleared by emergency services or your property manager.",
       "",
       "Your ticket has been escalated to your property manager for urgent review. The property manager should contact you within 2 hours.",
       "",

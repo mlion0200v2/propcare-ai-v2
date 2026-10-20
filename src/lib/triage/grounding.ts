@@ -13,6 +13,8 @@ import type { GatheredInfo, TroubleshootingStep, GuidedStep, GuidedStepKind } fr
 import type { RetrievalSnippet } from "../retrieval/types";
 import { getFallbackSOP } from "./sop-fallback";
 import { getEquipmentAliases, ALL_APPLIANCE_NAMES } from "./extract-details";
+import { EMERGENCY_FOOTER } from "./emergency";
+import { filterUnsafeSteps, sanitizeReplyText } from "./step-safety";
 import { zodResponseFormat } from "openai/helpers/zod";
 import { z } from "zod";
 
@@ -23,7 +25,14 @@ Rules:
 - Write in a warm, conversational tone
 - Return ONLY the numbered steps, one per line
 - Always end with a note that the property manager has been notified
-- Focus on apartment/rental maintenance — not homeowner DIY`;
+- Focus on apartment/rental maintenance — not homeowner DIY
+Never instruct the tenant to (these are for professionals only):
+- touch gas valves, gas lines, gas meters or pilot lights
+- open electrical panels or covers, touch wiring, or reset breakers when there is water, sparks, smoke or a burning smell
+- move, pull out or tilt heavy appliances (fridge, stove, washer, dryer, dishwasher)
+- climb on roofs or ladders, or use WD-40, lubricants or chemical drain cleaners
+- watch YouTube or other videos
+Use metric units (°C, cm).`;
 
 const SYSTEM_PROMPT = `You are a friendly property maintenance assistant helping a tenant. Generate 3-6 practical troubleshooting steps based ONLY on the retrieved SOP snippets below.
 
@@ -46,17 +55,23 @@ Pest-specific rules:
 - For insects: recommend bait traps, sanitation — NOT snap traps
 - For rodents: recommend snap traps along walls — NOT insect bait or spray
 - Do NOT ask tenants to seal holes, caulk gaps, or perform repairs — note these for the property manager instead
-- If an entry point has been reported, note it for the property manager but do NOT ask the tenant to seal it`;
+- If an entry point has been reported, note it for the property manager but do NOT ask the tenant to seal it
+
+Never instruct the tenant to (these are for professionals only):
+- touch gas valves, gas lines, gas meters or pilot lights
+- open electrical panels or covers, touch wiring, or reset breakers when there is water, sparks, smoke or a burning smell
+- move, pull out or tilt heavy appliances (fridge, stove, washer, dryer, dishwasher)
+- climb on roofs or ladders, or use WD-40, lubricants or chemical drain cleaners
+- watch YouTube or other videos
+Use metric units (°C, cm).`;
 
 // Emergency safety text (prepended BEFORE grounded steps)
 const EMERGENCY_SAFETY_LINES = [
   "**SAFETY ALERT**: Your issue has been flagged as a potential emergency.",
   "",
   "**IMMEDIATE ACTIONS:**",
-  "1. If you smell gas, leave the unit immediately and contact the FortisBC gas emergency line.",
-  "2. If there's flooding, turn off the main water valve if it is safe to do so.",
-  "3. If there's a fire or smoke, evacuate and call 911.",
-  "4. Do NOT re-enter the unit until cleared by emergency services or your property manager.",
+  EMERGENCY_FOOTER,
+  "- Do NOT re-enter the unit until cleared by emergency services or your property manager.",
   "",
   "Your ticket has been escalated to your property manager for urgent review. The property manager should contact you within 2 hours.",
   "",
@@ -348,6 +363,25 @@ export async function generateGroundedSteps(
     reply: formatConversationalTroubleshooting(stepsText, sourcesFooter, isEmergency),
     steps,
     usedFallback: false,
+  };
+}
+
+/**
+ * Never-instruct post-filter — run on the final steps of EVERY source
+ * (grounded, web search, hardcoded SOP) before anything reaches the tenant.
+ * Drops steps that tell a tenant to do professional-only work, strips the same
+ * lines from the reply text, and converts °F to °C.
+ */
+export function enforceStepSafety(result: GroundedResult): GroundedResult & { removedUnsafe: string[] } {
+  const { steps, removed } = filterUnsafeSteps(result.steps);
+  if (removed.length > 0) {
+    console.warn("[grounding] removed unsafe steps", removed.map((r) => ({ rule: r.rule, step: r.description.slice(0, 80) })));
+  }
+  return {
+    ...result,
+    reply: sanitizeReplyText(result.reply),
+    steps,
+    removedUnsafe: removed.map((r) => r.rule),
   };
 }
 

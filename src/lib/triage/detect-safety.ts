@@ -9,6 +9,7 @@
  */
 
 import type { GatheredInfo } from "./types";
+import { detectEmergency, classifySafetyAnswer, type EmergencyKind } from "./emergency";
 
 export interface SafetyDetectionResult {
   /** Whether the system detected a safety concern automatically */
@@ -19,25 +20,9 @@ export interface SafetyDetectionResult {
   question: string | null;
   /** Internal rationale */
   rationale: string;
+  /** Emergency type when detected=true */
+  kind?: EmergencyKind;
 }
-
-// ── Emergency keywords (reused from state-machine.ts) ──
-
-const EMERGENCY_KEYWORDS = [
-  "gas leak",
-  "gas smell",
-  "smell gas",
-  "fire",
-  "smoke",
-  "carbon monoxide",
-  "exposed wire",
-  "sparking",
-  "sewage",
-  "collapse",
-  "ceiling fell",
-  // NOTE: "mold", "flooding", "flooded", "no heat", "no hot water" removed —
-  // these are category+severity dependent, not automatic emergencies.
-];
 
 // ── High-risk keywords that suggest we should ask a targeted question ──
 
@@ -119,6 +104,7 @@ function detectConditionalEmergency(
       needsQuestion: false,
       question: null,
       rationale: `conditional_emergency: flooding with active water flow`,
+      kind: "flooding",
     };
   }
 
@@ -132,6 +118,7 @@ function detectConditionalEmergency(
       needsQuestion: false,
       question: null,
       rationale: `conditional_emergency: electrical with sparks/burning/exposed`,
+      kind: "electrical",
     };
   }
 
@@ -163,14 +150,15 @@ export function detectSafety(
 
   const category = gathered.category ?? "general";
 
-  // 1. Check for universal emergency keywords (auto-detect)
-  const foundKeyword = EMERGENCY_KEYWORDS.find((k) => allText.includes(k));
-  if (foundKeyword) {
+  // 1. Shared emergency detector (same one used on every chat message)
+  const emergency = detectEmergency(allText);
+  if (emergency) {
     return {
       detected: true,
       needsQuestion: false,
       question: null,
-      rationale: `auto_detected: "${foundKeyword}"`,
+      rationale: `auto_detected: ${emergency.kind} ("${emergency.phrase}")`,
+      kind: emergency.kind,
     };
   }
 
@@ -316,26 +304,11 @@ export function checkPestEscalation(
 
 /**
  * Parse the user's response to a targeted safety question.
- * More flexible than strict YES/NO.
+ *
+ * Returns true when the answer means "there IS a safety concern". Only a
+ * clear, unhedged "no" returns false — unclear answers ("not sure", "maybe",
+ * "a little", a question back) escalate instead of clearing.
  */
 export function parseSafetyResponse(response: string): boolean {
-  const lower = response.trim().toLowerCase();
-
-  // Positive indicators
-  if (/\b(yes|yeah|yep|y|true|definitely|absolutely|for sure)\b/i.test(lower)) {
-    return true;
-  }
-
-  // Negative indicators (checked BEFORE descriptive patterns so "not getting worse" → false)
-  if (/\b(no|nope|nah|not|not really|doesn't seem|don't think|none|nothing|isn't|doesn't)\b/i.test(lower)) {
-    return false;
-  }
-
-  // Descriptive safety concerns (only reached if no negation detected above)
-  if (/\b(sparks?|smoke|smoking|burning|gas smell|smell gas|flooding|flooded|spreading|getting worse|unstable|exposed)\b/i.test(lower)) {
-    return true;
-  }
-
-  // Default: no safety concern if unclear
-  return false;
+  return classifySafetyAnswer(response) !== "no_concern";
 }

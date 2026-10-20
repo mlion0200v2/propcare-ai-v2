@@ -114,7 +114,11 @@ export default async function DashboardPage() {
                       <span className="text-gray-500">
                         {ticket.category.replace("_", " ")}
                       </span>
-                      {ticket.triage_state !== "DONE" && (
+                      {ticket.triage_state === "EMERGENCY" ? (
+                        <span className="rounded-full bg-red-600 px-2 py-0.5 font-medium text-white">
+                          emergency — contact tenant now
+                        </span>
+                      ) : ticket.triage_state !== "DONE" && (
                         <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-800">
                           triage in progress
                         </span>

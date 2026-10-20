@@ -124,6 +124,24 @@ export const tenantInfoPhoneSchema = z
 export const tenantInfoEmailSchema = z.string().email("Please enter a valid email address");
 
 // ============================================================
+// Triage chat API
+// ============================================================
+
+/** Longest tenant message the triage chat accepts (characters). */
+export const MAX_TRIAGE_MESSAGE_LENGTH = 2000;
+
+export const triageChatRequestSchema = z.object({
+  message: z
+    .string()
+    .max(MAX_TRIAGE_MESSAGE_LENGTH, `Message must be ${MAX_TRIAGE_MESSAGE_LENGTH} characters or fewer`)
+    .optional(),
+  ticket_id: z.string().uuid("Invalid ticket").optional(),
+  confirm_profile: z.enum(["yes", "change"]).optional(),
+  media_action: z.string().max(50).optional(),
+  confirm_summary: z.string().max(MAX_TRIAGE_MESSAGE_LENGTH).optional(),
+});
+
+// ============================================================
 // Auth
 // ============================================================
 
@@ -151,3 +169,4 @@ export type CreateMessageInput = z.infer<typeof createMessageSchema>;
 export type CreateVendorInput = z.infer<typeof createVendorSchema>;
 export type SignUpInput = z.infer<typeof signUpSchema>;
 export type SignInInput = z.infer<typeof signInSchema>;
+export type TriageChatRequest = z.infer<typeof triageChatRequestSchema>;

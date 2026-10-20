@@ -5,7 +5,7 @@
  * in tickets.triage_state and gathered info in tickets.classification JSONB.
  */
 
-export type TriageStateName = "CONFIRM_PROFILE" | "COLLECT_TENANT_INFO" | "GATHER_INFO" | "AWAITING_MEDIA" | "GUIDED_TROUBLESHOOTING" | "CONFIRM_SUMMARY" | "DONE";
+export type TriageStateName = "CONFIRM_PROFILE" | "COLLECT_TENANT_INFO" | "GATHER_INFO" | "AWAITING_MEDIA" | "GUIDED_TROUBLESHOOTING" | "CONFIRM_SUMMARY" | "EMERGENCY" | "DONE";
 
 export interface GatheredInfo {
   category: string | null;
@@ -135,7 +135,7 @@ export interface IssueClassification {
 
 export interface SafetyDetection {
   detected: boolean;
-  method: "auto" | "user_confirmed" | "user_denied" | "skipped";
+  method: "auto" | "user_confirmed" | "user_denied" | "user_unclear" | "skipped";
   rationale: string;
 }
 
@@ -151,6 +151,18 @@ export interface TriageClassification {
   validation?: ValidationResult;
   guided_troubleshooting?: GuidedTroubleshootingState;
   summary?: string;
+  /** Set when the ticket was escalated as an emergency (state EMERGENCY). */
+  emergency?: EmergencyRecord;
+}
+
+/** What triggered an emergency escalation and whether the manager was alerted. */
+export interface EmergencyRecord {
+  kind: string;
+  phrase: string;
+  detected_at: string;
+  /** Triage state the conversation was in when the emergency was detected. */
+  previous_state: string;
+  manager_notified: boolean;
 }
 
 export interface ValidationResult {
