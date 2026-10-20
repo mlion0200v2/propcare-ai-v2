@@ -40,6 +40,21 @@ export function isWaterLeak(text: string): boolean {
   return LEAK_WORDS.test(text);
 }
 
+const LEAK_WHERE_PATTERNS: [RegExp, string][] = [
+  [/\bceiling\b/i, "Ceiling"],
+  [/\b(under|underneath|below) (the )?(kitchen |bathroom )?sink\b|\bsink\b.*\b(underneath|under it|below it|cabinet)\b/i, "Under the sink"],
+  [/\b(behind|around|base of|under) (the )?toilet\b|\btoilet (is )?(leak|leaking|overflow)/i, "Around the toilet"],
+  [/\b(dishwasher|washing machine|washer|fridge|refrigerator|water heater|hot water tank)\b/i, "Around an appliance"],
+  [/\bwalls?\b/i, "Wall"],
+  [/\bfloor\b/i, "Floor"],
+];
+
+/** Where the water is, if the tenant already said it ("dripping from the ceiling" → Ceiling). */
+export function extractLeakWhere(text: string): string | null {
+  for (const [pattern, label] of LEAK_WHERE_PATTERNS) if (pattern.test(text)) return label;
+  return null;
+}
+
 /** "yes" | "no" | "not sure" from a free-text answer. Anything unclear is "not sure". */
 export function normaliseYesNo(answer: string): "yes" | "no" | "not sure" {
   const a = answer.trim().toLowerCase();

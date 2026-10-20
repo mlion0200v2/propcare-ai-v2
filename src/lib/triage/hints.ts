@@ -22,8 +22,10 @@ export function buildChatHints(params: {
   category: string | null;
   description: string;
   profile: UnitProfile;
+  /** Rooms the tenant may mean (e.g. two bathrooms): offered instead of all rooms. */
+  locationCandidates?: string[] | null;
 }): ChatHints {
-  const { currentQuestion, triageState, category, description, profile } = params;
+  const { currentQuestion, triageState, category, description, profile, locationCandidates } = params;
   const quickReplies: string[] = [];
   const notes: string[] = [];
 
@@ -31,7 +33,9 @@ export function buildChatHints(params: {
 
   switch (currentQuestion) {
     case "location_in_unit":
-      quickReplies.push(...(profile.rooms.length > 0 ? profile.rooms : DEFAULT_ROOMS));
+      quickReplies.push(
+        ...(locationCandidates?.length ? locationCandidates : profile.rooms.length > 0 ? profile.rooms : DEFAULT_ROOMS)
+      );
       break;
     case "started_when":
       quickReplies.push("Just now", "Today", "Yesterday", "A few days ago", "Over a week ago");

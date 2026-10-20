@@ -26,7 +26,10 @@ export async function GET(request: NextRequest) {
     .maybeSingle();
   if (!ticket) return NextResponse.json({ quickReplies: [], notes: [] });
 
-  const c = (ticket.classification ?? {}) as { current_question?: string | null; gathered?: { category?: string | null } };
+  const c = (ticket.classification ?? {}) as {
+    current_question?: string | null;
+    gathered?: { category?: string | null; location_candidates?: string[] | null };
+  };
   return NextResponse.json(
     buildChatHints({
       currentQuestion: c.current_question ?? null,
@@ -34,6 +37,7 @@ export async function GET(request: NextRequest) {
       category: c.gathered?.category ?? null,
       description: ticket.description,
       profile: readUnitProfile(ticket.units?.profile),
+      locationCandidates: c.gathered?.location_candidates ?? null,
     })
   );
 }

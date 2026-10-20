@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createRunner, printSection, runStandalone, type TestResult } from "./helpers";
 import {
+  extractLeakWhere,
   getNextExtendedQuestion,
   isGatherComplete,
   isWaterLeak,
@@ -17,7 +18,7 @@ import { buildInitialGathered } from "../../src/lib/triage/state-machine";
 import { buildMediaPrompt, buildPreventionSteps, buildShotList } from "../../src/lib/triage/guidance";
 import { buildChatHints } from "../../src/lib/triage/hints";
 import { buildOwnerUpdate } from "../../src/lib/messages";
-import { readUnitProfile } from "../../src/lib/units/profile";
+import { matchingRooms, readUnitProfile, whichRoomQuestion } from "../../src/lib/units/profile";
 import type { GatheredInfo } from "../../src/lib/triage/types";
 
 const SRC = join(__dirname, "..", "..", "src");
@@ -30,6 +31,26 @@ export function testChatWorkflow(): TestResult {
   // Leak detection
   check(isWaterLeak("Water is dripping from the bathroom ceiling") && isWaterLeak("my sink is leaking") && isWaterLeak("there's a puddle by the fridge"), "leaks are recognised");
   check(!isWaterLeak("the oven won't heat") && !isWaterLeak("noisy fan"), "non-leaks don't get the leak questions");
+
+  // Use what the first message already says
+  check(extractLeakWhere("There's water dripping from the bathroom ceiling") === "Ceiling", "'dripping from the bathroom ceiling' → water at the ceiling (not asked again)");
+  check(
+    extractLeakWhere("my kitchen sink is leaking underneath") === "Under the sink" &&
+      extractLeakWhere("water around the base of the toilet") === "Around the toilet" &&
+      extractLeakWhere("the dishwasher is leaking") === "Around an appliance" &&
+      extractLeakWhere("there's a leak somewhere") === null,
+    "other sources recognised; unknown stays a question"
+  );
+  const rooms = ["Main bathroom (upstairs hallway)", "Ensuite", "Kitchen", "Laundry (basement)", "Basement"];
+  check(matchingRooms("bathroom", rooms).join("|") === "Main bathroom (upstairs hallway)|Ensuite", "'bathroom' matches both bathrooms in the profile");
+  check(matchingRooms("kitchen", rooms).join("|") === "Kitchen" && matchingRooms("bathroom", ["Main bathroom (hallway)", "Kitchen"]).length === 1, "a single match is used directly");
+  check(whichRoomQuestion("bathroom", ["Main bathroom (upstairs hallway)", "Ensuite"]) === "Which bathroom is it? (Main bathroom (upstairs hallway) or Ensuite)", "asks 'Which bathroom?' with the unit's own rooms");
+  const candidateChips = buildChatHints({ currentQuestion: "location_in_unit", triageState: "GATHER_INFO", category: "plumbing", description: "leak", profile: readUnitProfile({ rooms }), locationCandidates: ["Main bathroom (upstairs hallway)", "Ensuite"] });
+  check(candidateChips.quickReplies.join("|") === "Main bathroom (upstairs hallway)|Ensuite", "chips offer just the matching rooms");
+  {
+    const routeSrc = readFileSync(join(SRC, "app", "api", "triage", "chat", "route.ts"), "utf8");
+    check(/initialGathered\.leak_where = extractLeakWhere\(message\)/.test(routeSrc) && /whichRoomQuestion\(roomWord/.test(routeSrc), "first message fills in the water location and narrows the room");
+  }
 
   // Electrical answer: safety-critical
   check(normaliseYesNo("No") === "no" && normaliseYesNo("nope") === "no" && normaliseYesNo("no outlets nearby") === "no", "clear 'no' → no");

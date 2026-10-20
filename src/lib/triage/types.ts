@@ -28,6 +28,8 @@ export interface GatheredInfo {
   leak_timing?: string | null;
   /** Water near an outlet, light or anything plugged in: "yes" | "no" | "not sure". */
   leak_electrical?: string | null;
+  /** Unit-profile rooms the tenant may mean ("bathroom" → hallway bathroom, ensuite). */
+  location_candidates?: string[] | null;
 }
 
 export interface TriageContext {
