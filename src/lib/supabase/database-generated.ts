@@ -1118,6 +1118,7 @@ export type Database = {
       ticket_stage:
         | "new"
         | "waiting_for_owner"
+        | "approved"
         | "vendor_booked"
         | "fixed"
         | "closed"
@@ -1281,7 +1282,7 @@ export const Constants = {
         "other",
       ],
       ticket_priority: ["low", "medium", "high", "emergency"],
-      ticket_stage: ["new", "waiting_for_owner", "vendor_booked", "fixed", "closed"],
+      ticket_stage: ["new", "waiting_for_owner", "approved", "vendor_booked", "fixed", "closed"],
       ticket_status: [
         "open",
         "in_progress",

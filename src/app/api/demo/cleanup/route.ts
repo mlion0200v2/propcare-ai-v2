@@ -2,9 +2,9 @@
  * GET /api/demo/cleanup — delete try-mode sandboxes older than 24 hours
  * (workspace + all its rows + the demo auth users).
  *
- * Call hourly from a scheduler with `Authorization: Bearer $CRON_SECRET`
- * (Vercel Cron sends this header automatically when CRON_SECRET is set;
- * see vercel.json). Without CRON_SECRET the route refuses to run.
+ * Call hourly from a scheduler (Cloud Scheduler on Cloud Run) with
+ * `Authorization: Bearer $CRON_SECRET`. Without CRON_SECRET the route
+ * refuses to run.
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";

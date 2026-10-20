@@ -138,7 +138,12 @@ export async function decideApproval(formData: FormData): Promise<void> {
   if (error) {
     logError("decide_approval", error, { ticketId });
   } else {
-    await logActivity(ticketId, `${await actorName()} ${decision} the quote.`);
+    // decide_approval also moved the stage on; say where it is now.
+    const { data: ticket } = await supabase.from("tickets").select("stage").eq("id", ticketId).maybeSingle();
+    await logActivity(
+      ticketId,
+      `${await actorName()} ${decision} the quote.${ticket ? ` Status: ${STAGE_LABELS[ticket.stage]}.` : ""}`
+    );
   }
   revalidatePath(`/tickets/${ticketId}`);
 }
