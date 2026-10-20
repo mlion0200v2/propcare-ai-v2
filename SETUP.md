@@ -176,10 +176,9 @@ on the same request; each view uses that role's real permissions.
   messages per sandbox (emergency messages are never blocked), sandboxes
   expire after 24 hours.
 - **Cleanup:** call `GET /api/demo/cleanup` with
-  `Authorization: Bearer $CRON_SECRET` regularly. `vercel.json` schedules it
-  daily on Vercel (Hobby plans allow daily crons only); expired sandboxes are
-  already unusable, cleanup just deletes them. Elsewhere use any scheduler,
-  e.g. Google Cloud Scheduler hitting the URL with that header.
+  `Authorization: Bearer $CRON_SECRET` regularly (e.g. hourly): on Cloud Run,
+  a Cloud Scheduler HTTP job with that header. Expired sandboxes are already
+  unusable; cleanup deletes them and their demo users.
 - **Database:** needs migration `20261021000000_demo_mode.sql`
   (`npx supabase db push`). Locally, `npx supabase db reset` applies it.
 

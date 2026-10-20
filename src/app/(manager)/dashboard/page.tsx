@@ -8,7 +8,7 @@ export const metadata = {
   title: "Requests | PropCare",
 };
 
-const OPEN_STAGES = ["new", "waiting_for_owner", "vendor_booked"] as const;
+const OPEN_STAGES = ["new", "waiting_for_owner", "approved", "vendor_booked"] as const;
 
 export default async function DashboardPage({
   searchParams,
