@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { formatCents } from "@/lib/workspace/tokens";
 import { formatDateTime } from "@/lib/utils/time";
 import { VendorQuoteForm } from "@/components/demo/vendor-quote-form";
+import { readUnitProfile } from "@/lib/units/profile";
 
 export const metadata = {
   title: "Work order | PropCare",
@@ -24,7 +25,7 @@ export default async function VendorWorkOrderPage({ params }: { params: Promise<
   const { data: order } = await service
     .from("work_orders")
     .select(
-      "id, vendor_name, scope, access_window, entry_permission, pets, include_tenant_phone, status, quote_cents, quote_note, quoted_at, created_at, ticket_id, workspaces(name), tickets(title, vendor_booked_for, units(unit_number, properties(address_line1, city)), tenancies(name, phone))"
+      "id, vendor_name, scope, access_window, entry_permission, pets, include_tenant_phone, status, quote_cents, quote_note, quoted_at, created_at, ticket_id, workspaces(name), tickets(title, vendor_booked_for, units(unit_number, profile, properties(address_line1, city)), tenancies(name, phone))"
     )
     .eq("token", token)
     .maybeSingle();
@@ -49,6 +50,7 @@ export default async function VendorWorkOrderPage({ params }: { params: Promise<
     ticket.units?.properties?.city ? `, ${ticket.units.properties.city}` : ""
   }`;
   const firstName = ticket.tenancies?.name?.split(" ")[0];
+  const accessNotes = readUnitProfile(ticket.units?.profile).access_notes;
 
   return (
     <div className="min-h-screen bg-paper px-4 py-8 font-brand text-ink">
@@ -78,6 +80,12 @@ export default async function VendorWorkOrderPage({ params }: { params: Promise<
             )}
             <dt className="text-muted">Entry if no one is home</dt>
             <dd>{order.entry_permission === true ? "Yes, permitted" : order.entry_permission === false ? "No, tenant must be home" : "Ask the manager"}</dd>
+            {accessNotes && (
+              <>
+                <dt className="text-muted">Access notes</dt>
+                <dd>{accessNotes}</dd>
+              </>
+            )}
             <dt className="text-muted">Pets</dt>
             <dd>{order.pets ?? "None noted"}</dd>
             <dt className="text-muted">Tenant</dt>

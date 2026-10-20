@@ -76,6 +76,8 @@ export function TriageChat({
 } = {}) {
   // One in-progress draft per tenancy, so two homes never mix.
   const draftKey = tenancyId ? `${DRAFT_TICKET_KEY}:${tenancyId}` : DRAFT_TICKET_KEY;
+  // Tap-answers ("Which room?") and prevention notes from the unit profile.
+  const [hints, setHints] = useState<{ quickReplies: string[]; notes: string[] }>({ quickReplies: [], notes: [] });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [ticketId, setTicketId] = useState<string | null>(null);
@@ -194,8 +196,22 @@ export function TriageChat({
     resumeDraft();
   }, [resumeDraft]);
 
-  async function handleSend() {
-    const text = input.trim();
+  useEffect(() => {
+    if (!ticketId || isComplete) return;
+    let cancelled = false;
+    fetch(`/api/triage/hints?ticket_id=${ticketId}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setHints({ quickReplies: data.quickReplies ?? [], notes: data.notes ?? [] });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [ticketId, triageState, messages.length, isComplete]);
+
+  async function handleSend(override?: string) {
+    const text = (override ?? input).trim();
     if (!text || isLoading || isComplete) return;
 
     setError(null);
@@ -634,9 +650,35 @@ export function TriageChat({
         </div>
       )}
 
+      {/* Prevention notes from the unit profile (e.g. water shut-off) */}
+      {!isComplete && hints.notes.length > 0 && (
+        <div className="mx-4 mb-2 space-y-1 border-l-4 border-gold bg-cream px-3 py-2 text-sm text-ink">
+          {hints.notes.map((note) => (
+            <p key={note}>{note}</p>
+          ))}
+        </div>
+      )}
+
       {/* Input */}
       {triageState !== "CONFIRM_PROFILE" && triageState !== "AWAITING_MEDIA" && (triageState !== "CONFIRM_SUMMARY" || summaryEditMode) && (
         <div className="border-t border-gray-200 p-4">
+          {!isComplete && !isLoading && !summaryEditMode && hints.quickReplies.length > 0 && (
+            <div role="group" aria-label="Quick answers" className="mb-2 flex flex-wrap gap-2">
+              {hints.quickReplies.map((reply) => (
+                <button
+                  key={reply}
+                  type="button"
+                  onClick={() => {
+                    setHints((h) => ({ ...h, quickReplies: [] }));
+                    handleSend(reply);
+                  }}
+                  className="min-h-9 rounded-full border border-pine bg-white px-3 py-1.5 text-sm text-pine hover:bg-sage"
+                >
+                  {reply}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex gap-2">
             <textarea
               value={input}
@@ -656,7 +698,7 @@ export function TriageChat({
               className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
             />
             <Button
-              onClick={handleSend}
+              onClick={() => handleSend()}
               disabled={!input.trim() || isLoading || isComplete}
               size="md"
             >
