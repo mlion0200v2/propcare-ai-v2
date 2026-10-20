@@ -96,7 +96,6 @@ export async function signUp(
         id: authData.user.id,
         email: parsed.data.email,
         full_name: parsed.data.full_name,
-        role: parsed.data.role as "tenant" | "manager",
       },
       { onConflict: "id" }
     );
