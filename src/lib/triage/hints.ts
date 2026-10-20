@@ -22,8 +22,10 @@ export function buildChatHints(params: {
   category: string | null;
   description: string;
   profile: UnitProfile;
+  /** Rooms the tenant may mean (e.g. two bathrooms): offered instead of all rooms. */
+  locationCandidates?: string[] | null;
 }): ChatHints {
-  const { currentQuestion, triageState, category, description, profile } = params;
+  const { currentQuestion, triageState, category, description, profile, locationCandidates } = params;
   const quickReplies: string[] = [];
   const notes: string[] = [];
 
@@ -31,13 +33,33 @@ export function buildChatHints(params: {
 
   switch (currentQuestion) {
     case "location_in_unit":
-      quickReplies.push(...(profile.rooms.length > 0 ? profile.rooms : DEFAULT_ROOMS));
+      quickReplies.push(
+        ...(locationCandidates?.length ? locationCandidates : profile.rooms.length > 0 ? profile.rooms : DEFAULT_ROOMS)
+      );
       break;
     case "started_when":
       quickReplies.push("Just now", "Today", "Yesterday", "A few days ago", "Over a week ago");
       break;
     case "current_status":
       quickReplies.push("Still happening", "Comes and goes", "Getting worse", "It stopped");
+      break;
+    case "leak_where":
+      quickReplies.push("Ceiling", "Wall", "Floor", "Under the sink", "Around an appliance", "Around the toilet");
+      break;
+    case "leak_amount":
+      quickReplies.push("A few drops", "A small puddle", "It's spreading");
+      break;
+    case "leak_timing":
+      quickReplies.push(
+        "All the time",
+        "When the shower or bath is used",
+        "When the toilet is flushed",
+        "When an appliance runs",
+        "Not sure"
+      );
+      break;
+    case "leak_electrical":
+      quickReplies.push("No", "Yes", "Not sure");
       break;
     case "brand_model": {
       const relevant = profile.fixtures.filter((f) => f.brand || f.model);

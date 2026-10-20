@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
+import { MAX_UPLOAD_MB, MAX_VIDEO_SECONDS } from "@/lib/triage/guidance";
+import { AccessDetailsCard } from "@/components/intake/access-details";
 
 const DRAFT_TICKET_KEY = "propcare_draft_ticket_id";
 
@@ -57,6 +59,32 @@ function renderBotMarkdown(text: string): React.ReactNode {
   });
 }
 
+/** Size and (for videos) duration limits, checked in the browser. */
+async function checkMediaFile(file: File): Promise<string | null> {
+  if (file.size > MAX_UPLOAD_MB * 1024 * 1024) {
+    return `That file is over ${MAX_UPLOAD_MB} MB. For videos, record ${MAX_VIDEO_SECONDS} seconds or less (720p is plenty).`;
+  }
+  if (!file.type.startsWith("video/")) return null;
+  const seconds = await new Promise<number>((resolve) => {
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    const url = URL.createObjectURL(file);
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      resolve(video.duration);
+    };
+    video.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(0);
+    };
+    video.src = url;
+  });
+  if (seconds > MAX_VIDEO_SECONDS + 1) {
+    return `That video is ${Math.round(seconds)} seconds. Please keep videos to ${MAX_VIDEO_SECONDS} seconds or less.`;
+  }
+  return null;
+}
+
 interface ChatMessage {
   id: string;
   body: string;
@@ -68,11 +96,14 @@ interface ChatMessage {
 export function TriageChat({
   tenancyId,
   afterComplete,
+  defaultPets,
 }: {
   /** The unit tenancy new tickets are filed under (tenant link flow). */
   tenancyId?: string;
   /** Shown under the completion banner, e.g. the optional-account offer. */
   afterComplete?: React.ReactNode;
+  /** Pre-fills "Pets at home" in the access card (from the unit profile). */
+  defaultPets?: string;
 } = {}) {
   // One in-progress draft per tenancy, so two homes never mix.
   const draftKey = tenancyId ? `${DRAFT_TICKET_KEY}:${tenancyId}` : DRAFT_TICKET_KEY;
@@ -373,8 +404,17 @@ export function TriageChat({
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !ticketId || isUploading) return;
+    e.target.value = "";
 
     setError(null);
+
+    // Check size and video length here, before a long upload fails.
+    const problem = await checkMediaFile(file);
+    if (problem) {
+      setError(problem);
+      return;
+    }
+
     setIsUploading(true);
 
     // Show upload message
@@ -593,6 +633,11 @@ export function TriageChat({
       {isComplete && (
         <div className="mx-4 mb-2 rounded-lg bg-green-50 px-3 py-2 text-sm text-green-800">
           Triage complete. Your ticket has been submitted to your property manager.
+        </div>
+      )}
+      {isComplete && tenancyId && ticketId && (
+        <div className="mx-4 mb-3">
+          <AccessDetailsCard ticketId={ticketId} defaultPets={defaultPets} />
         </div>
       )}
       {isComplete && afterComplete && <div className="mx-4 mb-4">{afterComplete}</div>}

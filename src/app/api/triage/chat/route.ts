@@ -42,6 +42,8 @@ import {
   getNextExtendedQuestion,
   getExtendedQuestionText,
   processExtendedAnswer,
+  isWaterLeak,
+  extractLeakWhere,
 } from "@/lib/triage/gather-issue";
 import { buildAcknowledgement } from "@/lib/triage/acknowledgement";
 import {
@@ -86,6 +88,8 @@ import {
 } from "@/lib/triage/emergency";
 import { escalateEmergency, setPrivilegedTicketFields } from "@/lib/triage/escalate-emergency";
 import { isSummaryConfirmation } from "@/lib/triage/confirmation";
+import { buildMediaPrompt } from "@/lib/triage/guidance";
+import { matchingRooms, readUnitProfile, whichRoomQuestion } from "@/lib/units/profile";
 import { triageChatRequestSchema } from "@/lib/utils/validation";
 import { triageChatLimiter } from "@/lib/rate-limit";
 import type {
@@ -357,6 +361,8 @@ async function handleFirstMessage(
   }
   const unit = { id: tenancy.unit_id };
   const hasUnit = true;
+  const leakDetailsNeeded = isWaterLeak(message);
+  let roomWord: string | null = null;
 
   // ── Auto-classify issue ──
   const classification_result = classifyIssue(message);
@@ -480,6 +486,26 @@ async function handleFirstMessage(
       initialGathered.equipment_candidates = equipmentCandidates;
     }
 
+    // Use what the first message already says, and the unit's own rooms:
+    // "water dripping from the bathroom ceiling" → water at the ceiling;
+    // two bathrooms in the profile → ask "Which bathroom?" with those two.
+    if (leakDetailsNeeded) {
+      initialGathered.leak_details_needed = true;
+      initialGathered.leak_where = extractLeakWhere(message);
+    }
+    if (initialGathered.location_in_unit) {
+      const { data: unitRow } = await supabase.from("units").select("profile").eq("id", unit.id).maybeSingle();
+      const rooms = readUnitProfile(unitRow?.profile).rooms;
+      const candidates = matchingRooms(initialGathered.location_in_unit, rooms);
+      if (candidates.length > 1) {
+        initialGathered.location_candidates = candidates;
+        roomWord = initialGathered.location_in_unit;
+        initialGathered.location_in_unit = null;
+      } else if (candidates.length === 1) {
+        initialGathered.location_in_unit = candidates[0];
+      }
+    }
+
     if (classification_result.confidence === "low") {
       // Low confidence — ask a clarifying question
       const clarifyingQ = buildClarifyingCategoryQuestion(
@@ -504,7 +530,10 @@ async function handleFirstMessage(
       triageState = "GATHER_INFO";
       reply = buildInitialReply(
         acknowledgement,
-        nextQ?.text ?? "Thanks for all the details! Is there anything else about the issue you'd like to mention before I proceed?"
+        (nextQ?.field === "location_in_unit" && roomWord && initialGathered.location_candidates
+          ? whichRoomQuestion(roomWord, initialGathered.location_candidates)
+          : nextQ?.text) ??
+          "Thanks for all the details! Is there anything else about the issue you'd like to mention before I proceed?"
       );
     }
   } else {
@@ -598,6 +627,11 @@ async function handleFirstMessage(
       triageState = "COLLECT_TENANT_INFO";
       reply = buildTenantInfoInitialReply();
     }
+  }
+
+  // Water leaks get the source deep-dive (where, how much, when, electrical).
+  if (leakDetailsNeeded && triageClassification.gathered) {
+    triageClassification.gathered.leak_details_needed = true;
   }
 
   // Create ticket (unit_id is null when tenant has no assigned unit)
@@ -1729,6 +1763,24 @@ async function handleFollowUp(
   } else if (currentQuestion && isExtendedField(currentQuestion)) {
     // Extended field — process directly
     gathered = processExtendedAnswer(gathered, currentQuestion, message);
+
+    // Leak deep-dive: water near an outlet/light (or "not sure") → stop and
+    // escalate now, before any more questions.
+    if (currentQuestion === "leak_electrical" && gathered.leak_electrical !== "no") {
+      return handleEmergency(
+        supabase,
+        userId,
+        ticket,
+        { ...stored, gathered },
+        message,
+        {
+          kind: gathered.leak_electrical === "yes" ? "water_electrical" : "unconfirmed_safety",
+          phrase: `water near electrical: "${message.slice(0, 80)}"`,
+        },
+        start,
+        { insertUserMessage: true }
+      );
+    }
   } else {
     // Base field — run state machine
     const context: TriageContext = {
@@ -1998,7 +2050,11 @@ async function handleFollowUp(
   }
 
   // ── Transition to AWAITING_MEDIA ──
-  const mediaPrompt = "If you have any photos or videos of the issue, you can upload them now to help your property manager. Otherwise, you can skip this step.";
+  // Damage prevention first (leaks), then a shot list for this kind of issue.
+  const { data: unitRow } = ticket.unit_id
+    ? await supabase.from("units").select("profile").eq("id", ticket.unit_id).maybeSingle()
+    : { data: null };
+  const mediaPrompt = buildMediaPrompt(gathered, readUnitProfile(unitRow?.profile));
 
   const mediaClassification: TriageClassification = {
     gathered,

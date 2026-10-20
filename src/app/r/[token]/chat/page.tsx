@@ -4,6 +4,7 @@ import { findUnitByToken, unitLabel } from "@/lib/intake/server";
 import { TenantShell } from "@/components/intake/tenant-shell";
 import { KeepAccountCard } from "@/components/intake/keep-account";
 import { TriageChat } from "@/components/triage/chat";
+import { readUnitProfile } from "@/lib/units/profile";
 
 export const metadata = {
   title: "Report a problem | PropCare",
@@ -38,12 +39,14 @@ export default async function TenantChatPage({
   if (t && /^[0-9a-f-]{36}$/i.test(t)) query = query.eq("id", t);
   const { data: tenancy } = await query.order("created_at", { ascending: false }).limit(1).maybeSingle();
   if (!tenancy) redirect(`/r/${token}`);
+  const { data: unitRow } = await supabase.from("units").select("profile").eq("id", unit.unit_id).maybeSingle();
 
   return (
     <TenantShell workspaceName={unit.workspace_name} address={unitLabel(unit)}>
       <div className="h-[calc(100vh-80px)] sm:h-[calc(100vh-136px)]">
         <TriageChat
           tenancyId={tenancy.id}
+          defaultPets={readUnitProfile(unitRow?.profile).pets}
           afterComplete={<KeepAccountCard isGuest={!!user.is_anonymous} reportAgainHref={`/r/${token}/chat?t=${tenancy.id}`} />}
         />
       </div>

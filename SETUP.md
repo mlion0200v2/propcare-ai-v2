@@ -179,8 +179,10 @@ on the same request; each view uses that role's real permissions.
   `Authorization: Bearer $CRON_SECRET` regularly (e.g. hourly): on Cloud Run,
   a Cloud Scheduler HTTP job with that header. Expired sandboxes are already
   unusable; cleanup deletes them and their demo users.
-- **Database:** needs migration `20261021000000_demo_mode.sql`
-  (`npx supabase db push`). Locally, `npx supabase db reset` applies it.
+- **Database:** needs migrations `20261021000000_demo_mode.sql`,
+  `20261021010000_approval_moves_stage.sql` and
+  `20261022000000_ticket_access.sql` (`npx supabase db push`). Locally,
+  `npx supabase db reset` applies them.
 
 To try it locally: add `DEMO_MODE=1` to `.env.local`, run `npm run dev`, open
 http://localhost:3000/try.
