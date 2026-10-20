@@ -117,15 +117,14 @@ export async function getAuthenticatedClient(
 
 export async function createTestUser(
   adminClient: SupabaseClient<Database>,
-  label: string,
-  role: "tenant" | "manager"
+  label: string
 ): Promise<{ userId: string; email: string }> {
   const email = testEmail(label);
   const { data, error } = await adminClient.auth.admin.createUser({
     email,
     password: TEST_PASSWORD,
     email_confirm: true,
-    user_metadata: { role, full_name: `Test ${label}` },
+    user_metadata: { full_name: `Test ${label}` },
   });
   if (error) throw new Error(`createUser(${label}): ${error.message}`);
 
@@ -135,7 +134,6 @@ export async function createTestUser(
     id: userId,
     email,
     full_name: `Test ${label}`,
-    role,
   });
   if (profileErr) throw new Error(`createProfile(${label}): ${profileErr.message}`);
 
@@ -146,7 +144,6 @@ export async function cleanupTestUser(
   adminClient: SupabaseClient<Database>,
   userId: string
 ): Promise<void> {
-  await adminClient.from("vendors").delete().eq("manager_id", userId);
   await adminClient.auth.admin.deleteUser(userId);
 }
 

@@ -28,12 +28,6 @@ import { testWorkspaceRLS } from "./integration/test-workspace-rls";
 import { testWorkspacePure } from "./integration/test-workspace-pure";
 
 import { testSupabaseConnection, testTableSchema } from "./integration/test-supabase";
-import { testEnums } from "./integration/test-enums";
-import { testRLS } from "./integration/test-rls";
-import { testRLSIsolation } from "./integration/test-rls-isolation";
-import { testFKConstraints } from "./integration/test-fk-constraints";
-import { testTriggers } from "./integration/test-triggers";
-import { testE2E } from "./integration/test-e2e";
 
 import { testPinecone } from "./integration/test-pinecone";
 import { testOpenAI } from "./integration/test-openai";
@@ -77,12 +71,7 @@ async function main() {
   const { client, ...connResult } = await testSupabaseConnection();
   merge(connResult);
   merge(await testTableSchema(client));
-  merge(await testEnums(client));
-  merge(await testRLS(client));
-  merge(await testRLSIsolation(client));
-  merge(await testFKConstraints(client));
-  merge(await testTriggers(client));
-  merge(await testE2E(client));
+  // RLS, triggers and constraints: test-workspace-rls.ts (Phase A, PGlite).
 
   // ── Phase C: External service tests ──
   console.log("\n\x1b[1m-- Phase C: External Tests (Pinecone, OpenAI) --\x1b[0m");

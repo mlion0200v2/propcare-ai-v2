@@ -18,13 +18,13 @@ type Vendor = Database["public"]["Tables"]["vendors"]["Row"];
 type Assert<T extends true> = T;
 
 // Compile-time assertions — these cause build errors if types are wrong
-type _1 = Assert<Profile extends { id: string; email: string; full_name: string; role: string } ? true : never>;
-type _2 = Assert<Property extends { id: string; manager_id: string; address_line1: string; property_type: string } ? true : never>;
-type _3 = Assert<Unit extends { id: string; property_id: string; status: string; tenant_id: string | null } ? true : never>;
-type _4 = Assert<Ticket extends { id: string; unit_id: string; tenant_id: string; title: string; description: string } ? true : never>;
+type _1 = Assert<Profile extends { id: string; email: string | null; full_name: string } ? true : never>;
+type _2 = Assert<Property extends { id: string; workspace_id: string; address_line1: string; property_type: string } ? true : never>;
+type _3 = Assert<Unit extends { id: string; property_id: string; workspace_id: string; status: string; intake_token: string; link_active: boolean } ? true : never>;
+type _4 = Assert<Ticket extends { id: string; workspace_id: string; unit_id: string; tenant_id: string; tenancy_id: string | null; title: string; description: string } ? true : never>;
 type _5 = Assert<TicketMedia extends { id: string; ticket_id: string; file_path: string; file_type: string } ? true : never>;
 type _6 = Assert<Message extends { id: string; ticket_id: string; sender_id: string; body: string } ? true : never>;
-type _7 = Assert<Vendor extends { id: string; manager_id: string; name: string; trade: string } ? true : never>;
+type _7 = Assert<Vendor extends { id: string; workspace_id: string; name: string; trade: string } ? true : never>;
 
 // AI metadata fields on Ticket
 type _AI = Assert<

@@ -52,7 +52,7 @@ export async function testSupabaseConnection(): Promise<
 export async function testTableSchema(
   client: SupabaseClient<Database> | null
 ): Promise<TestResult> {
-  printSection("Table Schema Validation (7 tables)");
+  printSection("Table Schema Validation (core tables)");
   const { pass, fail, skip, result } = createRunner();
 
   if (!client) {
@@ -62,20 +62,20 @@ export async function testTableSchema(
 
   const expectedSchema: Record<string, string[]> = {
     profiles: [
-      "id", "email", "full_name", "phone", "role",
+      "id", "email", "full_name", "phone",
       "avatar_url", "created_at", "updated_at",
     ],
     properties: [
-      "id", "manager_id", "address_line1", "address_line2",
+      "id", "workspace_id", "address_line1", "address_line2",
       "city", "state", "zip", "property_type",
       "created_at", "updated_at",
     ],
     units: [
-      "id", "property_id", "unit_number", "tenant_id",
+      "id", "property_id", "workspace_id", "unit_number", "intake_token", "link_active",
       "status", "created_at", "updated_at",
     ],
     tickets: [
-      "id", "unit_id", "tenant_id", "assigned_to",
+      "id", "workspace_id", "unit_id", "tenancy_id", "tenant_id", "assigned_to", "stage",
       "title", "description", "category", "priority", "status",
       "classification", "safety_assessment",
       "similar_issues", "troubleshooting_steps",
@@ -90,7 +90,7 @@ export async function testTableSchema(
       "id", "ticket_id", "sender_id", "body", "created_at",
     ],
     vendors: [
-      "id", "manager_id", "name", "trade", "phone",
+      "id", "workspace_id", "name", "trade", "phone",
       "email", "rating", "notes", "created_at", "updated_at",
     ],
   };
