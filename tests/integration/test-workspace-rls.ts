@@ -9,9 +9,8 @@
  *   - tenants see only their own tickets and tenant-visible comments
  *   - turning a tenant link off / regenerating it revokes it
  *   - role-escalation attempts fail
- *   - the one-time data-migration script
+ *   - the local demo seed (supabase/seed.sql)
  */
-import { readFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
 import type { PGlite } from "@electric-sql/pglite";
 import { createRunner, printSection, runStandalone, type TestResult } from "./helpers";
@@ -20,7 +19,6 @@ import {
   createAuthUser,
   queryAs,
   tryAs,
-  DATA_MIGRATION_SCRIPT,
   type Actor,
 } from "../db/pglite-supabase";
 
@@ -328,7 +326,8 @@ export async function testWorkspaceRLS(): Promise<TestResult> {
   check(!(await tryAs(db, alice, "select set_member_role($1, $2, 'manager')", [ids.wsA, ids.alice])).ok, "Admin cannot change their own role (no lock-out)");
   check(!(await tryAs(db, bob, "select set_member_role($1, $2, 'manager')", [ids.wsA, ids.olive])).ok, "Admin of another workspace cannot change roles in A");
   check(!(await tryAs(db, mark, "select remove_member($1, $2)", [ids.wsA, ids.alice])).ok, "Manager cannot remove the admin");
-  check(denied(await tryAs(db, eve, "update profiles set role = 'manager' where id = $1", [ids.eve])), "Escalation: legacy profiles.role is not user-writable");
+  check(!(await tryAs(db, eve, "select role from profiles limit 1")).ok, "There is no role column on profiles to tamper with");
+  check(denied(await tryAs(db, eve, "update profiles set email = 'admin@a.test' where id = $1", [ids.eve])), "Users cannot change their profile email");
   check((await tryAs(db, eve, "update profiles set full_name = 'Eve E' where id = $1", [ids.eve])).ok, "Users can still edit their own name");
   check(
     denied(await tryAs(db, mark, "insert into invitations (workspace_id, email, role, token_hash) values ($1, 'x@x.test', 'manager', 'h1')", [ids.wsA])),
@@ -388,69 +387,41 @@ export async function testWorkspaceRLS(): Promise<TestResult> {
     "Per-property access is only for owners"
   );
 
-  // ── Data migration script ──
+  // ── Local demo seed ──
   try {
-    await testDataMigration(check);
+    await testSeed(check);
   } catch (err) {
-    fail("Data migration script threw", err);
+    fail("Seed (supabase/seed.sql) threw", err);
   }
 
   await db.close();
   return result;
 }
 
-async function testDataMigration(check: (cond: boolean, msg: string, detail?: unknown) => void) {
-  // Legacy database: schema up to 004, data, then 005, then the script.
-  const db = await createTestDatabase({ upTo: "004_storage_policies.sql" });
-  const mk = async (email: string, role: "manager" | "tenant") => {
-    const id = (await db.query<{ id: string }>("select gen_random_uuid() as id")).rows[0].id;
-    await db.query("insert into auth.users (id, email, email_confirmed_at) values ($1, $2, now())", [id, email]);
-    await db.query("insert into profiles (id, email, full_name, role, phone) values ($1, $2, $2, $3, '604-555-0199')", [id, email, role]);
-    return id;
-  };
-  const m1 = await mk("pm1@birchwood.test", "manager");
-  const m2 = await mk("pm2@birchwood.test", "manager");
-  const t1 = await mk("tenant1@birchwood.test", "tenant");
-  const prop = (await db.query<{ id: string }>(
-    "insert into properties (manager_id, address_line1, city, state, zip) values ($1, '3076 Arbutus', 'Vancouver', 'BC', 'V6J') returning id",
-    [m1]
-  )).rows[0].id;
-  const unit = (await db.query<{ id: string }>("insert into units (property_id, unit_number, tenant_id) values ($1, '304', $2) returning id", [prop, t1])).rows[0].id;
-  await db.query("insert into tickets (title, description, tenant_id, unit_id, status) values ('a', 'a', $1, $2, 'resolved')", [t1, unit]);
-  await db.query("insert into tickets (title, description, tenant_id, unit_id) values ('b', 'b', $1, null)", [t1]);
-  await db.query("insert into vendors (manager_id, name, trade) values ($1, 'Westside Plumbing', 'plumbing')", [m2]);
+/** supabase/seed.sql builds a usable demo on top of the baseline. */
+async function testSeed(check: (cond: boolean, msg: string, detail?: unknown) => void) {
+  const db = await createTestDatabase({ seed: true });
+  const user = (n: number): Actor => ({ kind: "user", id: `00000000-0000-4000-a000-00000000000${n}` });
+  const [admin, manager, owner, tenant] = [user(1), user(2), user(3), user(4)];
 
-  const { readdirSync } = await import("node:fs");
-  const path = await import("node:path");
-  const { MIGRATIONS_DIR } = await import("../db/pglite-supabase");
-  for (const f of readdirSync(MIGRATIONS_DIR).filter((f) => f.endsWith(".sql") && f > "004_storage_policies.sql").sort()) {
-    await db.exec(readFileSync(path.join(MIGRATIONS_DIR, f), "utf8"));
-  }
-
-  const asM1: Actor = { kind: "user", id: m1 };
-  check((await count(db, asM1, "select id from tickets")) === 0, "Migration: before the script, legacy rows are invisible (no global manager)");
-
-  const script = readFileSync(DATA_MIGRATION_SCRIPT, "utf8");
-  await db.exec(script);
-  await db.exec(script); // idempotent
-
-  const ws = (await db.query<{ id: string; n: number }>("select id, (select count(*)::int from workspaces) as n from workspaces")).rows;
-  check(ws.length === 1 && ws[0].n === 1, "Migration: exactly one workspace, also after a second run");
-  const members = (await db.query<{ role: string }>("select role from memberships")).rows;
-  check(members.length === 2 && members.every((m) => m.role === "admin"), "Migration: both existing managers are admins");
-  const orphans = (await db.query<{ n: number }>(
-    "select (select count(*) from properties where workspace_id is null) + (select count(*) from units where workspace_id is null) + (select count(*) from tickets where workspace_id is null) + (select count(*) from vendors where workspace_id is null) as n"
-  )).rows[0];
-  check(Number(orphans.n) === 0, "Migration: no property, unit, ticket or vendor left without a workspace");
-  const ten = (await db.query<{ tenant_user_id: string }>("select tenant_user_id from tenancies")).rows;
-  check(ten.length === 1 && ten[0].tenant_user_id === t1, "Migration: tenancy created for the unit's existing tenant account");
-  check((await count(db, asM1, "select id from tickets")) === 2, "Migration: managers see all migrated tickets (including unit-less)");
-  check((await count(db, { kind: "user", id: t1 }, "select id from tickets")) === 2, "Migration: tenant still sees their own tickets");
-  check((await count(db, asM1, "select id from tickets where stage = 'fixed'")) === 1, "Migration: resolved tickets start as Fixed");
-  const constraints = (await db.query<{ convalidated: boolean }>(
-    "select convalidated from pg_constraint where conname in ('properties_workspace_required','tickets_workspace_required','vendors_workspace_required')"
-  )).rows;
-  check(constraints.length === 3 && constraints.every((c) => c.convalidated), "Migration: workspace-required constraints validated");
+  check((await count(db, admin, "select id from units")) === 3, "Seed: admin sees the demo workspace's 3 units");
+  check((await count(db, manager, "select id from tickets")) === 1, "Seed: manager sees the demo request");
+  check((await count(db, owner, "select id from properties")) === 1, "Seed: owner sees only 3076 Arbutus Street");
+  check((await count(db, owner, "select id from ticket_comments")) === 2, "Seed: owner sees 2 of 3 comments (not the team-only one)");
+  check((await count(db, tenant, "select id from ticket_comments")) === 1, "Seed: tenant sees only the 'to tenant' comment");
+  check((await count(db, tenant, "select id from tickets")) === 1, "Seed: tenant with an account sees their request");
+  check(
+    (await count(db, { kind: "service" }, "select * from intake_unit_for_token('demo-link-arbutus-unit-101')")) === 1,
+    "Seed: demo tenant link resolves"
+  );
+  const pw = await db.query<{ ok: boolean }>(
+    "select encrypted_password = extensions.crypt('propcare-demo-1234', encrypted_password) as ok from auth.users where email = 'admin@example.test'"
+  );
+  check(pw.rows[0]?.ok === true, "Seed: demo users have the documented password");
+  check(
+    (await db.query<{ n: number }>("select count(*)::int as n from auth.identities")).rows[0].n === 4,
+    "Seed: each demo user has an email identity"
+  );
   await db.close();
 }
 

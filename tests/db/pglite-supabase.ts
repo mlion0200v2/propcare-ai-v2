@@ -9,29 +9,53 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { PGlite, type Transaction } from "@electric-sql/pglite";
-import { uuid_ossp } from "@electric-sql/pglite/contrib/uuid_ossp";
+import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 
 const ROOT = path.resolve(__dirname, "..", "..");
 export const MIGRATIONS_DIR = path.join(ROOT, "supabase", "migrations");
-export const DATA_MIGRATION_SCRIPT = path.join(
-  ROOT,
-  "supabase",
-  "scripts",
-  "migrate_existing_data_to_workspaces.sql"
-);
+export const SEED_FILE = path.join(ROOT, "supabase", "seed.sql");
 
 const SUPABASE_STUBS = `
 create role anon nologin;
 create role authenticated nologin;
 create role service_role nologin bypassrls;
 
+create schema extensions;
+create extension pgcrypto with schema extensions;
+
 create schema auth;
+-- The columns the app's SQL and supabase/seed.sql touch.
 create table auth.users (
+  instance_id uuid,
   id uuid primary key,
+  aud text,
+  role text,
   email text,
+  encrypted_password text,
   email_confirmed_at timestamptz,
+  raw_app_meta_data jsonb,
+  raw_user_meta_data jsonb,
   is_anonymous boolean not null default false,
-  created_at timestamptz not null default now()
+  confirmation_token text,
+  recovery_token text,
+  email_change text,
+  email_change_token_new text,
+  email_change_token_current text,
+  phone_change text,
+  phone_change_token text,
+  reauthentication_token text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz
+);
+create table auth.identities (
+  id uuid primary key,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  provider_id text not null,
+  provider text not null,
+  identity_data jsonb not null,
+  last_sign_in_at timestamptz,
+  created_at timestamptz,
+  updated_at timestamptz
 );
 create function auth.jwt() returns jsonb language sql stable as $$
   select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
@@ -74,14 +98,14 @@ export function migrationFiles(): string[] {
     .map((f) => path.join(MIGRATIONS_DIR, f));
 }
 
-/** Fresh database with Supabase stubs and migrations applied (all by default). */
-export async function createTestDatabase(opts: { upTo?: string } = {}): Promise<PGlite> {
-  const db = await PGlite.create({ extensions: { uuid_ossp } });
+/** Fresh database with Supabase stubs and every migration applied (optionally the seed too). */
+export async function createTestDatabase(opts: { seed?: boolean } = {}): Promise<PGlite> {
+  const db = await PGlite.create({ extensions: { pgcrypto } });
   await db.exec(SUPABASE_STUBS);
   for (const file of migrationFiles()) {
-    if (opts.upTo && path.basename(file) > opts.upTo) break;
     await db.exec(readFileSync(file, "utf8"));
   }
+  if (opts.seed) await db.exec(readFileSync(SEED_FILE, "utf8"));
   return db;
 }
 

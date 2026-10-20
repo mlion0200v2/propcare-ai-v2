@@ -47,7 +47,6 @@ async function cleanup() {
 
     for (const user of testUsers) {
       try {
-        await admin.from("vendors").delete().eq("manager_id", user.id);
         await admin.auth.admin.deleteUser(user.id);
         console.log(`  Deleted: ${user.email}`);
         deleted++;

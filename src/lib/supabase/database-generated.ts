@@ -312,7 +312,6 @@ export type Database = {
           full_name: string
           id: string
           phone: string | null
-          role: Database["public"]["Enums"]["user_role"]
           updated_at: string
         }
         Insert: {
@@ -324,7 +323,6 @@ export type Database = {
           full_name: string
           id: string
           phone?: string | null
-          role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
         Update: {
@@ -336,7 +334,6 @@ export type Database = {
           full_name?: string
           id?: string
           phone?: string | null
-          role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
         }
         Relationships: []
@@ -348,11 +345,10 @@ export type Database = {
           city: string
           created_at: string
           id: string
-          manager_id: string | null
           property_type: Database["public"]["Enums"]["property_type"]
           state: string
           updated_at: string
-          workspace_id: string | null
+          workspace_id: string
           zip: string
         }
         Insert: {
@@ -361,11 +357,10 @@ export type Database = {
           city: string
           created_at?: string
           id?: string
-          manager_id?: string | null
           property_type?: Database["public"]["Enums"]["property_type"]
           state: string
           updated_at?: string
-          workspace_id?: string | null
+          workspace_id: string
           zip: string
         }
         Update: {
@@ -374,21 +369,13 @@ export type Database = {
           city?: string
           created_at?: string
           id?: string
-          manager_id?: string | null
           property_type?: Database["public"]["Enums"]["property_type"]
           state?: string
           updated_at?: string
-          workspace_id?: string | null
+          workspace_id?: string
           zip?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "properties_manager_id_fkey"
-            columns: ["manager_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "properties_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -613,11 +600,11 @@ export type Database = {
           trace_id: string | null
           triage_state: string
           troubleshooting_steps: Json | null
-          unit_id: string | null
+          unit_id: string
           updated_at: string
           vendor_booked_for: string | null
           vendor_name: string | null
-          workspace_id: string | null
+          workspace_id: string
         }
         Insert: {
           assigned_to?: string | null
@@ -639,11 +626,11 @@ export type Database = {
           trace_id?: string | null
           triage_state?: string
           troubleshooting_steps?: Json | null
-          unit_id?: string | null
+          unit_id: string
           updated_at?: string
           vendor_booked_for?: string | null
           vendor_name?: string | null
-          workspace_id?: string | null
+          workspace_id?: string
         }
         Update: {
           assigned_to?: string | null
@@ -665,11 +652,11 @@ export type Database = {
           trace_id?: string | null
           triage_state?: string
           troubleshooting_steps?: Json | null
-          unit_id?: string | null
+          unit_id?: string
           updated_at?: string
           vendor_booked_for?: string | null
           vendor_name?: string | null
-          workspace_id?: string | null
+          workspace_id?: string
         }
         Relationships: [
           {
@@ -718,10 +705,9 @@ export type Database = {
           link_rotated_at: string | null
           property_id: string
           status: Database["public"]["Enums"]["unit_status"]
-          tenant_id: string | null
           unit_number: string | null
           updated_at: string
-          workspace_id: string | null
+          workspace_id: string
         }
         Insert: {
           created_at?: string
@@ -731,10 +717,9 @@ export type Database = {
           link_rotated_at?: string | null
           property_id: string
           status?: Database["public"]["Enums"]["unit_status"]
-          tenant_id?: string | null
           unit_number?: string | null
           updated_at?: string
-          workspace_id?: string | null
+          workspace_id?: string
         }
         Update: {
           created_at?: string
@@ -744,10 +729,9 @@ export type Database = {
           link_rotated_at?: string | null
           property_id?: string
           status?: Database["public"]["Enums"]["unit_status"]
-          tenant_id?: string | null
           unit_number?: string | null
           updated_at?: string
-          workspace_id?: string | null
+          workspace_id?: string
         }
         Relationships: [
           {
@@ -755,13 +739,6 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "units_tenant_id_fkey"
-            columns: ["tenant_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -778,49 +755,39 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
-          manager_id: string | null
           name: string
           notes: string | null
           phone: string | null
           rating: number | null
           trade: Database["public"]["Enums"]["ticket_category"]
           updated_at: string
-          workspace_id: string | null
+          workspace_id: string
         }
         Insert: {
           created_at?: string
           email?: string | null
           id?: string
-          manager_id?: string | null
           name: string
           notes?: string | null
           phone?: string | null
           rating?: number | null
           trade: Database["public"]["Enums"]["ticket_category"]
           updated_at?: string
-          workspace_id?: string | null
+          workspace_id: string
         }
         Update: {
           created_at?: string
           email?: string | null
           id?: string
-          manager_id?: string | null
           name?: string
           notes?: string | null
           phone?: string | null
           rating?: number | null
           trade?: Database["public"]["Enums"]["ticket_category"]
           updated_at?: string
-          workspace_id?: string | null
+          workspace_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "vendors_manager_id_fkey"
-            columns: ["manager_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "vendors_workspace_id_fkey"
             columns: ["workspace_id"]
@@ -946,7 +913,6 @@ export type Database = {
         | "resolved"
         | "closed"
       unit_status: "occupied" | "vacant" | "maintenance"
-      user_role: "tenant" | "manager"
       workspace_kind: "individual" | "company"
     }
     CompositeTypes: {
@@ -1109,7 +1075,6 @@ export const Constants = {
         "closed",
       ],
       unit_status: ["occupied", "vacant", "maintenance"],
-      user_role: ["tenant", "manager"],
       workspace_kind: ["individual", "company"],
     },
   },
