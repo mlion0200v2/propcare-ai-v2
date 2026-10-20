@@ -1,0 +1,13 @@
+.git
+.github
+.next
+node_modules
+coverage
+.env
+.env.*
+!.env.example
+supabase/.temp
+supabase/.branches
+tests/eval-reports
+Documents
+*.log

@@ -1,0 +1,104 @@
+name: Deploy production
+
+# Tag a commit on main as vX.Y.Z to release it to https://propcare.birchwoodcorp.com.
+# The image is deployed with no traffic, smoke-tested on its own revision URL,
+# and only then given 100% of traffic. Roll back with:
+#   gcloud run services update-traffic propcare --region northamerica-northeast1 --to-revisions <previous>=100
+#
+# Repository variables: GCP_PROD_PROJECT_ID, GCP_PROD_WIF_PROVIDER, GCP_PROD_DEPLOYER_SA,
+#   PROD_SUPABASE_URL, PROD_SUPABASE_ANON_KEY
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  REGION: northamerica-northeast1
+  SERVICE: propcare
+  APP_URL: https://propcare.birchwoodcorp.com
+
+jobs:
+  deploy:
+    name: Build, push, deploy with traffic hold
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://propcare.birchwoodcorp.com
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_PROD_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_PROD_DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      - uses: docker/setup-buildx-action@v3
+
+      - id: image
+        run: echo "name=${REGION}-docker.pkg.dev/${{ vars.GCP_PROD_PROJECT_ID }}/propcare/${SERVICE}:${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.image.outputs.name }}
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=${{ vars.PROD_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ vars.PROD_SUPABASE_ANON_KEY }}
+            NEXT_PUBLIC_APP_URL=${{ env.APP_URL }}
+            APP_VERSION=${{ github.ref_name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy new revision without traffic
+        id: deploy
+        run: |
+          tag="rel-$(echo "${GITHUB_REF_NAME}" | tr -c 'a-z0-9\n' '-')"
+          gcloud run deploy "$SERVICE" \
+            --project "${{ vars.GCP_PROD_PROJECT_ID }}" \
+            --region "$REGION" \
+            --image "${{ steps.image.outputs.name }}" \
+            --no-traffic \
+            --tag "$tag" \
+            --quiet
+          url=$(gcloud run services describe "$SERVICE" --project "${{ vars.GCP_PROD_PROJECT_ID }}" --region "$REGION" --format json \
+            | jq -r --arg tag "$tag" '.status.traffic[] | select(.tag==$tag) | .url')
+          echo "revision_url=$url" >> "$GITHUB_OUTPUT"
+          echo "Revision URL: $url"
+
+      - name: Smoke test the new revision
+        run: |
+          url="${{ steps.deploy.outputs.revision_url }}"
+          for i in $(seq 1 20); do
+            if curl -fsS "$url/api/health"; then echo; break; fi
+            sleep 3
+          done
+          curl -fsS "$url/api/health" | jq -e '.ok == true and .configured.supabase == true and .configured.openai == true'
+          curl -fsS -o /dev/null -w "login %{http_code}\n" "$url/login"
+
+      - name: Send 100% of traffic to the new revision
+        run: |
+          gcloud run services update-traffic "$SERVICE" \
+            --project "${{ vars.GCP_PROD_PROJECT_ID }}" \
+            --region "$REGION" \
+            --to-latest \
+            --quiet
+
+      - name: Verify the public site
+        run: |
+          curl -fsS "${APP_URL}/api/health"; echo
+          curl -fsS -o /dev/null -w "login %{http_code}\n" "${APP_URL}/login"
