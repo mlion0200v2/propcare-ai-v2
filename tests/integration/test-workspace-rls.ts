@@ -11,13 +11,17 @@
  *   - role-escalation attempts fail
  *   - the local demo seed (supabase/seed.sql)
  */
+import { readFileSync } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
+import { z } from "zod";
+import { createTicketSchema } from "../../src/lib/utils/validation";
 import type { PGlite } from "@electric-sql/pglite";
 import { createRunner, printSection, runStandalone, type TestResult } from "./helpers";
 import {
   createTestDatabase,
   createAuthUser,
   queryAs,
+  SEED_FILE,
   tryAs,
   type Actor,
 } from "../db/pglite-supabase";
@@ -399,6 +403,15 @@ export async function testWorkspaceRLS(): Promise<TestResult> {
 
 /** supabase/seed.sql builds a usable demo on top of the baseline. */
 async function testSeed(check: (cond: boolean, msg: string, detail?: unknown) => void) {
+  // Server actions validate ids with zod's RFC 4122 uuid check (version 1-8,
+  // variant 8/9/a/b); seeded ids must pass it or every action rejects them.
+  const seedIds = [
+    ...new Set(readFileSync(SEED_FILE, "utf8").match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? []),
+  ].filter((id) => id !== "00000000-0000-0000-0000-000000000000"); // auth.users.instance_id, never sent to the app
+  const uuid = z.string().uuid();
+  const invalid = seedIds.filter((id) => !uuid.safeParse(id).success || !createTicketSchema.shape.unit_id.safeParse(id).success);
+  check(seedIds.length >= 10 && invalid.length === 0, `Seed: all ${seedIds.length} UUIDs pass the app's zod uuid validation`, invalid);
+
   const db = await createTestDatabase({ seed: true });
   const user = (n: number): Actor => ({ kind: "user", id: `00000000-0000-4000-a000-00000000000${n}` });
   const [admin, manager, owner, tenant] = [user(1), user(2), user(3), user(4)];
