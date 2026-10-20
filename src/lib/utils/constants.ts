@@ -79,11 +79,12 @@ export const ALLOWED_PHOTO_TYPES = ["image/jpeg", "image/png", "image/heic", "im
 export const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/quicktime"];
 
 // Workspace ticket stages (what managers, owners and tenants see)
-export const TICKET_STAGES = ["new", "waiting_for_owner", "vendor_booked", "fixed", "closed"] as const;
+export const TICKET_STAGES = ["new", "waiting_for_owner", "approved", "vendor_booked", "fixed", "closed"] as const;
 
 export const STAGE_LABELS: Record<(typeof TICKET_STAGES)[number], string> = {
   new: "New",
   waiting_for_owner: "Waiting for owner",
+  approved: "Approved, booking vendor",
   vendor_booked: "Vendor booked",
   fixed: "Fixed",
   closed: "Closed",

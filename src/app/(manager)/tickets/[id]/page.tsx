@@ -40,6 +40,13 @@ const PRIORITY_LABEL: Record<string, string> = {
   low: "Low priority",
 };
 
+/** " (manager)" etc., unless the display name already says it ("Sam (manager)"). */
+function authorRoleSuffix(name: string, role: string): string {
+  if (role === "system") return "";
+  const label = ROLE_LABEL[role] ?? role;
+  return name.toLowerCase().includes(`(${label.toLowerCase()})`) ? "" : ` (${label})`;
+}
+
 function initials(name: string): string {
   return (
     name
@@ -491,7 +498,7 @@ function CommentItem({
       <div className={`min-w-0 flex-1 p-2.5 ${c.visibility === "tenant" ? "bg-sage" : "bg-paper"}`}>
         <b>
           {c.author_name}
-          {c.author_role !== "system" ? ` (${ROLE_LABEL[c.author_role] ?? c.author_role})` : ""}
+          {authorRoleSuffix(c.author_name, c.author_role)}
         </b>{" "}
         <span className="text-[11px] font-semibold uppercase tracking-[1px] text-muted">
           {c.visibility === "tenant" && c.author_role !== "tenant"

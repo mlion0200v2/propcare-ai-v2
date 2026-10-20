@@ -68,6 +68,12 @@ export async function testDemoSandbox(): Promise<TestResult> {
     check((await count(owner, "select id from work_orders")) === 0 && (await count(owner, "select id from outbox")) === 0, "Owner can't read work orders or the outbox");
     const decided = await tryAs(db, owner, "select decide_approval((select id from approvals limit 1), 'approved')");
     check(decided.ok, "Owner can approve the quote", decided);
+    const stageAfter = (await queryAs<{ stage: string }>(db, admin, "select stage from tickets where title = 'Kitchen sink, slow drain'"))[0].stage;
+    check(stageAfter === "approved", "Approval moves the ticket on to 'Approved, booking vendor'", stageAfter);
+    {
+      const r = await tryAs(db, owner, "update tickets set stage = 'fixed' where title = 'Kitchen sink, slow drain'");
+      check(!r.ok || r.affected === 0, "Owners still can't change the stage themselves", r);
+    }
 
     check((await count(tenant, "select id from tickets")) === 2, "Tenant view: Jamie's 2 requests only");
     check((await count(tenant, "select id from ticket_comments")) === 1, "Tenant view: only the 'to tenant' reply");
@@ -79,6 +85,33 @@ export async function testDemoSandbox(): Promise<TestResult> {
     check(!(await tryAs(db, admin, "select create_demo_sandbox($1,$1,$1,$1)", [a.admin])).ok, "Users can't call create_demo_sandbox");
     check(!(await tryAs(db, admin, "select * from demo_sandboxes")).ok, "Users can't read the sandbox registry");
     check(!(await tryAs(db, admin, "select demo_take_chat_turn($1)", [a.admin])).ok, "Users can't call demo_take_chat_turn");
+
+    // Decline → back to New; with a booked visit, approve → Vendor booked
+    {
+      const ownerB: Actor = { kind: "user", id: b.owner };
+      const adminB: Actor = { kind: "user", id: b.admin };
+      await queryAs(db, adminB, "update tickets set vendor_booked_for = now() + interval '1 day' where title = 'Kitchen sink, slow drain'");
+      await queryAs(db, ownerB, "select decide_approval((select id from approvals limit 1), 'approved')");
+      check(
+        (await queryAs<{ stage: string }>(db, adminB, "select stage from tickets where title = 'Kitchen sink, slow drain'"))[0].stage === "vendor_booked",
+        "Approval with a visit already booked → Vendor booked"
+      );
+      const sinkB = (await queryAs<{ id: string }>(db, adminB, "select id from tickets where title = 'Kitchen sink, slow drain'"))[0].id;
+      await queryAs(db, adminB, "update tickets set stage = 'waiting_for_owner' where id = $1", [sinkB]);
+      await queryAs(db, adminB, "insert into approvals (ticket_id, amount_cents, limit_cents) values ($1, 50000, 0)", [sinkB]);
+      await queryAs(db, ownerB, "select decide_approval((select id from approvals where decision = 'pending' limit 1), 'declined')");
+      check(
+        (await queryAs<{ stage: string }>(db, adminB, "select stage from tickets where id = $1", [sinkB]))[0].stage === "new",
+        "Declining sends the ticket back to New for the team"
+      );
+      await queryAs(db, adminB, "update tickets set stage = 'fixed' where id = $1", [sinkB]);
+      await queryAs(db, adminB, "insert into approvals (ticket_id, amount_cents, limit_cents) values ($1, 100, 0)", [sinkB]);
+      await queryAs(db, ownerB, "select decide_approval((select id from approvals where decision = 'pending' limit 1), 'approved')");
+      check(
+        (await queryAs<{ stage: string }>(db, adminB, "select stage from tickets where id = $1", [sinkB]))[0].stage === "fixed",
+        "A decision never moves a ticket that is past 'Waiting for owner'"
+      );
+    }
 
     // Chat-turn cap
     const turn = async (user: string, limit = 3) =>
