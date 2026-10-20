@@ -14,7 +14,8 @@ import { dollarsToCents, formatCents } from "@/lib/workspace/tokens";
 import { appTimeZone, zonedLocalToUtc } from "@/lib/utils/time";
 import { commentLimiter } from "@/lib/rate-limit";
 import { appUrl } from "@/lib/app-url";
-import { sendEmail } from "@/lib/email/mailer";
+import { deliver } from "@/lib/delivery";
+import { buildVendorWorkOrderMessage } from "@/lib/messages";
 import { buildTenantReplyEmail } from "@/lib/email/templates";
 import { logError } from "@/lib/triage/logger";
 
@@ -137,7 +138,12 @@ export async function decideApproval(formData: FormData): Promise<void> {
   if (error) {
     logError("decide_approval", error, { ticketId });
   } else {
-    await logActivity(ticketId, `${await actorName()} ${decision} the quote.`);
+    // decide_approval also moved the stage on; say where it is now.
+    const { data: ticket } = await supabase.from("tickets").select("stage").eq("id", ticketId).maybeSingle();
+    await logActivity(
+      ticketId,
+      `${await actorName()} ${decision} the quote.${ticket ? ` Status: ${STAGE_LABELS[ticket.stage]}.` : ""}`
+    );
   }
   revalidatePath(`/tickets/${ticketId}`);
 }
@@ -200,7 +206,7 @@ async function emailTenant(
   const service = createServiceClient();
   const { data: ticket } = await service
     .from("tickets")
-    .select("title, tenant_id, tenancies(email, tenant_user_id)")
+    .select("title, tenant_id, workspace_id, tenancies(name, email, tenant_user_id)")
     .eq("id", ticketId)
     .maybeSingle();
   if (!ticket) return { sent: false, reason: "Ticket not found" };
@@ -219,7 +225,17 @@ async function emailTenant(
     body,
     link: ticket.tenancies?.tenant_user_id ? appUrl(`/my-requests/${ticketId}`) : null,
   });
-  const result = await sendEmail({ to, ...mail, kind: "tenant_reply" });
+  const result = await deliver({
+    workspaceId: ticket.workspace_id,
+    ticketId,
+    channel: "email",
+    to,
+    recipientLabel: `${ticket.tenancies?.name ?? "Tenant"} (tenant) · ${to}`,
+    subject: mail.subject,
+    text: mail.text,
+    kind: "tenant_reply",
+  });
+  if (result.demo) return { sent: false, reason: "demo" };
   return result.success ? { sent: true } : { sent: false, reason: "Email could not be sent" };
 }
 
@@ -247,4 +263,74 @@ export async function addTenantReply(_prev: TicketFormState, formData: FormData)
   if (error) return { error: "Could not send your message" };
   revalidatePath(`/my-requests/${parsed.data.ticket_id}`);
   return { error: null, ok: "Sent" };
+}
+
+/**
+ * "Send to vendor": a work order with a no-account link where the vendor
+ * sees the job and submits a quote. Emailed to the vendor (in a demo
+ * workspace: shown as a preview, not delivered).
+ */
+export async function sendToVendor(_prev: TicketFormState, formData: FormData): Promise<TicketFormState> {
+  const membership = await requireTeam();
+  const ticketId = String(formData.get("ticket_id") ?? "");
+  const vendorId = String(formData.get("vendor_id") ?? "");
+  const vendorNameInput = String(formData.get("vendor_name") ?? "").trim();
+  const scope = String(formData.get("scope") ?? "").trim();
+  if (!/^[0-9a-f-]{36}$/i.test(ticketId)) return { error: "Invalid ticket" };
+  if (!scope) return { error: "Describe the job for the vendor" };
+
+  const supabase = await createClient();
+  const { data: vendor } = vendorId
+    ? await supabase.from("vendors").select("id, name, email").eq("id", vendorId).maybeSingle()
+    : { data: null };
+  const vendorName = vendor?.name ?? vendorNameInput;
+  if (!vendorName) return { error: "Choose or name a vendor" };
+
+  const entry = formData.get("entry_permission");
+  const { data: order, error } = await supabase
+    .from("work_orders")
+    .insert({
+      ticket_id: ticketId,
+      vendor_id: vendor?.id ?? null,
+      vendor_name: vendorName.slice(0, 200),
+      scope: scope.slice(0, 4000),
+      access_window: String(formData.get("access_window") ?? "").trim().slice(0, 300) || null,
+      entry_permission: entry === "yes" ? true : entry === "no" ? false : null,
+      pets: String(formData.get("pets") ?? "").trim().slice(0, 300) || null,
+      include_tenant_phone: formData.get("include_tenant_phone") === "on",
+    })
+    .select("token")
+    .single();
+  if (error || !order) return { error: "Could not create the work order" };
+
+  const { data: ticket } = await supabase
+    .from("tickets")
+    .select("title, units(unit_number, properties(address_line1))")
+    .eq("id", ticketId)
+    .maybeSingle();
+  const message = buildVendorWorkOrderMessage({
+    workspaceName: membership.workspaceName,
+    vendorName,
+    title: ticket?.title ?? "Repair",
+    address: `${ticket?.units?.properties?.address_line1 ?? ""}${ticket?.units?.unit_number ? `, Unit ${ticket.units.unit_number}` : ""}`,
+    link: appUrl(`/v/${order.token}`),
+  });
+
+  if (vendor?.email) {
+    const result = await deliver({
+      workspaceId: membership.workspaceId,
+      ticketId,
+      channel: "email",
+      to: vendor.email,
+      recipientLabel: `${vendorName} · ${vendor.email}`,
+      subject: message.subject,
+      text: message.text,
+      kind: "vendor_work_order",
+    });
+    await logActivity(ticketId, `${await actorName()} sent a work order to ${vendorName}${result.demo ? " (demo, not delivered)" : " by email"}.`);
+  } else {
+    await logActivity(ticketId, `${await actorName()} created a work order for ${vendorName}. Share the link by WhatsApp or WeChat.`);
+  }
+  revalidatePath(`/tickets/${ticketId}`);
+  return { error: null, ok: "Work order ready" };
 }

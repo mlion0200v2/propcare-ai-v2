@@ -197,7 +197,7 @@ export const ticketCommentSchema = z.object({
 
 export const ticketStageSchema = z.object({
   ticket_id: z.string().uuid("Invalid ticket"),
-  stage: z.enum(["new", "waiting_for_owner", "vendor_booked", "fixed", "closed"]),
+  stage: z.enum(["new", "waiting_for_owner", "approved", "vendor_booked", "fixed", "closed"]),
 });
 
 export const ticketVendorSchema = z.object({

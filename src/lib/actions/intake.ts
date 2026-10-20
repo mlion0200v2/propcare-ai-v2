@@ -22,6 +22,8 @@ import {
   parseContact,
 } from "@/lib/intake/codes";
 import { getCodeSender } from "@/lib/intake/senders";
+import { isDemoWorkspace } from "@/lib/delivery";
+import { buildIntakeCodeEmail } from "@/lib/email/templates";
 import { findUnitByToken, unitLabel } from "@/lib/intake/server";
 import { logError } from "@/lib/triage/logger";
 
@@ -31,6 +33,8 @@ export type IntakeState = {
   name?: string;
   contact?: string;
   masked?: string;
+  /** Demo workspace: the message that would have been sent. */
+  demoPreview?: string;
 };
 
 export type SimpleState = { error: string | null; ok?: string | null };
@@ -82,11 +86,20 @@ export async function requestIntakeCode(_prev: IntakeState, formData: FormData):
     return { ...back, error: "Something went wrong. Please try again." };
   }
 
-  const sent = await sender.send(contact.destination, {
-    code,
-    workspaceName: unit.workspace_name,
-    address: unitLabel(unit),
-  });
+  const message = { code, workspaceName: unit.workspace_name, address: unitLabel(unit) };
+  if (await isDemoWorkspace(unit.workspace_id)) {
+    // Demo homes never send anything: show the message instead.
+    const mail = buildIntakeCodeEmail(message);
+    return {
+      step: "code",
+      error: null,
+      name: nameParsed.data,
+      contact: rawContact,
+      masked: maskDestination(contact.channel, contact.destination),
+      demoPreview: `${mail.subject}\n\n${mail.text}`,
+    };
+  }
+  const sent = await sender.send(contact.destination, message);
   if (!sent.success) return { ...back, error: "We couldn't send the code. Please check the address and try again." };
 
   return {

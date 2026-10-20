@@ -5,8 +5,9 @@ import { updateSession } from "@/lib/supabase/middleware";
 const AUTH_ROUTES = ["/login", "/signup"];
 
 // Reachable without signing in. /r/<token> is the tenant link, /auth/* the
-// email-confirmation callback, /invite/<token> an invitation landing page.
-const PUBLIC_PREFIXES = ["/r/", "/auth/", "/invite/"];
+// email-confirmation callback, /invite/<token> an invitation landing page,
+// /v/<token> a vendor's work order, /try the demo (DEMO_MODE=1).
+const PUBLIC_PREFIXES = ["/r/", "/auth/", "/invite/", "/v/", "/try"];
 
 /**
  * Middleware only answers "is anyone signed in?". Which workspace and role a
