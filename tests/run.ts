@@ -31,6 +31,8 @@ import { testDemoSandbox } from "./integration/test-demo-sandbox";
 import { testUnitProfile } from "./integration/test-unit-profile";
 import { testChatWorkflow } from "./integration/test-chat-workflow";
 import { testConversationEval } from "./eval/conversation-eval";
+import { testFrameEval } from "./eval/frame-eval";
+import { testUnderstanding } from "./integration/test-understanding";
 
 import { testSupabaseConnection, testTableSchema } from "./integration/test-supabase";
 
@@ -75,6 +77,8 @@ async function main() {
   merge(await testUnitProfile()); // pure + PGlite
   merge(testChatWorkflow());
   merge(await testConversationEval()); // scripted multi-turn chats, no network
+  merge(await testUnderstanding()); // rules frame, model merge (stubbed), no network
+  merge(await testFrameEval()); // labelled first messages: understanding + questions, no network
 
   // ── Phase B: Integration tests (Supabase) ──
   console.log("\n\x1b[1m-- Phase B: Integration Tests (Supabase) --\x1b[0m");

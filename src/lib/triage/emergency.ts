@@ -49,7 +49,7 @@ const RULES: Rule[] = [
   { kind: "gas", negatable: true, pattern: /\bleaking gas\b/ },
 
   // ── Carbon monoxide ──
-  { kind: "carbon_monoxide", negatable: true, pattern: /\bcarbon monoxide\b/ },
+  { kind: "carbon_monoxide", negatable: true, pattern: /\bcarbon monoxide\b(?![^.!?]*\b(chirp\w*|battery)\b)/ },
   // "CO alarm/detector" — any state except a low-battery chirp (handled below).
   { kind: "carbon_monoxide", pattern: /\bco(2)?\s*(alarm|detector|monitor|sensor)s?\b(?![^.!?]*\bchirp)/ },
 
@@ -59,11 +59,11 @@ const RULES: Rule[] = [
   {
     kind: "fire",
     negatable: true,
-    pattern: /\bfire\b(?!\s*(exit|escape|door|extinguisher|inspection|code|hydrant|drill|safety|alarm test))/,
+    pattern: /\bfire\b(?!\s*(exit|escape|door|extinguisher|inspection|code|hydrant|drill|safety|alarm test|alarms?\b(?=[^.!?]{0,40}\b(chirp\w*|beep\w*|battery)\b)))/,
   },
   { kind: "fire", negatable: true, pattern: /\b(flames?|on fire|caught fire|burning up)\b/ },
   // Smoke, but not "smoke detector/alarm" (chirping detectors are battery issues).
-  { kind: "fire", negatable: true, pattern: /\bsmok(e|ing|y)\b(?!\s*(detector|alarm))/ },
+  { kind: "fire", negatable: true, pattern: /\bsmok(e|ing|y)\b(?!\s*(detect\w*|alarm|alrm))/ },
   // A smoke alarm actually sounding is treated as a possible fire.
   {
     kind: "fire",

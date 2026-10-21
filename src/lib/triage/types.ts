@@ -1,3 +1,5 @@
+import type { IssueFrame } from "@/lib/understanding/frame";
+
 /**
  * Phase 2A Triage Types
  *
@@ -171,6 +173,8 @@ export interface TriageClassification {
   summary?: string;
   /** Set when the ticket was escalated as an emergency (state EMERGENCY). */
   emergency?: EmergencyRecord;
+  /** What we understood (src/lib/understanding): equipment, symptom, substance… */
+  issue_frame?: IssueFrame;
 }
 
 /** What triggered an emergency escalation and whether the manager was alerted. */
