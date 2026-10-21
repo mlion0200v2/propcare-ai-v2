@@ -48,8 +48,8 @@ export function testChatWorkflow(): TestResult {
   const candidateChips = buildChatHints({ currentQuestion: "location_in_unit", triageState: "GATHER_INFO", category: "plumbing", description: "leak", profile: readUnitProfile({ rooms }), locationCandidates: ["Main bathroom (upstairs hallway)", "Ensuite"] });
   check(candidateChips.quickReplies.join("|") === "Main bathroom (upstairs hallway)|Ensuite", "chips offer just the matching rooms");
   {
-    const routeSrc = readFileSync(join(SRC, "app", "api", "triage", "chat", "route.ts"), "utf8");
-    check(/initialGathered\.leak_where = extractLeakWhere\(message\)/.test(routeSrc) && /whichRoomQuestion\(roomWord/.test(routeSrc), "first message fills in the water location and narrows the room");
+    const convSrc = readFileSync(join(SRC, "lib", "triage", "conversation.ts"), "utf8");
+    check(/gathered\.leak_where = extractLeakWhere\(message\)/.test(convSrc) && /whichRoomQuestion\(roomWord/.test(convSrc), "first message fills in the water location and narrows the room");
   }
 
   // Electrical answer: safety-critical
@@ -81,8 +81,13 @@ export function testChatWorkflow(): TestResult {
   check(isGatherComplete(notLeak), "non-leak reports skip the leak questions");
 
   const route = readFileSync(join(SRC, "app", "api", "triage", "chat", "route.ts"), "utf8");
-  check(/currentQuestion === "leak_electrical" && gathered\.leak_electrical !== "no"[\s\S]{0,200}handleEmergency\(/.test(route), "the chat escalates immediately on water near electricity");
-  check(/isWaterLeak\(message\)/.test(route) && /buildMediaPrompt\(/.test(route), "leaks flagged from the first message; media step uses the guided prompt");
+  const conv = readFileSync(join(SRC, "lib", "triage", "conversation.ts"), "utf8");
+  check(
+    /currentQuestion === "leak_electrical" && gathered\.leak_electrical !== "no"[\s\S]{0,120}kind: "emergency"/.test(conv) &&
+      /gatherStep\.kind === "emergency"[\s\S]{0,200}handleEmergency\(/.test(route),
+    "the chat escalates immediately on water near electricity"
+  );
+  check(/isWaterLeak\(message\)/.test(conv) && /buildMediaPrompt\(/.test(route), "leaks flagged from the first message; media step uses the guided prompt");
 
   // Prevention first
   const profile = readUnitProfile({ water_shutoff: "Laundry closet, blue lever", breaker_panel: "Hallway" });
