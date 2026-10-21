@@ -4,7 +4,8 @@
  * always works too; these only save typing and mistakes.
  */
 import { fixtureLabel, type UnitProfile } from "@/lib/units/profile";
-import { FIXTURES, LEAK_WHERE_OPTIONS, type FixtureId } from "./fixtures";
+import { sopByKey } from "@/lib/sops/catalog";
+import { optionsFor } from "@/lib/sops/intake";
 import type { GatheredInfo } from "./types";
 
 export interface ChatHints {
@@ -26,15 +27,26 @@ export function buildChatHints(params: {
   profile: UnitProfile;
   /** Rooms the tenant may mean (e.g. two bathrooms): offered instead of all rooms. */
   locationCandidates?: string[] | null;
-  /** Conversation so far: the leak questions' options depend on the fixture. */
+  /** Conversation so far: an SOP question's options depend on what's known (no disposal for a bathroom sink). */
   gathered?: GatheredInfo | null;
 }): ChatHints {
   const { currentQuestion, triageState, category, description, profile, locationCandidates, gathered } = params;
-  const fixture = gathered?.leak_fixture ? FIXTURES[gathered.leak_fixture as FixtureId] ?? null : null;
   const quickReplies: string[] = [];
   const notes: string[] = [];
 
   if (triageState === "DONE") return { quickReplies, notes };
+
+  if (currentQuestion?.startsWith("intake:") && gathered?.sop) {
+    const sop = sopByKey(gathered.sop.issue_key);
+    const question = sop?.intake_questions.find((q) => `intake:${q.id}` === currentQuestion);
+    if (question) {
+      quickReplies.push(...optionsFor(question, gathered.sop).map((o) => o.label));
+      if (question.slot === "brand_model") {
+        const relevant = profile.fixtures.filter((f) => f.brand || f.model);
+        quickReplies.unshift(...relevant.slice(0, 6).map(fixtureLabel));
+      }
+    }
+  }
 
   switch (currentQuestion) {
     case "location_in_unit":
@@ -47,22 +59,6 @@ export function buildChatHints(params: {
       break;
     case "current_status":
       quickReplies.push("Still happening", "Comes and goes", "Getting worse", "It stopped");
-      break;
-    case "leak_where":
-      quickReplies.push(...LEAK_WHERE_OPTIONS);
-      break;
-    case "leak_part":
-      quickReplies.push(...(fixture?.part?.options.map((o) => o.label) ?? []));
-      break;
-    case "leak_amount":
-      quickReplies.push("A few drops", "A small puddle", "It's spreading");
-      break;
-    case "leak_timing":
-      // Only options that make sense for this fixture (no "shower" for a kitchen sink).
-      quickReplies.push(...(fixture?.timing?.options.map((o) => o.label) ?? []));
-      break;
-    case "leak_electrical":
-      quickReplies.push("No", "Yes", "Not sure");
       break;
     case "brand_model": {
       const relevant = profile.fixtures.filter((f) => f.brand || f.model);

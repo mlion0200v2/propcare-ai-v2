@@ -5,6 +5,8 @@
  * Stored in tickets.classification.summary as a string.
  */
 
+import { sopByKey } from "@/lib/sops/catalog";
+import { intakeLines } from "@/lib/sops/intake";
 import type {
   GatheredInfo,
   TenantInfo,
@@ -83,7 +85,14 @@ export function generateTicketSummary(input: SummaryInput): string {
   if (gathered.brand_model) {
     parts.push(`Equipment: ${gathered.brand_model}`);
   }
-  if (gathered.leak_details_needed) {
+  const sop = gathered.sop ? sopByKey(gathered.sop.issue_key) : null;
+  if (gathered.sop && sop) {
+    parts.push(`Procedure: ${gathered.sop.title}`);
+    const details = intakeLines(sop, gathered.sop);
+    if (details.length > 0) parts.push(`Details: ${details.join("; ")}`);
+    if (gathered.sop.cause) parts.push(`Likely source: ${gathered.sop.cause.label}`);
+  } else if (gathered.leak_details_needed) {
+    // Tickets from before SOP intake
     const leak = [
       gathered.leak_part ? `where: ${gathered.leak_part}` : null,
       gathered.leak_timing ? `when: ${gathered.leak_timing}` : null,

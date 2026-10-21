@@ -667,6 +667,7 @@ async function handleFollowUp(
       if (stored.gathered?.equipment_candidates) {
         gatheredWithCategory.equipment_candidates = stored.gathered.equipment_candidates;
       }
+      if (stored.gathered?.sop) gatheredWithCategory.sop = stored.gathered.sop;
 
       // If fields were pre-extracted, find the actual next question (base or extended)
       let currentQuestion = tiResult.current_question;
@@ -820,6 +821,7 @@ async function handleFollowUp(
     if (stored.gathered?.entry_point) {
       gatheredWithCategory.entry_point = stored.gathered.entry_point;
     }
+    if (stored.gathered?.sop) gatheredWithCategory.sop = stored.gathered.sop;
 
     // If fields were pre-extracted, find the actual next question (base or extended)
     let tiCurrentQuestion = tiResult.current_question;

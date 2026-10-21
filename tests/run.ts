@@ -76,7 +76,7 @@ async function main() {
   merge(testDemoPure());
   merge(await testDemoSandbox()); // PGlite
   merge(await testUnitProfile()); // pure + PGlite
-  merge(testChatWorkflow());
+  merge(await testChatWorkflow());
   merge(await testConversationEval()); // scripted multi-turn chats, no network
   merge(await testUnderstanding()); // rules frame, model merge (stubbed), no network
   merge(await testSopCatalog()); // SOP catalog schema, references, tenant safety
