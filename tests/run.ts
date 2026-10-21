@@ -34,6 +34,7 @@ import { testConversationEval } from "./eval/conversation-eval";
 import { testFrameEval } from "./eval/frame-eval";
 import { testUnderstanding } from "./integration/test-understanding";
 import { testSopCatalog } from "./integration/test-sop-catalog";
+import { testLiveEval } from "./integration/test-live-eval";
 
 import { testSupabaseConnection, testTableSchema } from "./integration/test-supabase";
 
@@ -80,7 +81,8 @@ async function main() {
   merge(await testConversationEval()); // scripted multi-turn chats, no network
   merge(await testUnderstanding()); // rules frame, model merge (stubbed), no network
   merge(await testSopCatalog()); // SOP catalog schema, references, tenant safety
-  merge(await testFrameEval()); // labelled first messages: understanding + questions, no network
+  merge(await testFrameEval());
+  merge(await testLiveEval()); // live-tier plumbing with stub models // labelled first messages: understanding + questions, no network
 
   // ── Phase B: Integration tests (Supabase) ──
   console.log("\n\x1b[1m-- Phase B: Integration Tests (Supabase) --\x1b[0m");
