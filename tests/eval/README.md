@@ -38,6 +38,24 @@ The helper appends the message to `corpus/regressions.jsonl`. Fields you don't p
 
 The CI floors are in `FLOORS` in `frame-eval.ts`. Raise them as the rules improve; never lower one to get a build to pass.
 
+## Diagnosis and coverage
+
+```bash
+npx tsx tests/eval/diagnosis-eval.ts --failures   # every SOP × cause as a hidden scenario card
+npx tsx tests/eval/coverage.ts --write            # area × SOPs × eval cases × pass rate → reports/coverage.md
+```
+
+- **Diagnosis cards.** There is one card for each cause of each SOP. The card fixes the true cause, and a scripted tenant answers each question the way that cause would look:
+  - an option that rules the cause in;
+  - otherwise a neutral answer, or "not sure".
+
+  The chat runs end to end from a real corpus first message for that SOP. If that message contradicts the card, a neutral message is used instead. A card passes when the ticket lists the true cause first or second, with its trade and parts.
+- **Coverage matrix.** It covers every area on Simone's list: plumbing, appliances, electrical, heating and air, safety, doors/windows/locks, building, pests, outdoor and common areas, and noise. For each area it shows the SOPs, the labelled cases, how many pass, and the diagnosis cards.
+
+  A case passes when an emergency is escalated at once. Otherwise it must pick the right SOP, with no question that is re-asked, irrelevant or out of scope.
+
+CI (`testCoverage`) requires every SOP to have eval cases and every area to pass its floor, with the true cause in the top 2 on ≥ 95% of cards.
+
 ## Live tier (real model calls, opt-in)
 
 ```bash

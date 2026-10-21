@@ -25,7 +25,7 @@ function keywordHits(keywords: string[], text: string): number {
   let hits = 0;
   for (const kw of keywords) {
     const k = kw.toLowerCase();
-    if (CJK.test(k) ? text.includes(k) : new RegExp(`(^|[^\\p{L}])${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^\\p{L}])`, "u").test(text)) hits++;
+    if (CJK.test(k) ? text.includes(k) : new RegExp(`(^|[^\\p{L}])${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(e?s)?($|[^\\p{L}])`, "u").test(text)) hits++;
   }
   return hits;
 }

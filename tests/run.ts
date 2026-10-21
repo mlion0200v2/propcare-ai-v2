@@ -36,6 +36,7 @@ import { testUnderstanding } from "./integration/test-understanding";
 import { testSopCatalog } from "./integration/test-sop-catalog";
 import { testLiveEval } from "./integration/test-live-eval";
 import { testScope } from "./integration/test-scope";
+import { testCoverage } from "./eval/coverage";
 
 import { testSupabaseConnection, testTableSchema } from "./integration/test-supabase";
 
@@ -84,7 +85,8 @@ async function main() {
   merge(await testSopCatalog());
   merge(await testScope()); // scope rule: questions fit what is known // SOP catalog schema, references, tenant safety
   merge(await testFrameEval());
-  merge(await testLiveEval()); // live-tier plumbing with stub models // labelled first messages: understanding + questions, no network
+  merge(await testLiveEval()); // live-tier plumbing with stub models
+  merge(await testCoverage()); // coverage matrix and diagnosis cards // labelled first messages: understanding + questions, no network
 
   // ── Phase B: Integration tests (Supabase) ──
   console.log("\n\x1b[1m-- Phase B: Integration Tests (Supabase) --\x1b[0m");

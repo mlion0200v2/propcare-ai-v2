@@ -28,6 +28,8 @@ function normalise(text: string): string {
     .replace(/\b(l|d|j|n|m|s|c|qu)'(?=[aeiouyhàâéèêëîïôûù])/g, "$1 ")
     // Possessive / contraction 's: ceiling's → ceiling
     .replace(/'s\b/g, "")
+    // "next door" is a neighbour, not a door
+    .replace(/\bnext door\b/g, "nextdoor")
     .replace(/[^\p{L}\p{N}'/㐀-鿿]+/gu, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -155,7 +157,7 @@ function findAll<T extends string>(text: string, tokens: string[], lexicon: Reco
 }
 
 const SYMPTOM_PRIORITY: Symptom[] = [
-  "sparking", "leaking", "clogged", "no_hot_water", "no_heat", "not_cooling", "beeping", "tripping",
+  "sparking", "draft", "leaking", "clogged", "no_hot_water", "no_water", "no_heat", "not_cooling", "beeping", "tripping",
   "running", "stuck", "pests", "mold", "smell", "noisy", "damaged", "broken", "not_working",
 ];
 const SUBSTANCE_PRIORITY: Substance[] = ["gas", "smoke", "sewage", "grease", "oil", "water"];
@@ -164,7 +166,7 @@ const SUBSTANCE_PRIORITY: Substance[] = ["gas", "smoke", "sewage", "grease", "oi
 const WATER_FIXTURES = new Set<Equipment>([
   "kitchen_sink", "bathroom_sink", "sink", "faucet", "toilet", "tub_shower", "pipe", "drain",
   "water_heater", "dishwasher", "washer", "fridge", "ceiling", "wall", "floor", "roof", "ac", "window",
-  "garbage_disposal", "furnace",
+  "garbage_disposal", "furnace", "gutter", "heat_pump",
 ]);
 /** Where water ends up, not where it comes from: a named fixture wins. */
 const SURFACES = new Set<Equipment>(["ceiling", "wall", "floor"]);
@@ -172,13 +174,14 @@ const SURFACES = new Set<Equipment>(["ceiling", "wall", "floor"]);
 const POWERED = new Set<Equipment>([
   "range_hood", "stove_oven", "microwave", "fridge", "dishwasher", "garbage_disposal", "washer", "dryer",
   "water_heater", "light", "outlet", "switch", "furnace", "baseboard_heater", "thermostat", "ac",
-  "bathroom_fan", "intercom", "smoke_alarm", "co_alarm",
+  "bathroom_fan", "intercom", "smoke_alarm", "co_alarm", "heat_pump", "elevator", "garage_door",
 ]);
 const HEAT_APPLIANCES = new Set<Equipment>(["stove_oven", "dryer", "microwave"]);
 
 const EMERGENCY_MULTILINGUAL: RegExp[] = [
-  /煤气味|燃气味|闻到煤气|闻到燃气|漏气|着火|起火|失火|冒烟|火花|触电|一氧化碳|水管爆|爆管|到处都是水|淹水/,
+  /煤气味|燃气味|闻到煤气|闻到燃气|漏气|着火|起火|失火|冒烟|火花|触电|一氧化碳|水管爆|爆管|到处都是水|淹水|污水倒灌|粪水|返臭水/,
   /\b(odeur de gaz|fuite de gaz|ça sent le gaz|ca sent le gaz|feu|incendie|fumée épaisse|étincelles|electrocut|monoxyde)\b/i,
+  /\b(alarme|détecteur|avertisseur) (de fumée|incendie)\b[^.!?]{0,30}\bsonne\w*\b[^.!?]{0,20}\b(sans arrêt|toujours|fort)\b/i,
 ];
 
 export function rulesFrame(message: string): IssueFrame {
@@ -213,7 +216,8 @@ export function rulesFrame(message: string): IssueFrame {
     (first, h) => (!first || h.pos < first.pos || (h.pos === first.pos && h.score > first.score) ? h : first),
     null
   );
-  let room: Room = (roomHit?.value as Room) ?? "unknown";
+  const roomFromAll = roomHit ? null : findHits(text, tokens, ROOM_LEXICON).reduce<Hit | null>((b, h) => (!b || h.score > b.score ? h : b), null);
+  let room: Room = (roomHit?.value as Room) ?? (roomFromAll?.value as Room) ?? "unknown";
 
   // Compose: "sink" + room → kitchen/bathroom sink; "exhaust fan" in a kitchen → range hood;
   // a drain is the shower's or the sink's when they're named.
@@ -222,6 +226,11 @@ export function rulesFrame(message: string): IssueFrame {
   if (equipment === "sink" && room === "kitchen") equipment = "kitchen_sink";
   if (equipment === "sink" && room === "bathroom") equipment = "bathroom_sink";
   if (equipment === "bathroom_fan" && (room === "kitchen" || /\b(stove|cook|cooking|grease|oven)\b/.test(text))) equipment = "range_hood";
+  // A bare "fan": the bathroom's or the kitchen's, by room.
+  if (equipment === "unknown" && /\bfans?\b|ventilateur/.test(text)) {
+    if (room === "bathroom") equipment = "bathroom_fan";
+    else if (room === "kitchen" || /\b(stove|cook|cooking)\b/.test(text)) equipment = "range_hood";
+  }
 
   // Symptom: the most specific mentioned
   const symptoms = findAll(restText, restTokens, SYMPTOM_LEXICON);
@@ -241,6 +250,15 @@ export function rulesFrame(message: string): IssueFrame {
   }
   if (equipment === "toilet" && symptoms.has("running")) symptom = "running";
   if (equipment === "toilet" && /\boverflow/.test(text)) symptom = "clogged";
+  // Drains and gutters that overflow or pool are blocked.
+  if ((equipment === "drain" || equipment === "gutter") && symptom === "leaking" && /\b(overflow\w*|pool\w*|block\w*|clog\w*|déborde\w*)\b|堵/.test(text)) symptom = "clogged";
+  // Water pooling on a balcony is its drain.
+  if (equipment === "unknown" && /\b(balcony|deck|patio)\b|阳台/.test(text) && /\b(pool\w*|drain\w*|clog\w*)\b/.test(text)) {
+    equipment = "drain";
+    symptom = "clogged";
+  }
+  // Overflowing bins are a missed pickup.
+  if (equipment === "garbage" && symptom === "leaking") symptom = "not_working";
   if (equipment === "faucet" && symptom === "running") symptom = "leaking";
   if (equipment === "garbage_disposal" && (symptom === "noisy" || /\b(hum|hums|humming|buzz|buzzes|buzzing)\b/.test(text))) symptom = "stuck";
   if ((equipment === "fridge" || equipment === "ac") && (symptoms.has("not_cooling") || symptom === "no_heat")) symptom = "not_cooling";
@@ -256,8 +274,8 @@ export function rulesFrame(message: string): IssueFrame {
     equipmentInferred = true;
     if (!roomHit) room = "unknown";
   }
-  // Pests in a wall or ceiling are about the pests, not the wall.
-  if (symptom === "pests" && SURFACES.has(equipment)) equipment = "unknown";
+  // Pests are about the pests, not the wall or window they're near (garbage rooms aside).
+  if (symptom === "pests" && equipment !== "garbage") equipment = "unknown";
 
   // Substance: explicit first; oil at a hood or stove is grease
   const substances = findAll(restText, restTokens, SUBSTANCE_LEXICON);
@@ -268,7 +286,7 @@ export function rulesFrame(message: string): IssueFrame {
   if (symptom === "unknown" && (substance === "smoke" || substance === "gas" || substance === "sewage")) symptom = "smell";
   // Substance is what leaks, backs up or smells; "water pressure" isn't a leak.
   if (substance === "water" && !["leaking", "clogged", "running", "damaged", "unknown"].includes(symptom)) substance = "unknown";
-  if (symptom === "no_hot_water") substance = "none";
+  if (symptom === "no_hot_water" || symptom === "no_water") substance = "none";
   let substanceConfidence = substance === "unknown" ? 0 : 0.9;
   if (substance === "unknown") {
     if ((symptom === "leaking" || symptom === "clogged" || symptom === "running") && WATER_FIXTURES.has(equipment)) {
