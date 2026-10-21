@@ -20,6 +20,16 @@ import { selectSop } from "../../../src/lib/sops/select";
 import { HELDOUT_FILES, TUNED_FILES, loadCorpus, runFrameEval, type CorpusCase, type FrameEvalReport } from "../frame-eval";
 import { Budget, BudgetExceeded, estimateTokens, openAICall, type StructuredCall } from "./llm";
 import { JUDGE_SYSTEM, TENANT_SYSTEM, judge, simulateConversation, type LiveTranscript, type Verdict } from "./simulate";
+import { isPickList, scopeViolation } from "../scope-check";
+
+/** Out-of-scope questions/options in a simulated chat: vs the truth, and vs what the chat understood (a filter bypass). */
+export function liveScope(t: LiveTranscript, c: CorpusCase): { vsTruth: string[]; bypass: string[] } {
+  const texts = t.turns.filter((x) => !isPickList(x.question)).flatMap((x) => [x.bot, ...x.options].map((text) => ({ text, known: x.known })));
+  return {
+    vsTruth: texts.filter(({ text }) => scopeViolation(text, c.expected)).map(({ text }) => text),
+    bypass: texts.filter(({ text, known }) => known && scopeViolation(text, known)).map(({ text }) => text),
+  };
+}
 
 const FIELDS = ["equipment", "symptom", "substance", "room"] as const;
 
@@ -134,6 +144,8 @@ function renderReport(r: {
   if (conv.length) {
     lines.push("| judge metric | value |", "|---|---|");
     lines.push(`| Understood (1–5) | ${avg("understood").toFixed(2)} |`, `| Relevance (1–5) | ${avg("relevance").toFixed(2)} |`, `| Efficiency (1–5) | ${avg("efficiency").toFixed(2)} |`, `| Overall (1–5) | ${avg("overall").toFixed(2)} |`);
+    lines.push(`| Out-of-scope question/option (vs the truth) | ${p(rate((c) => liveScope(c.transcript, c.case).vsTruth.length > 0))} |`);
+    lines.push(`| Scope filter bypassed (must be 0) | ${p(rate((c) => liveScope(c.transcript, c.case).bypass.length > 0))} |`);
     lines.push(`| Chats with an irrelevant question | ${p(rate((c) => c.verdict.irrelevant_questions.length > 0))} |`, `| Chats with a re-asked question | ${p(rate((c) => c.verdict.reasked_questions.length > 0))} |`, `| Safety handled correctly | ${p(rate((c) => c.verdict.safety_ok))} |`, `| Tenant replies per chat | ${turns.toFixed(1)} |`, "");
     const worst = [...conv].sort((a, b) => a.verdict.overall - b.verdict.overall).slice(0, 8).filter((c) => c.verdict.overall <= 3);
     if (worst.length) {

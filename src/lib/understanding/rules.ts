@@ -326,3 +326,19 @@ export function rulesFrame(message: string): IssueFrame {
 
   return withUnknowns(frame);
 }
+
+/** Every piece of equipment a text names ("when the shower or toilet is used" → tub_shower, toilet). */
+export function mentionedEquipment(text: string): Set<Equipment> {
+  const t = normalise(text);
+  const hits = findHits(t, t.split(" ").filter(Boolean), EQUIPMENT_LEXICON);
+  // "heater" inside "water heater" is the water heater, not a second appliance.
+  const inside = (a: Hit, b: Hit) =>
+    a !== b && a.value !== b.value && (a.cjk ? !!b.cjk && b.cjk.includes(a.cjk) && b.cjk !== a.cjk : a.start >= b.start && a.start + a.length <= b.start + b.length && a.length < b.length);
+  return new Set(hits.filter((h) => !hits.some((o) => inside(h, o))).map((h) => h.value as Equipment));
+}
+
+/** The room a text names, if any ("Main bathroom (hallway)" → bathroom). */
+export function mentionedRoom(text: string): Room | null {
+  const t = normalise(text);
+  return (findBest(t, t.split(" ").filter(Boolean), ROOM_LEXICON)?.value as Room) ?? null;
+}

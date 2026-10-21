@@ -64,6 +64,7 @@ import {
   type IntakeState,
 } from "@/lib/sops/intake";
 import type { IntakeQuestion } from "@/lib/sops/schema";
+import type { UnitProfile } from "@/lib/units/profile";
 import type { EmergencyKind } from "./emergency";
 import type { GatheredInfo, IssueClassification, TriageClassification, TriageContext } from "./types";
 
@@ -127,13 +128,13 @@ function completeIntake(gathered: GatheredInfo): void {
 }
 
 /** Pick (or switch to) the SOP for this frame; answers to shared slots carry over. */
-function chooseSop(gathered: GatheredInfo, frame: IssueFrame, text: string): void {
+function chooseSop(gathered: GatheredInfo, frame: IssueFrame, text: string, profile?: UnitProfile | null): void {
   const choice = selectSop(frame, text);
   if (!choice) return;
   const previous = gathered.sop;
   if (previous && previous.issue_key === choice.sop.issue_key) return;
-  let state = startIntake(choice.sop, frame, choice.confidence);
-  if (previous) state = { ...state, answers: { ...previous.answers }, asked: [...previous.asked] };
+  let state = startIntake(choice.sop, frame, choice.confidence, profile);
+  if (previous) state = { ...state, answers: { ...previous.answers }, asked: [...previous.asked], fixtures: previous.fixtures };
   gathered.sop = prefillFromMessage(choice.sop, state, text);
   gathered.category ??= choice.sop.category;
   gathered.leak_details_needed = false;
@@ -189,6 +190,8 @@ export interface OpeningContext {
   classifyFallback?: FallbackClassifier;
   /** Model understanding (null/absent: rules only). */
   understander?: ModelUnderstander | null;
+  /** The unit's profile (fixture rooms keep questions in scope). */
+  profile?: UnitProfile | null;
 }
 
 const ROOM_LABEL: Record<Room, string | null> = {
@@ -296,7 +299,7 @@ export async function openConversation(message: string, ctx: OpeningContext = {}
   }
 
   // The SOP for it (its questions, minus what the message already says).
-  if (classification.confidence !== "low") chooseSop(gathered, frame, message);
+  if (classification.confidence !== "low") chooseSop(gathered, frame, message, ctx.profile ?? (ctx.rooms ? { rooms: ctx.rooms, fixtures: [] } : null));
 
   // Only reflect the problem back when it was understood; use our words, not theirs.
   const acknowledgement = buildAcknowledgement(normalizeVocabulary(message), {

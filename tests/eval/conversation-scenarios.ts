@@ -34,6 +34,8 @@ export interface Scenario {
     likelySource?: string;
     /** Strings the first reply must not contain (case-insensitive). */
     firstReplyExcludes?: string[];
+    /** Words no question or tap option may contain, anywhere in the chat (whole words, case-insensitive). */
+    neverSay?: string[];
   };
 }
 
@@ -98,6 +100,24 @@ export const SCENARIOS: Scenario[] = [
       equipment: "range hood",
       noCategoryQuestion: true,
       neverAsk: ["classify_category", "location_in_unit", "leak_where", "leak_amount", "leak_electrical"],
+    },
+  },
+  {
+    // Verbatim from Simone (main, 2026-10-21): "my fridge is leaking" → when → status → how much water →
+    // "When does it leak? (all the time, only when the shower or bath is used, when the toilet is flushed, or when an appliance runs)".
+    id: "simone-4",
+    name: "Simone transcript: my fridge is leaking → fridge questions, no shower or toilet",
+    first: "my fridge is leaking",
+    rooms: KITCHEN_ROOMS,
+    facts: { leak_part: "Inside, under the crisper drawers", "intake:fridge_freezer_ice": "No" },
+    expect: {
+      category: "appliance",
+      noCategoryQuestion: true,
+      mustAsk: ["leak_part", "intake:fridge_supply_line", "intake:fridge_freezer_ice", "intake:fridge_dispenser"],
+      neverAsk: ["location_in_unit", "leak_timing", "leak_where"],
+      optionsInclude: { leak_part: ["In front of the fridge", "Under it", "Behind it", "Inside, under the crisper drawers", "On the freezer floor"] },
+      likelySource: "defrost drain",
+      neverSay: ["shower", "bath", "toilet", "flushed"],
     },
   },
   {
@@ -234,10 +254,11 @@ export const SCENARIOS: Scenario[] = [
   },
   {
     id: "leak-fridge",
-    name: "Fridge: water under it (said up front) → ice maker line",
+    name: "Fridge: water under it (said up front), water on the supply line → ice-maker line",
     first: "there's water under my fridge",
     rooms: KITCHEN_ROOMS,
-    expect: { neverAsk: ["leak_where", "leak_timing", "leak_part"], likelySource: "ice maker" },
+    facts: { "intake:fridge_supply_line": "Water on it" },
+    expect: { neverAsk: ["leak_where", "leak_timing", "leak_part"], likelySource: "ice-maker supply line" },
   },
   {
     id: "leak-ceiling",

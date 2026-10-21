@@ -19,6 +19,7 @@ import { join } from "node:path";
 import { runScenario } from "./conversation-eval";
 import type { Scenario } from "./conversation-scenarios";
 import { createRunner, printSection, type TestResult } from "../integration/helpers";
+import { isPickList, scopeViolation } from "./scope-check";
 
 export interface CorpusCase {
   id: string;
@@ -111,6 +112,10 @@ interface CaseResult {
   irrelevant: string[];
   /** SOP chosen from the rules frame, and from the expected (gold) frame. */
   sop?: { expected: string | null; got: string | null; gotFromGold: string | null };
+  /** Questions or tap options that don't fit the true situation (shower options for a fridge…). */
+  outOfScope: string[];
+  /** …or don't fit what the chat itself understood at the time: a bypass of the scope filter. Must be empty. */
+  scopeBypass: string[];
 }
 
 export interface FrameEvalReport {
@@ -126,6 +131,10 @@ export interface FrameEvalReport {
   avgQuestions: number;
   /** Among cases with an expected SOP that aren't emergencies. */
   sopAccuracy: { fromRules: number; fromGoldFrame: number; cases: number } | null;
+  /** Chats with a question or option that doesn't fit the true situation (understanding misses included). */
+  outOfScopeRate: number;
+  /** Chats where a question or option didn't fit what the chat understood: the filter was bypassed. Must be 0. */
+  scopeBypassRate: number;
   results: CaseResult[];
 }
 
@@ -180,6 +189,16 @@ export async function runFrameEval(cases = loadCorpus()): Promise<FrameEvalRepor
       asked,
       reasked: asked.filter((a) => reask.includes(a)),
       irrelevant: asked.filter((a) => irrelevant.includes(a)),
+      outOfScope: t.turns
+        .filter((turn) => !isPickList(turn.question))
+        .flatMap((turn) => [turn.reply, ...turn.options])
+        .map((text) => (scopeViolation(text, c.expected) ? `${scopeViolation(text, c.expected)}: "${text.slice(0, 80)}"` : null))
+        .filter((x): x is string => !!x),
+      scopeBypass: t.turns
+        .filter((turn) => !isPickList(turn.question) && turn.known)
+        .flatMap((turn) => [turn.reply, ...turn.options].map((text) => ({ text, known: turn.known! })))
+        .map(({ text, known }) => (scopeViolation(text, known) ? `${scopeViolation(text, known)}: "${text.slice(0, 80)}"` : null))
+        .filter((x): x is string => !!x),
     };
     if (rulesFrame) {
       const f = rulesFrame(c.message);
@@ -222,6 +241,8 @@ export async function runFrameEval(cases = loadCorpus()): Promise<FrameEvalRepor
     irrelevantRate: pct(nonEmergency.filter((r) => r.irrelevant.length > 0).length, nonEmergency.length),
     forbiddenRate: pct(nonEmergency.filter((r) => r.reasked.length + r.irrelevant.length > 0).length, nonEmergency.length),
     avgQuestions: Math.round((nonEmergency.reduce((n, r) => n + r.asked.length, 0) / Math.max(1, nonEmergency.length)) * 10) / 10,
+    outOfScopeRate: pct(results.filter((r) => r.outOfScope.length > 0).length, results.length),
+    scopeBypassRate: pct(results.filter((r) => r.scopeBypass.length > 0).length, results.length),
     sopAccuracy: selectSop
       ? {
           fromRules: pct(sopCases.filter((r) => r.sop!.got === r.sop!.expected).length, sopCases.length),
@@ -245,6 +266,7 @@ export function summarise(r: FrameEvalReport): string {
     r.sopAccuracy
       ? `SOP selection: ${(r.sopAccuracy.fromRules * 100).toFixed(1)}% from the rules frame, ${(r.sopAccuracy.fromGoldFrame * 100).toFixed(1)}% from the labelled frame (${r.sopAccuracy.cases} cases)`
       : "SOP selection: n/a (no SOP catalog)",
+    `out-of-scope questions/options: ${(r.outOfScopeRate * 100).toFixed(1)}% of chats (vs the truth); ${(r.scopeBypassRate * 100).toFixed(1)}% vs what the chat understood (must be 0)`,
     `avg questions before photos: ${r.avgQuestions}`,
   ];
   return lines.join("\n");
@@ -252,8 +274,8 @@ export function summarise(r: FrameEvalReport): string {
 
 /** CI floors (deterministic tier, rules only). Raise them as the rules improve; never lower to pass. */
 export const FLOORS = {
-  tuned: { frameField: 0.95, emergencyRecall: 1, emergencyPrecision: 0.95, forbiddenRate: 0.03, sopFromRules: 0.9 },
-  heldout: { equipment: 0.8, emergencyRecall: 1, forbiddenRate: 0.12, sopFromGoldFrame: 0.9 },
+  tuned: { frameField: 0.95, emergencyRecall: 1, emergencyPrecision: 0.95, forbiddenRate: 0.03, sopFromRules: 0.9, outOfScope: 0.01 },
+  heldout: { equipment: 0.8, emergencyRecall: 1, forbiddenRate: 0.12, sopFromGoldFrame: 0.9, outOfScope: 0.05 },
 };
 
 export async function testFrameEval(): Promise<TestResult> {
@@ -271,6 +293,12 @@ export async function testFrameEval(): Promise<TestResult> {
   check((heldout.frameAccuracy?.equipment ?? 0) >= FLOORS.heldout.equipment, `held out: equipment accuracy ≥ ${FLOORS.heldout.equipment * 100}%`, heldout.frameAccuracy);
   if (tuned.sopAccuracy) check(tuned.sopAccuracy.fromRules >= FLOORS.tuned.sopFromRules, `corpus: SOP selection ≥ ${FLOORS.tuned.sopFromRules * 100}%`, tuned.sopAccuracy);
   if (heldout.sopAccuracy) check(heldout.sopAccuracy.fromGoldFrame >= FLOORS.heldout.sopFromGoldFrame, `held out: SOP selection from the labelled frame ≥ ${FLOORS.heldout.sopFromGoldFrame * 100}%`, heldout.sopAccuracy);
+  for (const [name, rep] of [["corpus", tuned], ["held out", heldout]] as const) {
+    const bypass = rep.results.filter((r) => r.scopeBypass.length > 0);
+    check(bypass.length === 0, `${name}: no question or option outside what the chat understood (scope filter never bypassed)`, bypass.slice(0, 3).map((r) => `${r.id}: ${r.scopeBypass[0]}`));
+  }
+  check(tuned.outOfScopeRate <= FLOORS.tuned.outOfScope, `corpus: out-of-scope questions/options ≤ ${FLOORS.tuned.outOfScope * 100}% of chats (vs the truth)`, tuned.results.filter((r) => r.outOfScope.length).map((r) => r.id));
+  check(heldout.outOfScopeRate <= FLOORS.heldout.outOfScope, `held out: out-of-scope questions/options ≤ ${FLOORS.heldout.outOfScope * 100}% of chats (vs the truth)`, heldout.results.filter((r) => r.outOfScope.length).map((r) => r.id));
   check(heldout.emergency.recall >= FLOORS.heldout.emergencyRecall, "held out: every emergency caught", heldout.emergency);
   check(heldout.forbiddenRate <= FLOORS.heldout.forbiddenRate, `held out: forbidden-question rate ≤ ${FLOORS.heldout.forbiddenRate * 100}%`, heldout.forbiddenRate);
   // Real transcripts and regressions must pass exactly.
@@ -311,6 +339,7 @@ if (isMain) {
         const misses = x.frame ? Object.entries(x.frame).filter(([, v]) => !v.ok).map(([k, v]) => `${k}: ${v.got}≠${v.expected}`) : [];
         const em = x.emergency.expected !== x.emergency.got ? [`emergency: ${x.emergency.got}≠${x.emergency.expected}`] : [];
         const q = [...x.reasked.map((a) => `re-ask ${a}`), ...x.irrelevant.map((a) => `irrelevant ${a}`)];
+        q.push(...x.outOfScope.map((v) => `out of scope: ${v}`), ...x.scopeBypass.map((v) => `SCOPE BYPASS: ${v}`));
         if (x.sop?.expected && x.sop.got !== x.sop.expected) q.push(`sop ${x.sop.got} (gold frame: ${x.sop.gotFromGold}) ≠ ${x.sop.expected}`);
         if (misses.length + em.length + q.length) console.log(`${x.id}  "${x.message}"\n    ${[...misses, ...em, ...q].join("; ")}`);
       }

@@ -35,6 +35,8 @@ interface Turn {
   question: string | null;
   reply: string;
   options: string[];
+  /** What the chat understood when it asked (absent before the understanding layer). */
+  known?: { equipment: string; substance: string; room: string };
 }
 
 interface Transcript {
@@ -113,7 +115,9 @@ export async function runScenario(s: Scenario): Promise<Transcript> {
   for (let turn = 1; turn <= 16; turn++) {
     const gathered = stored.gathered!;
     const named = canonicalQuestion(question);
-    t.turns.push({ question: named, reply, options: chipsFor(question, gathered, s.first, rooms) });
+    const f = (stored as { issue_frame?: { equipment: string; substance: string; room: string } }).issue_frame;
+    const known = f ? { equipment: f.equipment, substance: f.substance, room: f.room } : undefined;
+    t.turns.push({ question: named, reply, options: chipsFor(question, gathered, s.first, rooms), known });
     if (!question || !named) break;
     t.asked.push(named);
 
@@ -196,6 +200,10 @@ export async function evaluate(s: Scenario): Promise<ScenarioResult> {
     for (const w of words) add(`${q} has no "${w}" option`, offered.length > 0 && !offered.some((x) => lower(x).includes(lower(w))), offered);
   }
   if (e.likelySource) add(`likely source ~ "${e.likelySource}"`, lower(likelySourceLabel(t.gathered)).includes(lower(e.likelySource)), likelySourceLabel(t.gathered));
+  for (const w of e.neverSay ?? []) {
+    const said = [t.firstReply, ...t.turns.flatMap((turn) => [turn.reply, ...turn.options])].filter((x) => new RegExp(`\\b${w}\\b`, "i").test(x));
+    add(`never says "${w}"`, said.length === 0, said.slice(0, 2));
+  }
   for (const x of e.firstReplyExcludes ?? []) add(`first reply doesn't say "${x}"`, !lower(t.firstReply).includes(lower(x)), t.firstReply.slice(0, 160));
 
   return { id: s.id, name: s.name, passed: checks.every((c) => c.ok), checks, asked: t.asked };
