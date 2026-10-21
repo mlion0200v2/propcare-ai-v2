@@ -1,4 +1,5 @@
 import type { IssueFrame } from "@/lib/understanding/frame";
+import type { IntakeState } from "@/lib/sops/intake";
 
 /**
  * Phase 2A Triage Types
@@ -32,12 +33,14 @@ export interface GatheredInfo {
   leak_electrical?: string | null;
   /** Unit-profile rooms the tenant may mean ("bathroom" → hallway bathroom, ensuite). */
   location_candidates?: string[] | null;
-  /** Which fixture is leaking (kitchen_sink, toilet, …; see fixtures.ts). */
+  /** Older tickets (before SOP intake): which fixture was leaking. */
   leak_fixture?: string | null;
-  /** "Where on the fixture?" answer (fixture-specific options). */
+  /** Older tickets (before SOP intake): "Where on the fixture?" answer. */
   leak_part?: string | null;
-  /** Likely source from the answers: shown on the summary and work order, steers SOPs. */
-  leak_likely_source?: { id: string; label: string } | null;
+  /** Likely cause from the intake answers: shown on the summary and work order, steers retrieval. */
+  leak_likely_source?: { id: string; label: string; sop_query?: string; prevention?: string } | null;
+  /** The SOP driving the questions, its answers and the likely cause (src/lib/sops/intake.ts). */
+  sop?: IntakeState | null;
 }
 
 export interface TriageContext {

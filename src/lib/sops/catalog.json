@@ -31,7 +31,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "sink_part",
@@ -95,7 +96,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "sink_timing",
@@ -122,7 +124,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -144,7 +147,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -154,21 +158,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -205,7 +215,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -370,6 +381,7 @@
     "Photo under the sink showing shut-off valves and leak source",
     "Short video if the leak comes and goes"
    ],
+   "ask_safety_check": false,
    "strong_keywords": [
     "base of the",
     "around the base",
@@ -406,7 +418,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "sink_part",
@@ -470,7 +483,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "sink_timing",
@@ -497,7 +511,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -519,7 +534,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -529,21 +545,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -580,7 +602,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -744,6 +767,7 @@
     "Photo of shut-off valves after turning them off",
     "Photo of any wet flooring or cabinet damage"
    ],
+   "ask_safety_check": false,
    "strong_keywords": [
     "won't turn off",
     "turn off",
@@ -780,7 +804,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "sink_part",
@@ -844,7 +869,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "sink_timing",
@@ -871,7 +897,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -893,7 +920,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -903,21 +931,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -954,7 +988,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -1120,6 +1155,7 @@
     "Photo of shut-off valves",
     "Video of active dripping if present"
    ],
+   "ask_safety_check": false,
    "strong_keywords": [
     "under",
     "underneath",
@@ -1143,7 +1179,6 @@
     ],
     "symptoms": [
      "running",
-     "leaking",
      "noisy"
     ],
     "substances": [
@@ -1177,7 +1212,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -1214,7 +1250,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -1278,6 +1315,7 @@
     "Video showing the running water sound",
     "Photo of any water on the floor"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -1319,7 +1357,8 @@
        "value": "no",
        "match": "\\b(no|slow|not at all)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "plunger_tried",
@@ -1341,7 +1380,8 @@
        "value": "not_yet",
        "match": "\\b(no|not yet)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "other_toilet",
@@ -1358,7 +1398,8 @@
        "value": "no",
        "match": "\\b(no|only)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -1395,7 +1436,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -1444,6 +1486,7 @@
     "Photo of the water level in the bowl",
     "Photo of any overflow on the floor"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -1472,7 +1515,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "toilet_part",
@@ -1504,7 +1548,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "toilet_timing",
@@ -1526,7 +1571,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -1548,7 +1594,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -1558,21 +1605,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -1609,7 +1662,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -1729,6 +1783,7 @@
     "Photo of the shut-off valve",
     "Video showing where the water appears"
    ],
+   "ask_safety_check": false,
    "strong_keywords": [
     "base",
     "bottom",
@@ -1766,7 +1821,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "clog_severity",
@@ -1783,7 +1839,8 @@
        "value": "slow",
        "match": "\\bslow"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "other_drains",
@@ -1800,7 +1857,8 @@
        "value": "several",
        "match": "\\b(yes|others?|all|several)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -1837,7 +1895,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -1887,6 +1946,7 @@
     "Photo of the sink basin with standing water",
     "Photo under the sink"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -1928,7 +1988,8 @@
        "value": "slow",
        "match": "\\bslow"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "other_drains",
@@ -1945,7 +2006,8 @@
        "value": "several",
        "match": "\\b(yes|others?|all|several)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -1982,7 +2044,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -2028,6 +2091,7 @@
     "Photo of standing water in the tub or shower",
     "Photo of drain cover area"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -2073,7 +2137,8 @@
        "value": "one",
        "match": "\\b(one|just|only)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "pressure_temp",
@@ -2095,7 +2160,8 @@
        "value": "both",
        "match": "\\bboth\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -2132,7 +2198,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -2161,6 +2228,7 @@
     "Short video showing the weak water flow",
     "Note whether hot, cold, or both are affected"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -2200,7 +2268,8 @@
        "value": "one",
        "match": "\\b(one|just|only)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "hot_pattern",
@@ -2222,7 +2291,8 @@
        "value": "lukewarm",
        "match": "\\b(lukewarm|warm|tepid)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "heater_location",
@@ -2244,7 +2314,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -2281,7 +2352,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -2311,6 +2383,7 @@
     "Photo of the water heater display if visible",
     "Photo of any warning lights or labels"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "hot water",
     "热水",
@@ -2364,7 +2437,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -2386,7 +2460,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -2396,21 +2471,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -2447,7 +2528,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -2523,6 +2605,7 @@
     "Photo of the shut-off valve if accessible",
     "Video showing how fast the water is leaking"
    ],
+   "ask_safety_check": false,
    "strong_keywords": [
     "leak",
     "leaking",
@@ -2570,6 +2653,7 @@
     "Photo of the valve before and after turning",
     "Video showing whether the leak changes"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -2613,7 +2697,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -2650,7 +2735,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -2680,6 +2766,7 @@
     "Photo of the breaker label area",
     "Photo of the affected outlet or device"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -2707,7 +2794,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "outlet_scope",
@@ -2724,7 +2812,8 @@
        "value": "several",
        "match": "\\b(several|all|many|few|half)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "outlet_gfci",
@@ -2751,7 +2840,8 @@
       "scope": [
        "several"
       ]
-     }
+     },
+     "prefill": false
     },
     {
      "id": "onset",
@@ -2788,7 +2878,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -2838,6 +2929,7 @@
     "Photo of the outlet",
     "Photo of any GFCI outlet you reset"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -2863,7 +2955,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "flicker_scope",
@@ -2880,7 +2973,8 @@
        "value": "several",
        "match": "\\b(several|all|many|whole)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -2917,7 +3011,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -2945,6 +3040,7 @@
     "Short video of the flickering",
     "Photo of the switch and fixture"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "flicker",
     "flickering",
@@ -2976,7 +3072,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -3013,7 +3110,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -3041,6 +3139,7 @@
     "Photo of the switch",
     "Video showing what happens when toggled"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "switch",
     "开关",
@@ -3087,7 +3186,8 @@
        "value": "all",
        "match": "\\b(whole|all|everything|entire)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -3124,7 +3224,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -3155,6 +3256,7 @@
     "Photo of breaker panel labels",
     "List of rooms or fixtures affected"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "half",
     "no power",
@@ -3223,7 +3325,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -3254,6 +3357,7 @@
     "Photo of the outlet or switch from a safe distance",
     "Photo of breaker label if known"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -3292,7 +3396,8 @@
        "value": "no",
        "match": "\\b(no|can'?t|too high|ladder)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -3329,7 +3434,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -3358,6 +3464,7 @@
     "Photo of the alarm",
     "Photo of battery compartment if accessible"
    ],
+   "ask_safety_check": false,
    "strong_keywords": []
   },
   {
@@ -3407,6 +3514,7 @@
     "Photo from a safe distance if possible",
     "Photo of breaker label if known"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -3446,7 +3554,8 @@
        "value": "no",
        "match": "\\b(no|not sure|don'?t know)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "heat_scope",
@@ -3463,7 +3572,8 @@
        "value": "one",
        "match": "\\b(one|just|only)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -3500,7 +3610,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -3529,6 +3640,7 @@
     "Photo of thermostat settings",
     "Photo of furnace area from a safe distance"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -3567,7 +3679,8 @@
        "value": "off",
        "match": "\\b(doesn'?t|won'?t|not) (turn on|start)|\\bdead\\b|\\bnothing\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -3604,7 +3717,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -3616,7 +3730,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -3646,6 +3761,7 @@
     "Photo of thermostat settings",
     "Photo of indoor unit or vent"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -3685,7 +3801,8 @@
        "value": "no",
        "match": "^\\s*(no|nope)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -3714,6 +3831,7 @@
     "Photo of thermostat display",
     "Note indoor temperature if known"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -3751,7 +3869,8 @@
        "value": "on",
        "match": "\\b(on|lit|shows)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -3788,7 +3907,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -3817,6 +3937,7 @@
     "Photo of thermostat display",
     "Video of button presses if helpful"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -3868,7 +3989,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -3905,7 +4027,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -3935,6 +4058,7 @@
     "Short video with sound",
     "Photo of the unit if visible"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "bang",
     "banging",
@@ -3985,7 +4109,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -3995,21 +4120,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -4046,7 +4177,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -4076,6 +4208,7 @@
     "Photo of the leak area",
     "Video showing where water is coming from"
    ],
+   "ask_safety_check": false,
    "strong_keywords": []
   },
   {
@@ -4102,7 +4235,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "heater_dial",
@@ -4119,7 +4253,8 @@
        "value": "no",
        "match": "\\b(no|not sure)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "other_heaters",
@@ -4136,7 +4271,8 @@
        "value": "all",
        "match": "\\b(no|none|all)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -4173,7 +4309,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -4202,6 +4339,7 @@
     "Photo of the radiator or baseboard",
     "Note whether only one room is affected"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -4229,7 +4367,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "fan_behaviour",
@@ -4251,7 +4390,8 @@
        "value": "loud",
        "match": "\\b(loud|noisy|rattl|squeal)"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -4288,7 +4428,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -4315,6 +4456,7 @@
     "Photo of fan cover and switch",
     "Short video with sound"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -4355,7 +4497,8 @@
        "value": "no",
        "match": "\\b(no|not sure|how)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "sink_backup",
@@ -4372,7 +4515,8 @@
        "value": "no",
        "match": "\\b(no|slow)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -4409,7 +4553,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -4421,7 +4566,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -4450,6 +4596,7 @@
     "Photo of standing water",
     "Photo of filter area"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -4499,7 +4646,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "dishwasher_timing",
@@ -4526,7 +4674,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -4548,7 +4697,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -4558,21 +4708,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -4609,7 +4765,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -4621,7 +4778,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -4722,6 +4880,7 @@
     "Photo of the leak location",
     "Video during or just after a cycle if safe"
    ],
+   "ask_safety_check": false,
    "strong_keywords": []
   },
   {
@@ -4771,7 +4930,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -4793,7 +4953,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -4830,7 +4991,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -4842,7 +5004,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -4903,6 +5066,7 @@
     "Photo of the water on the floor",
     "Photo of the back or bottom area if visible"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "water",
     "leak",
@@ -4948,7 +5112,8 @@
        "value": "no",
        "match": "\\b(no|both|warm)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "fridge_power",
@@ -4965,7 +5130,8 @@
        "value": "no",
        "match": "\\b(no|off|dark)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -5002,7 +5168,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -5014,7 +5181,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -5043,6 +5211,7 @@
     "Photo of temperature setting",
     "Photo of fridge interior"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "warm",
     "not cold",
@@ -5094,7 +5263,8 @@
        "value": "loud",
        "match": "\\b(bang|loud|noise)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -5131,7 +5301,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -5143,7 +5314,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -5172,6 +5344,7 @@
     "Photo of control panel or error code",
     "Video showing what happens when cycle starts"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -5226,7 +5399,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "washer_timing",
@@ -5253,7 +5427,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -5275,7 +5450,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -5285,21 +5461,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -5336,7 +5518,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -5348,7 +5531,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -5449,6 +5633,7 @@
     "Photo of leak source",
     "Photo of washer supply hoses if visible"
    ],
+   "ask_safety_check": false,
    "strong_keywords": []
   },
   {
@@ -5486,7 +5671,8 @@
        "value": "no",
        "match": "\\b(no|not)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -5523,7 +5709,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -5535,7 +5722,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -5567,6 +5755,7 @@
     "Photo of control settings",
     "Note whether the drum spins normally"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -5605,7 +5794,8 @@
        "value": "no",
        "match": "\\b(no|dead|nothing)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "oven_error",
@@ -5617,7 +5807,8 @@
        "value": "none",
        "match": "^\\s*(none|no)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -5654,7 +5845,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -5666,7 +5858,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -5697,6 +5890,7 @@
     "Photo of control panel and any error code",
     "Photo of the oven interior if relevant"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "oven",
     "four",
@@ -5743,7 +5937,8 @@
        "value": "no",
        "match": "^\\s*(no|nope)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -5772,6 +5967,7 @@
     "Photo of the lock if it appears damaged",
     "Your current location and contact number"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "locked out",
     "locked myself out",
@@ -5822,7 +6018,8 @@
        "value": "other",
        "match": "\\b(other|bedroom|bathroom)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "door_locks",
@@ -5839,7 +6036,8 @@
        "value": "no",
        "match": "\\b(no|can'?t|won'?t)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -5876,7 +6074,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -5906,6 +6105,7 @@
     "Photo of the lock and strike plate",
     "Video showing the sticking behavior"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "deadbolt",
     "hard to turn",
@@ -5947,7 +6147,8 @@
        "value": "other",
        "match": "\\b(other|bedroom|bathroom|patio)\\b"
       }
-     ]
+     ],
+     "prefill": true
     }
    ],
    "likely_causes": [],
@@ -5974,6 +6175,7 @@
     "Photo of the key in the lock",
     "Photo of any visible damage"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "key is stuck",
     "key stuck",
@@ -6014,7 +6216,8 @@
        "value": "no",
        "match": "\\b(no|dark|nothing)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -6042,6 +6245,7 @@
     "Photo of the lock exterior",
     "Video showing unresponsive keypad or error lights"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "keypad",
     "electronic",
@@ -6070,7 +6274,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "pest_amount",
@@ -6087,7 +6292,8 @@
        "value": "many",
        "match": "\\b(lot|many|every day|hundreds|trail)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -6124,7 +6330,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -6153,6 +6360,7 @@
     "Photo of the ants and where they are entering",
     "Note which rooms are affected"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "ant",
     "ants",
@@ -6181,7 +6389,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "rodent_signs_seen",
@@ -6203,7 +6412,8 @@
        "value": "seen",
        "match": "\\b(saw|seen|mouse|rat)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -6240,7 +6450,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -6271,6 +6482,7 @@
     "Photo of droppings or gnaw marks",
     "Note where and when activity is noticed"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "mice",
     "mouse",
@@ -6319,7 +6531,8 @@
        "value": "spots",
        "match": "\\b(spot|stain)"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -6356,7 +6569,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -6387,6 +6601,7 @@
     "Close-up photo of signs on mattress seams or bed frame",
     "Photo of any visible insects or stains"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "bed bug",
     "bed bugs",
@@ -6425,7 +6640,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "ceiling_above",
@@ -6457,7 +6673,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "ceiling_timing",
@@ -6484,7 +6701,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -6506,7 +6724,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -6516,21 +6735,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -6567,7 +6792,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -6684,6 +6910,7 @@
     "Photo of the stain or drip",
     "Video if dripping is active"
    ],
+   "ask_safety_check": false,
    "strong_keywords": []
   },
   {
@@ -6713,7 +6940,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "amount",
@@ -6735,7 +6963,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -6745,21 +6974,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -6796,7 +7031,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -6838,6 +7074,7 @@
     "Photo of leak area and any ceiling damage",
     "Video showing leak intensity"
    ],
+   "ask_safety_check": false,
    "strong_keywords": [
     "rain",
     "raining",
@@ -6870,7 +7107,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "amount",
@@ -6892,7 +7130,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -6929,7 +7168,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -6958,6 +7198,7 @@
     "Photo of leak path",
     "Video during rain if possible"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "rain",
     "water"
@@ -6988,7 +7229,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "crack_growing",
@@ -7010,7 +7252,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -7047,7 +7290,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -7077,6 +7321,7 @@
     "Photos with a ruler or coin for scale",
     "Note location and whether the crack changed recently"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -7125,7 +7370,8 @@
        "value": "inside",
        "match": "\\b(bathroom|bedroom|inside|other)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "door_secure",
@@ -7142,7 +7388,8 @@
        "value": "no",
        "match": "\\b(no|can'?t|won'?t)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -7179,7 +7426,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -7209,6 +7457,7 @@
     "Photo of the door edge and frame",
     "Video showing where it binds"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "won't close",
     "track",
@@ -7244,7 +7493,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "mold_size",
@@ -7261,7 +7511,8 @@
        "value": "large",
        "match": "\\b(big|large|bigger|wall)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -7298,7 +7549,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -7328,6 +7580,7 @@
     "Photo of the affected area",
     "Note size and whether there is an odor"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -7368,6 +7621,7 @@
     "Photo or video of the emergency area from a safe distance",
     "Note what shutoffs you used, if any"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -7400,7 +7654,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "sink_part",
@@ -7464,7 +7719,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "sink_timing",
@@ -7491,7 +7747,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -7513,7 +7770,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -7523,21 +7781,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -7574,7 +7838,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -7743,6 +8008,7 @@
     "Photo of the faucet and handle",
     "Photo of the shut-off valves under the sink"
    ],
+   "ask_safety_check": false,
    "strong_keywords": []
   },
   {
@@ -7774,7 +8040,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "sink_part",
@@ -7838,7 +8105,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "sink_timing",
@@ -7865,7 +8133,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -7887,7 +8156,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -7897,21 +8167,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -7948,7 +8224,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -8112,6 +8389,7 @@
     "Photo under the sink showing the P-trap",
     "Short video of where the water appears while draining"
    ],
+   "ask_safety_check": false,
    "strong_keywords": [
     "drain pipe",
     "trap",
@@ -8147,7 +8425,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "sink_part",
@@ -8211,7 +8490,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "sink_timing",
@@ -8238,7 +8518,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -8260,7 +8541,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -8270,21 +8552,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -8321,7 +8609,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -8485,6 +8774,7 @@
     "Photo of both valves and hoses",
     "Video showing whether the leak stops after closing the valves"
    ],
+   "ask_safety_check": false,
    "strong_keywords": [
     "hose",
     "supply",
@@ -8533,7 +8823,8 @@
        "value": "slow",
        "match": "\\b(slow|smell)"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -8570,7 +8861,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -8604,6 +8896,7 @@
     "Short video of the sound when switched on",
     "Photo of the unit under the sink"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -8648,7 +8941,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -8658,21 +8952,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -8709,7 +9009,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -8736,6 +9037,7 @@
     "Photo of the unit from below",
     "Photo showing where the water drips"
    ],
+   "ask_safety_check": false,
    "strong_keywords": [
     "leak",
     "leaking"
@@ -8784,7 +9086,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -8821,7 +9124,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -8848,6 +9152,7 @@
     "Photo of the hose connection under the sink",
     "Video during a drain if safe"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "hose under the sink"
    ]
@@ -8895,7 +9200,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -8932,7 +9238,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -8993,6 +9300,7 @@
     "Photo inside the tank (lid off)",
     "Short video of the running water"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "hiss",
     "hissing",
@@ -9045,6 +9353,7 @@
     "Short video of the fan sound",
     "Photo of the model label (inside, behind the filter)"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -9089,7 +9398,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -9126,7 +9436,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -9169,6 +9480,7 @@
     "Photo of the tank's side pipe",
     "Photo of the label on the tank"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "relief",
     "side pipe",
@@ -9204,7 +9516,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "tub_part",
@@ -9241,7 +9554,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "tub_timing",
@@ -9263,7 +9577,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "amount",
@@ -9285,7 +9600,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -9322,7 +9638,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -9416,6 +9733,7 @@
     "Photo of the caulking around the tub",
     "Photo of where water collects on the floor"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "floor",
     "caulk",
@@ -9453,7 +9771,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "tub_part",
@@ -9490,7 +9809,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "tub_timing",
@@ -9512,7 +9832,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -9549,7 +9870,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -9641,6 +9963,7 @@
     "Short video of the drip",
     "Photo of the handle and spout"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "spout",
     "shower head"
@@ -9690,7 +10013,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "hood_where",
@@ -9717,7 +10041,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "hood_filters_cleaned",
@@ -9747,7 +10072,8 @@
        "unknown",
        "not_sure"
       ]
-     }
+     },
+     "prefill": false
     },
     {
      "id": "hood_when",
@@ -9781,7 +10107,8 @@
        "not_sure",
        "unknown"
       ]
-     }
+     },
+     "prefill": true
     },
     {
      "id": "onset",
@@ -9818,7 +10145,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -9934,6 +10262,7 @@
     "Where the drip comes from",
     "The stovetop under it"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "grease",
     "oil",
@@ -9998,7 +10327,8 @@
        "value": "weak",
        "match": "\\b(weak|doesn'?t pull|smoke|suction)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "hood_speeds",
@@ -10022,7 +10352,8 @@
        "light_only",
        "hums"
       ]
-     }
+     },
+     "prefill": false
     },
     {
      "id": "onset",
@@ -10059,7 +10390,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -10071,7 +10403,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -10159,6 +10492,7 @@
     "The hood's buttons and the model sticker (usually behind the filters)",
     "A short video with sound if it's noisy"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "fan",
     "loud",
@@ -10202,7 +10536,8 @@
        "value": "no",
        "match": "^\\s*(no|nope)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "hood_bulb_tried",
@@ -10224,7 +10559,8 @@
        "value": "cant_reach",
        "match": "\\b(can'?t|reach|high)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -10236,7 +10572,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -10261,6 +10598,7 @@
    "photos": [
     "The light cover and the old bulb"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "light",
     "bulb",
@@ -10307,7 +10645,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "burner_scope",
@@ -10324,7 +10663,8 @@
        "value": "all",
        "match": "\\b(all|none|every)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -10361,7 +10701,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -10373,7 +10714,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -10400,6 +10742,7 @@
     "The burner and knob",
     "The model sticker (inside the oven door or drawer)"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "burner",
     "element",
@@ -10448,7 +10791,8 @@
        "value": "loud",
        "match": "\\b(loud|buzz|noise)"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -10485,7 +10829,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -10497,7 +10842,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -10521,6 +10867,7 @@
     "The microwave's control panel",
     "The model sticker (inside the door)"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -10558,7 +10905,8 @@
        "value": "no",
        "match": "\\b(no|dead|nothing)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "dw_door",
@@ -10575,7 +10923,8 @@
        "value": "not_sure",
        "match": "\\b(not sure|no)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -10612,7 +10961,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -10624,7 +10974,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -10650,6 +11001,7 @@
     "The control panel",
     "The model sticker (on the door's edge)"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -10687,7 +11039,8 @@
        "value": "no",
        "match": "\\b(no|dead|nothing)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -10724,7 +11077,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -10736,7 +11090,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -10760,6 +11115,7 @@
    "photos": [
     "The control panel and any error code"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "won't start",
     "won't turn on",
@@ -10803,7 +11159,8 @@
        "value": "no",
        "match": "\\b(no|dead|nothing)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "lint_cleaned",
@@ -10820,7 +11177,8 @@
        "value": "no",
        "match": "\\b(no|not)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -10857,7 +11215,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "brand_model",
@@ -10869,7 +11228,8 @@
        "value": "unknown",
        "match": "^\\s*(unknown|no idea|don'?t know|not sure|can'?t see)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -10894,6 +11254,7 @@
     "The control panel",
     "The lint filter"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "won't start",
     "dead",
@@ -10938,7 +11299,8 @@
        "match": "\\b(loud|continuous|alarm|going off|won'?t stop)\\b",
        "emergency": "carbon_monoxide"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "alarm_reach",
@@ -10955,7 +11317,8 @@
        "value": "no",
        "match": "\\b(no|can'?t|too high|ladder)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -10992,7 +11355,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -11017,6 +11381,7 @@
    "photos": [
     "The alarm's label (back or side) if it's safe to see"
    ],
+   "ask_safety_check": false,
    "strong_keywords": []
   },
   {
@@ -11060,7 +11425,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "gfci_reset",
@@ -11082,7 +11448,8 @@
       "gfci": [
        "yes"
       ]
-     }
+     },
+     "prefill": false
     },
     {
      "id": "onset",
@@ -11119,7 +11486,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [
@@ -11158,6 +11526,7 @@
     "The outlet with the buttons",
     "Which outlets are dead"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "gfci",
     "reset",
@@ -11192,7 +11561,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "bulb_tried",
@@ -11214,7 +11584,8 @@
        "value": "cant_reach",
        "match": "\\b(can'?t|reach|high|ladder)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -11251,7 +11622,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -11278,6 +11650,7 @@
     "The fixture",
     "The switch"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "fixture",
     "bulb",
@@ -11311,7 +11684,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "window_issue",
@@ -11338,7 +11712,8 @@
        "value": "fogged",
        "match": "\\b(fog|condensation|between)"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "window_secure",
@@ -11361,7 +11736,8 @@
        "wont_close",
        "glass"
       ]
-     }
+     },
+     "prefill": false
     },
     {
      "id": "onset",
@@ -11398,7 +11774,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -11427,6 +11804,7 @@
     "The window from inside",
     "The latch or crank close up"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -11450,7 +11828,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "pest_amount",
@@ -11467,7 +11846,8 @@
        "value": "many",
        "match": "\\b(lot|many|every day|hundreds)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -11504,7 +11884,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -11532,6 +11913,7 @@
     "A photo of one (a trap or tape is fine)",
     "Where you see them"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "roach",
     "roaches",
@@ -11579,7 +11961,8 @@
        "value": "inside",
        "match": "\\b(inside|in the)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -11616,7 +11999,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -11642,6 +12026,7 @@
    "photos": [
     "A photo of the nest from a safe distance"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "wasp",
     "wasps",
@@ -11683,7 +12068,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "smell_where",
@@ -11705,7 +12091,8 @@
        "value": "everywhere",
        "match": "\\b(whole|everywhere|all)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "drain_used",
@@ -11727,7 +12114,8 @@
       "where": [
        "drain"
       ]
-     }
+     },
+     "prefill": false
     },
     {
      "id": "onset",
@@ -11764,7 +12152,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -11789,6 +12178,7 @@
    "photos": [
     "The drain where the smell is strongest"
    ],
+   "ask_safety_check": true,
    "strong_keywords": [
     "smell",
     "smells",
@@ -11837,7 +12227,8 @@
        "value": "sound",
        "match": "\\b(sound|hear|static)\\b"
       }
-     ]
+     ],
+     "prefill": true
     },
     {
      "id": "onset",
@@ -11874,7 +12265,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -11897,6 +12289,7 @@
    "photos": [
     "The intercom handset or panel"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -11923,7 +12316,8 @@
      "id": "room",
      "slot": "room",
      "question": "Which room is it in?",
-     "options": []
+     "options": [],
+     "prefill": false
     },
     {
      "id": "floor_wet",
@@ -11940,7 +12334,8 @@
        "value": "no",
        "match": "^\\s*(no|dry)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -11977,7 +12372,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -12003,6 +12399,7 @@
     "The damaged area",
     "A wider photo of the room"
    ],
+   "ask_safety_check": true,
    "strong_keywords": []
   },
   {
@@ -12094,7 +12491,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "amount",
@@ -12116,7 +12514,8 @@
        "value": "spreading",
        "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "electrical_near",
@@ -12126,21 +12525,27 @@
       {
        "label": "No",
        "value": "no",
-       "match": "^\\s*(no|nope|nah|n)\\b|\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|electric\\w*)\\b"
+       "match": "\\b(no|not near|nowhere near|nothing) (outlets?|lights?|plugs?|sockets?|electric\\w*)\\b"
       },
       {
        "label": "Yes",
        "value": "yes",
-       "match": "\\b(yes|yeah|yep|outlets?|lights?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?)\\b",
+       "match": "\\b(outlets?|lights?|lamps?|plugs?|plugged|sockets?|electric\\w*|switch(es)?|wires?|wiring|power bar|extension cord|appliance)\\b|^\\s*(yes|yeah|yep|y|it is|close|near)\\b",
        "emergency": "water_electrical"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|nah|n)\\b"
       },
       {
        "label": "Not sure",
        "value": "not_sure",
-       "match": "\\b(not sure|unsure|don'?t know|maybe)\\b",
+       "match": ".",
        "emergency": "unconfirmed_safety"
       }
-     ]
+     ],
+     "prefill": false
     },
     {
      "id": "onset",
@@ -12177,7 +12582,8 @@
        "value": "not_sure",
        "match": "^\\s*(not sure|unsure|don'?t know|no idea|idk)\\b"
       }
-     ]
+     ],
+     "prefill": false
     }
    ],
    "likely_causes": [],
@@ -12205,6 +12611,7 @@
     "Where the water is",
     "Anything above it (ceiling, pipes)"
    ],
+   "ask_safety_check": false,
    "strong_keywords": []
   }
  ]

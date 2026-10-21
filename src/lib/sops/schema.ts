@@ -29,6 +29,11 @@ export const IntakeQuestionSchema = z.object({
   options: z.array(IntakeOptionSchema),
   /** Ask only when these slots have these values. */
   only_if: SlotCondition.optional(),
+  /**
+   * Fill from the first message ("leaks under the sink when I drain it")? Only for descriptive
+   * questions; a ceiling leak "in the bathroom" says nothing about what's above.
+   */
+  prefill: z.boolean(),
 });
 
 export const CauseSchema = z.object({
@@ -67,6 +72,8 @@ export const SopSchema = z.object({
   tenant_steps: z.array(z.string()),
   escalate_if: z.array(z.string()),
   photos: z.array(z.string()),
+  /** Ask the generic "sparks, burning smell, warmth?" check after intake (not for alarms, or when electrics were asked). */
+  ask_safety_check: z.boolean(),
 });
 
 export const CatalogSchema = z.object({ version: z.literal(2), sops: z.array(SopSchema) }).passthrough();

@@ -62,6 +62,28 @@ function chipsFor(question: string | null, gathered: GatheredInfo, description: 
   return hints.quickReplies;
 }
 
+/** SOP intake questions → the names scenarios use (they predate SOP intake). Others keep their intake id. */
+const QUESTION_ALIAS: Record<string, string> = {
+  "intake:leak_where": "leak_where",
+  "intake:amount": "leak_amount",
+  "intake:electrical_near": "leak_electrical",
+  "intake:onset": "started_when",
+  "intake:status": "current_status",
+  "intake:brand_model": "brand_model",
+  ...Object.fromEntries(
+    ["sink", "toilet", "tub", "water_heater", "dishwasher", "washer", "fridge"].flatMap((f) => [
+      [`intake:${f}_part`, "leak_part"],
+      [`intake:${f}_timing`, "leak_timing"],
+    ])
+  ),
+  "intake:ceiling_above": "leak_part",
+  "intake:ceiling_timing": "leak_timing",
+};
+
+function canonicalQuestion(question: string | null): string | null {
+  return question ? QUESTION_ALIAS[question] ?? question : null;
+}
+
 export async function runScenario(s: Scenario): Promise<Transcript> {
   const rooms = s.rooms ?? [];
   const fallback = s.fallback ?? null;
@@ -90,11 +112,12 @@ export async function runScenario(s: Scenario): Promise<Transcript> {
   let reply = open.reply;
   for (let turn = 1; turn <= 16; turn++) {
     const gathered = stored.gathered!;
-    t.turns.push({ question, reply, options: chipsFor(question, gathered, s.first, rooms) });
-    if (!question) break;
-    t.asked.push(question);
+    const named = canonicalQuestion(question);
+    t.turns.push({ question: named, reply, options: chipsFor(question, gathered, s.first, rooms) });
+    if (!question || !named) break;
+    t.asked.push(named);
 
-    const answer = s.facts?.[question] ?? DEFAULT_ANSWERS[question] ?? "not sure";
+    const answer = s.facts?.[named] ?? s.facts?.[question] ?? DEFAULT_ANSWERS[named] ?? "not sure";
     const emergency = conversation.turnEmergency(answer, "GATHER_INFO", stored);
     if (emergency) {
       t.emergencyAtTurn = turn + 1;

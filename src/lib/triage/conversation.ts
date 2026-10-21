@@ -29,9 +29,6 @@ import {
   getNextExtendedQuestion,
   getExtendedQuestionText,
   processExtendedAnswer,
-  isWaterLeak,
-  extractLeakWhere,
-  refreshLeakDetails,
 } from "./gather-issue";
 import { normalizeVocabulary } from "./vocabulary";
 import { buildAcknowledgement } from "./acknowledgement";
@@ -53,19 +50,103 @@ import { detectEmergency, classifySafetyAnswer, type EmergencyMatch } from "./em
 import { detectSafety } from "./detect-safety";
 import { matchingRooms, whichRoomQuestion } from "@/lib/units/profile";
 import { understand, understandReply, type ModelUnderstander } from "@/lib/understanding";
-import { EQUIPMENT_CATEGORY, EQUIPMENT_LABEL, type Room, type Substance } from "@/lib/understanding/taxonomy";
+import { EQUIPMENT_CATEGORY, EQUIPMENT_LABEL, type Room } from "@/lib/understanding/taxonomy";
 import type { IssueFrame } from "@/lib/understanding/frame";
+import { sopByKey } from "@/lib/sops/catalog";
+import { selectSop } from "@/lib/sops/select";
+import {
+  answerIntake,
+  frameSlots,
+  nextIntakeQuestion,
+  optionsFor,
+  prefillFromMessage,
+  startIntake,
+  type IntakeState,
+} from "@/lib/sops/intake";
+import type { IntakeQuestion } from "@/lib/sops/schema";
+import type { EmergencyKind } from "./emergency";
 import type { GatheredInfo, IssueClassification, TriageClassification, TriageContext } from "./types";
 
 const ALL_SET_REPLY =
   "Thanks for all the details! Is there anything else about the issue you'd like to mention before I proceed?";
 
-/** Next gather question (base or extended), or null when every field is filled. */
+/** Shared questions whose tap options are enough; others list their options in the text. */
+const PLAIN_SLOTS = new Set(["onset", "status", "amount", "electrical_near", "brand_model", "room"]);
+
+export function intakeQuestionText(q: IntakeQuestion, state: IntakeState): string {
+  const all = optionsFor(q, state);
+  const options = all.filter((o) => o.value !== "not_sure");
+  // Two options (yes/no) or shared questions: the tap answers are enough.
+  if (PLAIN_SLOTS.has(q.slot) || options.length < 3) return q.question;
+  const shown = options.map((o) => o.label.charAt(0).toLowerCase() + o.label.slice(1));
+  return all.length > options.length ? `${q.question} (${shown.join("; ")}; or not sure)` : `${q.question} (${shown.join("; ")})`;
+}
+
+/** Slots the conversation already has, beyond the frame (room/onset/status said in words). */
+function knownSlots(gathered: GatheredInfo): Record<string, boolean> {
+  return { room: !!gathered.location_in_unit };
+}
+
+/** The selected SOP's next question; the room uses the unit's own rooms (location_in_unit). */
+function nextSopQuestion(gathered: GatheredInfo): { field: string; text: string } | null {
+  const state = gathered.sop!;
+  const sop = sopByKey(state.issue_key);
+  if (!sop) return null;
+  const known = knownSlots(gathered);
+  const q = nextIntakeQuestion(sop, state, known);
+  if (!q) return null;
+  if (q.slot === "room") return { field: "location_in_unit", text: QUESTIONS.location_in_unit };
+  return { field: `intake:${q.id}`, text: intakeQuestionText(q, state) };
+}
+
+/**
+ * Keep the fields the summary, work order and older screens read in step
+ * with the intake (started_when, current_status, brand_model, likely source).
+ */
+function syncFromIntake(gathered: GatheredInfo): void {
+  const state = gathered.sop;
+  if (!state) return;
+  const a = state.answers;
+  if (a.onset && !gathered.started_when) gathered.started_when = a.onset.label;
+  if (a.status && !gathered.current_status) gathered.current_status = a.status.label;
+  if (a.brand_model && !gathered.brand_model) gathered.brand_model = a.brand_model.value === "unknown" ? "unknown" : a.brand_model.label;
+  if (a.amount) gathered.leak_amount = a.amount.label;
+  if (a.electrical_near) gathered.leak_electrical = a.electrical_near.value === "not_sure" ? "not sure" : a.electrical_near.value;
+  gathered.leak_likely_source = state.cause
+    ? { id: state.cause.id, label: state.cause.label, sop_query: state.cause.sop_query, prevention: state.cause.prevention }
+    : null;
+}
+
+/** Done with the SOP's questions: mark it and fill what the generic summary expects. */
+function completeIntake(gathered: GatheredInfo): void {
+  if (!gathered.sop) return;
+  gathered.sop = { ...gathered.sop, complete: true };
+  syncFromIntake(gathered);
+  gathered.started_when ??= "Not asked";
+  gathered.current_status ??= "Not asked";
+}
+
+/** Pick (or switch to) the SOP for this frame; answers to shared slots carry over. */
+function chooseSop(gathered: GatheredInfo, frame: IssueFrame, text: string): void {
+  const choice = selectSop(frame, text);
+  if (!choice) return;
+  const previous = gathered.sop;
+  if (previous && previous.issue_key === choice.sop.issue_key) return;
+  let state = startIntake(choice.sop, frame, choice.confidence);
+  if (previous) state = { ...state, answers: { ...previous.answers }, asked: [...previous.asked] };
+  gathered.sop = prefillFromMessage(choice.sop, state, text);
+  gathered.category ??= choice.sop.category;
+  gathered.leak_details_needed = false;
+  syncFromIntake(gathered);
+}
+
+/** Next gather question (SOP intake, else base or extended), or null when every field is filled. */
 export function getNextGatherQuestion(gathered: GatheredInfo): { field: string; text: string } | null {
+  if (gathered.sop) return gathered.sop.complete ? null : nextSopQuestion(gathered);
   const nextBase = getNextMissingField(gathered);
   if (nextBase) return { field: nextBase, text: QUESTIONS[nextBase] };
   const nextExtended = getNextExtendedQuestion(gathered);
-  if (nextExtended) return { field: nextExtended, text: getExtendedQuestionText(nextExtended, gathered) };
+  if (nextExtended) return { field: nextExtended, text: getExtendedQuestionText(nextExtended) };
   return null;
 }
 
@@ -116,15 +197,6 @@ const ROOM_LABEL: Record<Room, string | null> = {
   garage: "Garage", exterior: "Outside", unknown: null,
 };
 
-/** What leaks that isn't water: no "Where is the water?" questions for these. */
-const NOT_WATER = new Set<Substance>(["grease", "oil", "gas", "smoke", "sewage", "none"]);
-
-/** The water-leak deep-dive applies only when what's leaking is (or may be) water. */
-export function wantsWaterQuestions(frame: IssueFrame | undefined, text: string): boolean {
-  if (!isWaterLeak(text) && frame?.symptom !== "leaking") return false;
-  return !frame || !NOT_WATER.has(frame.substance);
-}
-
 function emergencyFromFrame(frame: IssueFrame, message: string): EmergencyMatch | null {
   if (frame.severity !== "emergency") return null;
   const kind =
@@ -157,6 +229,11 @@ export async function openConversation(message: string, ctx: OpeningContext = {}
     classification = { category: EQUIPMENT_CATEGORY[frame.equipment] as IssueCategory, confidence: "medium", rationale: "issue_frame" };
   } else if (classification.confidence === "low" && frame.symptom === "pests") {
     classification = { category: "pest_control", confidence: "medium", rationale: "issue_frame" };
+  }
+  // An SOP that clearly matches settles the category too.
+  const sopChoice = selectSop(frame, message);
+  if (classification.confidence === "low" && sopChoice?.confidence === "high") {
+    classification = { category: sopChoice.sop.category as IssueCategory, confidence: "medium", rationale: "sop_match" };
   }
   let modelEquipment: string | null = null;
   if (classification.rationale === "no_keyword_match" && ctx.classifyFallback) {
@@ -205,11 +282,7 @@ export async function openConversation(message: string, ctx: OpeningContext = {}
     if (probe.subcategory) gathered.subcategory = probe.subcategory;
   }
 
-  // Use what the first message already says, and the unit's own rooms.
-  if (isWaterLeak(message) && wantsWaterQuestions(frame, message)) {
-    gathered.leak_details_needed = true;
-    gathered.leak_where = extractLeakWhere(message);
-  }
+  // Use the unit's own rooms.
   let roomWord: string | null = null;
   if (gathered.location_in_unit && ctx.rooms?.length) {
     const candidates = matchingRooms(gathered.location_in_unit, ctx.rooms);
@@ -222,10 +295,8 @@ export async function openConversation(message: string, ctx: OpeningContext = {}
     }
   }
 
-  // Fixture (sink, toilet…) and what was already said about it — after the
-  // room is settled, so "Which bathroom?" doesn't block it.
-  const leakReady = refreshLeakDetails(gathered, message, true);
-  Object.assign(gathered, leakReady);
+  // The SOP for it (its questions, minus what the message already says).
+  if (classification.confidence !== "low") chooseSop(gathered, frame, message);
 
   // Only reflect the problem back when it was understood; use our words, not theirs.
   const acknowledgement = buildAcknowledgement(normalizeVocabulary(message), {
@@ -274,6 +345,8 @@ export async function updateIssueFrame(
 ): Promise<IssueFrame> {
   const current = stored.issue_frame ?? (await understand(description, understander ?? null)).frame;
   stored.issue_frame = await understandReply(current, message, understander ?? null);
+  // Intake answers win over what the reply text suggests; the rest follows the frame.
+  if (stored.gathered?.sop) stored.gathered.sop = { ...stored.gathered.sop, slots: frameSlots(stored.issue_frame) };
   return stored.issue_frame;
 }
 
@@ -340,6 +413,28 @@ export function advanceGather(params: {
     gathered.is_emergency = false;
     stored.safety_detection = { detected: false, method: "user_denied", rationale: `user_response: "${message.slice(0, 50)}"` };
     currentQuestion = null;
+  } else if (currentQuestion?.startsWith("intake:") && gathered.sop) {
+    const sop = sopByKey(gathered.sop.issue_key);
+    const question = sop?.intake_questions.find((q) => `intake:${q.id}` === currentQuestion);
+    if (sop && question) {
+      const result = answerIntake(sop, gathered.sop, question, message);
+      gathered = { ...gathered, sop: result.state };
+      syncFromIntake(gathered);
+      if (result.emergency) {
+        return {
+          kind: "emergency",
+          gathered,
+          emergency: { kind: result.emergency as EmergencyKind, phrase: `${question.question} "${message.slice(0, 80)}"` },
+        };
+      }
+      // An answer that changes what it is (the water is at the toilet; it's grease) can change the SOP.
+      if (result.frameUpdate && stored.issue_frame && ["equipment", "symptom", "substance"].includes(result.frameUpdate.slot)) {
+        stored.issue_frame = { ...stored.issue_frame, [result.frameUpdate.slot]: result.frameUpdate.value };
+        if (result.frameUpdate.slot === "equipment" && !gathered.equipment) gathered.equipment = EQUIPMENT_LABEL[stored.issue_frame.equipment];
+        chooseSop(gathered, stored.issue_frame, `${description} ${message}`);
+      }
+    }
+    currentQuestion = null;
   } else if (currentQuestion && isExtendedField(currentQuestion)) {
     gathered = processExtendedAnswer(gathered, currentQuestion, message);
     // Water near an outlet/light (or "not sure") → stop and escalate now.
@@ -379,11 +474,15 @@ export function advanceGather(params: {
     if (eq) gathered.equipment = eq;
   }
   classifySubcategory(gathered, message);
-  // A reply can say it isn't water after all (grease, oil…): drop the water questions.
-  if (gathered.leak_details_needed && stored.issue_frame && NOT_WATER.has(stored.issue_frame.substance)) {
-    gathered.leak_details_needed = false;
+
+  // SOP intake: its next question, or done. (Answering "what type of issue" can bring an SOP into play.)
+  if (!gathered.sop && gathered.category && stored.issue_frame) chooseSop(gathered, stored.issue_frame, description);
+  if (gathered.sop) {
+    const next = nextSopQuestion(gathered);
+    if (next) return { kind: "ask", gathered, nextQuestion: next.field, reply: next.text };
+    completeIntake(gathered);
+    return { kind: "complete", gathered };
   }
-  gathered = refreshLeakDetails(gathered, description);
 
   if (!isGatherComplete(gathered)) {
     let nextQuestion: string | null;
@@ -393,7 +492,7 @@ export function advanceGather(params: {
       reply = stepReply;
     } else {
       nextQuestion = getNextExtendedQuestion(gathered);
-      reply = nextQuestion ? getExtendedQuestionText(nextQuestion, gathered) : "";
+      reply = nextQuestion ? getExtendedQuestionText(nextQuestion) : "";
     }
     // No question left but gather says incomplete: fall through rather than deadlock.
     if (nextQuestion || reply) return { kind: "ask", gathered, nextQuestion: nextQuestion ?? "", reply };
@@ -410,6 +509,9 @@ export type AfterGather =
 export function afterGather(gathered: GatheredInfo, description: string, stored: TriageClassification): AfterGather {
   if (gathered.is_emergency === null) {
     const safety = detectSafety(description, gathered);
+    // The SOP decides whether the generic electrical check adds anything (not for a chirping alarm).
+    const sop = gathered.sop ? sopByKey(gathered.sop.issue_key) : null;
+    if (sop && !sop.ask_safety_check && !safety.detected) safety.needsQuestion = false;
     if (safety.detected) {
       gathered.is_emergency = true;
       stored.safety_detection = { detected: true, method: "auto", rationale: safety.rationale };
