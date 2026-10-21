@@ -59,7 +59,8 @@ import {
 } from "@/lib/triage/emergency";
 import { escalateEmergency, setPrivilegedTicketFields } from "@/lib/triage/escalate-emergency";
 import { isSummaryConfirmation } from "@/lib/triage/confirmation";
-import { advanceGather, afterGather, getNextGatherQuestion, openConversation, turnEmergency } from "@/lib/triage/conversation";
+import { advanceGather, afterGather, getNextGatherQuestion, openConversation, turnEmergency, updateIssueFrame } from "@/lib/triage/conversation";
+import { openAIUnderstander } from "@/lib/understanding";
 import { classifyWithModel } from "@/lib/triage/classify-model";
 import { buildMediaPrompt } from "@/lib/triage/guidance";
 import { readUnitProfile } from "@/lib/units/profile";
@@ -321,6 +322,7 @@ async function handleFirstMessage(
   const opening = await openConversation(message, {
     rooms: readUnitProfile(unitRow?.profile).rooms,
     classifyFallback: classifyWithModel,
+    understander: openAIUnderstander(),
   });
   const classification_result = opening.classification;
   const emergency = opening.emergency;
@@ -623,6 +625,7 @@ async function handleFollowUp(
           current_question: firstMissing ?? invalidFields[0],
           tenant_info: clearedInfo,
           issue_classification: stored.issue_classification,
+          issue_frame: stored.issue_frame,
         };
         reply = "Some of the info we have on file doesn't look right. Let me collect the correct details.\n\n" +
           TENANT_INFO_QUESTIONS[firstMissing ?? invalidFields[0]];
@@ -695,6 +698,7 @@ async function handleFollowUp(
         current_question: currentQuestion,
         tenant_info: tiResult.tenant_info,
         issue_classification: stored.issue_classification,
+        issue_frame: stored.issue_frame,
       };
       newState = tiResult.next_state;
       } // end valid tenant info else
@@ -712,6 +716,7 @@ async function handleFollowUp(
         current_question: firstMissing ?? "reported_address",
         tenant_info: clearedInfo,
         issue_classification: stored.issue_classification,
+        issue_frame: stored.issue_frame,
       };
       reply = "No problem, let's update your info.\n\n" + TENANT_INFO_QUESTIONS[firstMissing ?? "reported_address"];
       newState = "COLLECT_TENANT_INFO";
@@ -846,6 +851,7 @@ async function handleFollowUp(
       current_question: tiCurrentQuestion,
       tenant_info: tiResult.tenant_info,
       issue_classification: stored.issue_classification,
+      issue_frame: stored.issue_frame,
     };
 
     // Persist state BEFORE inserting messages (so refresh always has latest state)
@@ -1395,6 +1401,8 @@ async function handleFollowUp(
 
   // ── GATHER_INFO branch ──
   const traceId = ticket.trace_id ?? ticket.id;
+  // A reply can add to (or correct) what we understood; urgency never drops.
+  await updateIssueFrame(stored, ticket.description, message, openAIUnderstander());
   const gatherStep = advanceGather({
     stored,
     description: ticket.description,
@@ -1425,6 +1433,7 @@ async function handleFollowUp(
       current_question: nextQuestion,
       tenant_info: stored.tenant_info,
       issue_classification: stored.issue_classification,
+      issue_frame: stored.issue_frame,
       safety_detection: stored.safety_detection,
       media_refs: stored.media_refs,
       retrieval: stored.retrieval,
@@ -1503,6 +1512,7 @@ async function handleFollowUp(
       current_question: "safety_check",
       tenant_info: stored.tenant_info,
       issue_classification: stored.issue_classification,
+      issue_frame: stored.issue_frame,
       media_refs: stored.media_refs,
       retrieval: stored.retrieval,
       summary: stored.summary,
@@ -1563,6 +1573,7 @@ async function handleFollowUp(
     current_question: null,
     tenant_info: stored.tenant_info,
     issue_classification: stored.issue_classification,
+    issue_frame: stored.issue_frame,
     safety_detection: stored.safety_detection,
     media_refs: stored.media_refs,
     retrieval: stored.retrieval,
@@ -1689,6 +1700,7 @@ async function handleRetrievalAndCompletion(
       current_question: null,
       tenant_info: stored.tenant_info,
       issue_classification: stored.issue_classification,
+      issue_frame: stored.issue_frame,
       safety_detection: stored.safety_detection,
       media_refs: stored.media_refs,
       retrieval: retrievalLog ?? undefined,
@@ -1955,6 +1967,7 @@ async function handleRetrievalAndCompletion(
       current_question: null,
       tenant_info: stored.tenant_info,
       issue_classification: stored.issue_classification,
+      issue_frame: stored.issue_frame,
       safety_detection: stored.safety_detection,
       media_refs: stored.media_refs,
       retrieval: retrievalLog ?? undefined,
@@ -2025,6 +2038,7 @@ async function handleRetrievalAndCompletion(
     current_question: null,
     tenant_info: stored.tenant_info,
     issue_classification: stored.issue_classification,
+    issue_frame: stored.issue_frame,
     safety_detection: stored.safety_detection,
     media_refs: stored.media_refs,
     retrieval: retrievalLog ?? undefined,
@@ -2117,6 +2131,7 @@ async function handleGuidedComplete(
     current_question: null,
     tenant_info: stored.tenant_info,
     issue_classification: stored.issue_classification,
+    issue_frame: stored.issue_frame,
     safety_detection: stored.safety_detection,
     media_refs: stored.media_refs,
     retrieval: stored.retrieval,

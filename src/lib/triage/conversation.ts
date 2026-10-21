@@ -52,6 +52,9 @@ import {
 import { detectEmergency, classifySafetyAnswer, type EmergencyMatch } from "./emergency";
 import { detectSafety } from "./detect-safety";
 import { matchingRooms, whichRoomQuestion } from "@/lib/units/profile";
+import { understand, understandReply, type ModelUnderstander } from "@/lib/understanding";
+import { EQUIPMENT_CATEGORY, EQUIPMENT_LABEL, type Room, type Substance } from "@/lib/understanding/taxonomy";
+import type { IssueFrame } from "@/lib/understanding/frame";
 import type { GatheredInfo, IssueClassification, TriageClassification, TriageContext } from "./types";
 
 const ALL_SET_REPLY =
@@ -103,6 +106,36 @@ export interface OpeningContext {
   /** Room names from the unit profile ("Main bathroom (hallway)", "Ensuite"…). */
   rooms?: string[];
   classifyFallback?: FallbackClassifier;
+  /** Model understanding (null/absent: rules only). */
+  understander?: ModelUnderstander | null;
+}
+
+const ROOM_LABEL: Record<Room, string | null> = {
+  kitchen: "Kitchen", bathroom: "Bathroom", bedroom: "Bedroom", living_room: "Living room",
+  laundry: "Laundry", basement: "Basement", hallway: "Hallway", balcony: "Balcony",
+  garage: "Garage", exterior: "Outside", unknown: null,
+};
+
+/** What leaks that isn't water: no "Where is the water?" questions for these. */
+const NOT_WATER = new Set<Substance>(["grease", "oil", "gas", "smoke", "sewage", "none"]);
+
+/** The water-leak deep-dive applies only when what's leaking is (or may be) water. */
+export function wantsWaterQuestions(frame: IssueFrame | undefined, text: string): boolean {
+  if (!isWaterLeak(text) && frame?.symptom !== "leaking") return false;
+  return !frame || !NOT_WATER.has(frame.substance);
+}
+
+function emergencyFromFrame(frame: IssueFrame, message: string): EmergencyMatch | null {
+  if (frame.severity !== "emergency") return null;
+  const kind =
+    frame.substance === "gas" ? "gas"
+    : frame.equipment === "co_alarm" ? "carbon_monoxide"
+    : frame.substance === "smoke" ? "fire"
+    : frame.symptom === "sparking" ? "electrical"
+    : frame.symptom === "no_heat" ? "no_heat"
+    : frame.substance === "sewage" ? "sewage"
+    : "unconfirmed_safety";
+  return { kind, phrase: `understood: ${message.slice(0, 100)}` };
 }
 
 export interface Opening {
@@ -111,11 +144,20 @@ export interface Opening {
   triageClassification: TriageClassification;
   reply: string;
   extracted: { location: string | null; timing: string | null; status: string | null };
+  frame: IssueFrame;
 }
 
 /** First message: classify, pull out what it already says, pick the first question. */
 export async function openConversation(message: string, ctx: OpeningContext = {}): Promise<Opening> {
+  // Understanding first (rules always; the model too when configured).
+  const { frame } = await understand(message, ctx.understander ?? null);
   let classification = classifyIssue(message);
+  // The frame decides the category when the keyword rules can't.
+  if (classification.confidence === "low" && frame.equipment !== "unknown" && frame.confidence.equipment >= 0.6) {
+    classification = { category: EQUIPMENT_CATEGORY[frame.equipment] as IssueCategory, confidence: "medium", rationale: "issue_frame" };
+  } else if (classification.confidence === "low" && frame.symptom === "pests") {
+    classification = { category: "pest_control", confidence: "medium", rationale: "issue_frame" };
+  }
   let modelEquipment: string | null = null;
   if (classification.rationale === "no_keyword_match" && ctx.classifyFallback) {
     try {
@@ -133,13 +175,16 @@ export async function openConversation(message: string, ctx: OpeningContext = {}
     confidence: classification.confidence,
     rationale: classification.rationale,
   };
-  const emergency = detectEmergency(message);
+  // Deterministic rules first; the understanding may only raise urgency.
+  const emergency = detectEmergency(message) ?? emergencyFromFrame(frame, message);
 
-  const location = extractLocation(message) ?? inferLocationFromEquipment(message);
+  const frameRoom = frame.confidence.room >= 0.7 ? ROOM_LABEL[frame.room] : null;
+  const location = extractLocation(message) ?? inferLocationFromEquipment(message) ?? frameRoom;
   const timing = extractTiming(message);
   const status = extractCurrentStatus(message);
   const entryPoint = extractEntryPoint(message);
-  const equipment = extractEquipment(message) ?? modelEquipment;
+  const equipment =
+    extractEquipment(message) ?? modelEquipment ?? (frame.equipment !== "unknown" ? EQUIPMENT_LABEL[frame.equipment] : null);
   const { candidates: equipmentCandidates } = detectEquipmentAmbiguity(message);
 
   const gathered = buildInitialGathered();
@@ -161,7 +206,7 @@ export async function openConversation(message: string, ctx: OpeningContext = {}
   }
 
   // Use what the first message already says, and the unit's own rooms.
-  if (isWaterLeak(message)) {
+  if (isWaterLeak(message) && wantsWaterQuestions(frame, message)) {
     gathered.leak_details_needed = true;
     gathered.leak_where = extractLeakWhere(message);
   }
@@ -194,9 +239,10 @@ export async function openConversation(message: string, ctx: OpeningContext = {}
     return {
       classification,
       emergency,
-      triageClassification: { gathered, current_question: "classify_category", issue_classification: issueClassification },
+      triageClassification: { gathered, current_question: "classify_category", issue_classification: issueClassification, issue_frame: frame },
       reply: buildInitialReplyWithClarification(acknowledgement, clarifyingQ),
       extracted: { location, timing, status },
+      frame,
     };
   }
 
@@ -208,10 +254,27 @@ export async function openConversation(message: string, ctx: OpeningContext = {}
   return {
     classification,
     emergency,
-    triageClassification: { gathered, current_question: nextQ?.field ?? null, issue_classification: issueClassification },
+    triageClassification: { gathered, current_question: nextQ?.field ?? null, issue_classification: issueClassification, issue_frame: frame },
     reply: buildInitialReply(acknowledgement, questionText ?? ALL_SET_REPLY),
     extracted: { location, timing, status },
+    frame,
   };
+}
+
+/**
+ * A reply may add information ("it's grease, not water"): fold it into the
+ * stored frame. Call before advanceGather. Tickets from before the frame
+ * existed get one from their description first.
+ */
+export async function updateIssueFrame(
+  stored: TriageClassification,
+  description: string,
+  message: string,
+  understander?: ModelUnderstander | null
+): Promise<IssueFrame> {
+  const current = stored.issue_frame ?? (await understand(description, understander ?? null)).frame;
+  stored.issue_frame = await understandReply(current, message, understander ?? null);
+  return stored.issue_frame;
 }
 
 /**
@@ -316,6 +379,10 @@ export function advanceGather(params: {
     if (eq) gathered.equipment = eq;
   }
   classifySubcategory(gathered, message);
+  // A reply can say it isn't water after all (grease, oil…): drop the water questions.
+  if (gathered.leak_details_needed && stored.issue_frame && NOT_WATER.has(stored.issue_frame.substance)) {
+    gathered.leak_details_needed = false;
+  }
   gathered = refreshLeakDetails(gathered, description);
 
   if (!isGatherComplete(gathered)) {

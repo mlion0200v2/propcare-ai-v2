@@ -100,6 +100,9 @@ export async function runScenario(s: Scenario): Promise<Transcript> {
       t.emergencyAtTurn = turn + 1;
       break;
     }
+    // (Absent on older commits, when the eval measures a baseline.)
+    const update = (conversation as { updateIssueFrame?: typeof conversation.updateIssueFrame }).updateIssueFrame;
+    if (update) await update(stored, s.first, answer, null);
     const step = conversation.advanceGather({ stored, description: s.first, triageState: "GATHER_INFO", message: answer });
     stored.gathered = step.gathered;
     t.gathered = step.gathered;

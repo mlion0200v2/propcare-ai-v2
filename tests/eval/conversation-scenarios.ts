@@ -89,6 +89,18 @@ export const SCENARIOS: Scenario[] = [
     },
   },
   {
+    id: "simone-3",
+    name: "Simone transcript: rangehood is leaking gease (typo; grease, not water)",
+    first: "rangehood is leaking gease",
+    rooms: KITCHEN_ROOMS,
+    expect: {
+      category: "appliance",
+      equipment: "range hood",
+      noCategoryQuestion: true,
+      neverAsk: ["classify_category", "location_in_unit", "leak_where", "leak_amount", "leak_electrical"],
+    },
+  },
+  {
     id: "simone-2",
     name: "Simone transcript: my sink is leaking → Kitchen",
     first: "my sink is leaking",
