@@ -9,7 +9,8 @@ import * as conversation from "../../../src/lib/triage/conversation";
 import { buildChatHints } from "../../../src/lib/triage/hints";
 import { readUnitProfile } from "../../../src/lib/units/profile";
 import type { ModelUnderstander } from "../../../src/lib/understanding";
-import type { TriageClassification } from "../../../src/lib/triage/types";
+import type { GatheredInfo, TriageClassification } from "../../../src/lib/triage/types";
+import { buildDiagnosisView, diagnosisText } from "../../../src/lib/sops/diagnosis-view";
 import type { CorpusCase } from "../frame-eval";
 import type { StructuredCall } from "./llm";
 
@@ -27,6 +28,9 @@ export interface LiveTurn {
 export interface LiveTranscript {
   id: string;
   first: string;
+  /** Ranked cause ids at the end (diagnosis cards), and the manager-facing diagnosis text. */
+  ranked?: string[];
+  diagnosis?: string | null;
   turns: LiveTurn[];
   sop: string | null;
   emergency: string | null;
@@ -55,14 +59,16 @@ export async function simulateConversation(
   c: CorpusCase,
   call: StructuredCall,
   understander: ModelUnderstander | null,
-  maxTurns = 12
+  maxTurns = 12,
+  /** Overrides the hidden card (diagnosis cards fix the true cause). */
+  cardText?: string
 ): Promise<LiveTranscript> {
   const open = await conversation.openConversation(c.message, { rooms: ROOMS, understander });
   const stored: TriageClassification = open.triageClassification;
   const t: LiveTranscript = { id: c.id, first: c.message, turns: [], sop: null, emergency: open.emergency?.kind ?? null, cause: null };
   let question = stored.current_question;
   let bot = open.reply;
-  const card = tenantCard(c);
+  const card = cardText ?? tenantCard(c);
   for (let i = 0; i < maxTurns && !t.emergency; i++) {
     const options = question
       ? buildChatHints({ currentQuestion: question, triageState: "GATHER_INFO", category: stored.gathered?.category ?? null, description: c.message, profile: readUnitProfile({ rooms: ROOMS }), gathered: stored.gathered }).quickReplies
@@ -114,6 +120,9 @@ export async function simulateConversation(
   }
   t.sop = stored.gathered?.sop?.issue_key ?? null;
   t.cause = stored.gathered?.sop?.cause?.label ?? null;
+  t.ranked = stored.gathered?.sop?.diagnosis?.ranked.map((r) => r.id) ?? [];
+  const view = buildDiagnosisView(stored.gathered as GatheredInfo, 0);
+  t.diagnosis = view ? diagnosisText(view) : null;
   return t;
 }
 
@@ -124,6 +133,7 @@ export const JudgeVerdict = z.object({
   reasked_questions: z.array(z.string()).describe("Questions about something the tenant had already said."),
   safety_ok: z.boolean().describe("Was danger handled correctly (escalated when dangerous, not alarmed when safe)?"),
   efficiency: z.number().int().min(1).max(5).describe("Was it short enough: no padding, no needless questions?"),
+  tradesperson_ready: z.number().int().min(1).max(5).describe("From the chat and the ticket's diagnosis: would a tradesperson have what they need before the visit (likely cause, model/serial or what to identify, parts to bring, the right trade)?"),
   overall: z.number().int().min(1).max(5),
   notes: z.string(),
 });
@@ -142,7 +152,7 @@ export async function judge(t: LiveTranscript, c: CorpusCase, call: StructuredCa
   return call({
     purpose: "judge",
     system: JUDGE_SYSTEM,
-    user: `What was really going on: ${c.expected.equipment} / ${c.expected.symptom} / ${c.expected.substance}; dangerous: ${c.emergency ? "yes" : "no"}.\nEscalated by the assistant: ${t.emergency ?? "no"}.\n\nChat:\n${transcript}`,
+    user: `What was really going on: ${c.expected.equipment} / ${c.expected.symptom} / ${c.expected.substance}; dangerous: ${c.emergency ? "yes" : "no"}.\nEscalated by the assistant: ${t.emergency ?? "no"}.\n\nChat:\n${transcript}\n\nTicket diagnosis (manager/vendor only, the tenant never sees it):\n${t.diagnosis ?? "(none)"}`,
     schema: JudgeVerdict,
     name: "judge_verdict",
   });

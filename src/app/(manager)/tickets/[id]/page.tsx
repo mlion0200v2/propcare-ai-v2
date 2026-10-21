@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { DiagnosisBlock } from "@/components/tickets/diagnosis";
+import { buildDiagnosisView } from "@/lib/sops/diagnosis-view";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isTeamRole, requireMembership } from "@/lib/workspace/server";
@@ -168,6 +170,7 @@ export default async function TicketDetailPage({
     emergency?: { kind?: string; manager_notified?: boolean };
   } | null;
   const gathered = classification?.gathered;
+  const diagnosis = buildDiagnosisView(gathered, media.length);
   const tenantInfo = classification?.tenant_info;
   const tz = appTimeZone();
   const address = ticket.units?.properties?.address_line1 ?? tenantInfo?.reported_address ?? "No unit on file";
@@ -291,6 +294,7 @@ export default async function TicketDetailPage({
                 </>
               )}
             </dl>
+            {diagnosis && <DiagnosisBlock view={diagnosis} audience="manager" />}
             {classification?.summary && (
               <details className="mt-4 text-sm">
                 <summary className="cursor-pointer text-pine underline">Summary for the property manager</summary>

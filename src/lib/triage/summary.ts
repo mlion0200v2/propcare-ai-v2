@@ -7,6 +7,7 @@
 
 import { sopByKey } from "@/lib/sops/catalog";
 import { intakeLines } from "@/lib/sops/intake";
+import { buildDiagnosisView, diagnosisText } from "@/lib/sops/diagnosis-view";
 import type {
   GatheredInfo,
   TenantInfo,
@@ -103,6 +104,13 @@ export function generateTicketSummary(input: SummaryInput): string {
   }
   parts.push(`Emergency: ${isEmergency ? "Yes" : "No"}`);
   parts.push(`Priority: ${priority}`);
+
+  // ── Diagnosis (manager and vendor only) ──
+  const diagnosis = buildDiagnosisView(gathered, mediaCount);
+  if (diagnosis) {
+    parts.push("");
+    parts.push(diagnosisText(diagnosis));
+  }
 
   // ── Key Findings ──
   if (gathered.entry_point) {
