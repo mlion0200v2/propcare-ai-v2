@@ -30,6 +30,12 @@ export interface GatheredInfo {
   leak_electrical?: string | null;
   /** Unit-profile rooms the tenant may mean ("bathroom" → hallway bathroom, ensuite). */
   location_candidates?: string[] | null;
+  /** Which fixture is leaking (kitchen_sink, toilet, …; see fixtures.ts). */
+  leak_fixture?: string | null;
+  /** "Where on the fixture?" answer (fixture-specific options). */
+  leak_part?: string | null;
+  /** Likely source from the answers: shown on the summary and work order, steers SOPs. */
+  leak_likely_source?: { id: string; label: string } | null;
 }
 
 export interface TriageContext {

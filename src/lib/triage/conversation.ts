@@ -31,7 +31,9 @@ import {
   processExtendedAnswer,
   isWaterLeak,
   extractLeakWhere,
+  refreshLeakDetails,
 } from "./gather-issue";
+import { normalizeVocabulary } from "./vocabulary";
 import { buildAcknowledgement } from "./acknowledgement";
 import {
   classifyIssue,
@@ -60,7 +62,7 @@ export function getNextGatherQuestion(gathered: GatheredInfo): { field: string; 
   const nextBase = getNextMissingField(gathered);
   if (nextBase) return { field: nextBase, text: QUESTIONS[nextBase] };
   const nextExtended = getNextExtendedQuestion(gathered);
-  if (nextExtended) return { field: nextExtended, text: getExtendedQuestionText(nextExtended) };
+  if (nextExtended) return { field: nextExtended, text: getExtendedQuestionText(nextExtended, gathered) };
   return null;
 }
 
@@ -86,9 +88,21 @@ function classifySubcategory(gathered: GatheredInfo, message: string, opening = 
   if (sub) gathered.subcategory = sub;
 }
 
+/**
+ * Model fallback, used only when the keyword rules find nothing at all.
+ * Returns a category (and equipment, if named) or null.
+ */
+export type FallbackClassifier = (message: string) => Promise<{ category: string; equipment: string | null } | null>;
+
+const KNOWN_CATEGORIES = new Set<string>([
+  "plumbing", "electrical", "hvac", "appliance", "structural", "pest_control", "locksmith",
+  "roofing", "painting", "flooring", "landscaping", "general", "other",
+]);
+
 export interface OpeningContext {
   /** Room names from the unit profile ("Main bathroom (hallway)", "Ensuite"…). */
   rooms?: string[];
+  classifyFallback?: FallbackClassifier;
 }
 
 export interface Opening {
@@ -100,8 +114,20 @@ export interface Opening {
 }
 
 /** First message: classify, pull out what it already says, pick the first question. */
-export function openConversation(message: string, ctx: OpeningContext = {}): Opening {
-  const classification = classifyIssue(message);
+export async function openConversation(message: string, ctx: OpeningContext = {}): Promise<Opening> {
+  let classification = classifyIssue(message);
+  let modelEquipment: string | null = null;
+  if (classification.rationale === "no_keyword_match" && ctx.classifyFallback) {
+    try {
+      const guess = await ctx.classifyFallback(message);
+      if (guess && KNOWN_CATEGORIES.has(guess.category) && guess.category !== "general") {
+        classification = { category: guess.category as IssueCategory, confidence: "medium", rationale: "model_fallback" };
+        modelEquipment = guess.equipment;
+      }
+    } catch {
+      // Model unavailable: fall back to asking, as before.
+    }
+  }
   const issueClassification: IssueClassification = {
     category: classification.category,
     confidence: classification.confidence,
@@ -113,7 +139,7 @@ export function openConversation(message: string, ctx: OpeningContext = {}): Ope
   const timing = extractTiming(message);
   const status = extractCurrentStatus(message);
   const entryPoint = extractEntryPoint(message);
-  const equipment = extractEquipment(message);
+  const equipment = extractEquipment(message) ?? modelEquipment;
   const { candidates: equipmentCandidates } = detectEquipmentAmbiguity(message);
 
   const gathered = buildInitialGathered();
@@ -151,7 +177,17 @@ export function openConversation(message: string, ctx: OpeningContext = {}): Ope
     }
   }
 
-  const acknowledgement = buildAcknowledgement(message, { timing, status });
+  // Fixture (sink, toilet…) and what was already said about it — after the
+  // room is settled, so "Which bathroom?" doesn't block it.
+  const leakReady = refreshLeakDetails(gathered, message, true);
+  Object.assign(gathered, leakReady);
+
+  // Only reflect the problem back when it was understood; use our words, not theirs.
+  const acknowledgement = buildAcknowledgement(normalizeVocabulary(message), {
+    timing,
+    status,
+    understood: classification.confidence !== "low",
+  });
 
   if (classification.confidence === "low") {
     const clarifyingQ = buildClarifyingCategoryQuestion(message, [classification.category]);
@@ -280,6 +316,7 @@ export function advanceGather(params: {
     if (eq) gathered.equipment = eq;
   }
   classifySubcategory(gathered, message);
+  gathered = refreshLeakDetails(gathered, description);
 
   if (!isGatherComplete(gathered)) {
     let nextQuestion: string | null;
@@ -289,7 +326,7 @@ export function advanceGather(params: {
       reply = stepReply;
     } else {
       nextQuestion = getNextExtendedQuestion(gathered);
-      reply = nextQuestion ? getExtendedQuestionText(nextQuestion) : "";
+      reply = nextQuestion ? getExtendedQuestionText(nextQuestion, gathered) : "";
     }
     // No question left but gather says incomplete: fall through rather than deadlock.
     if (nextQuestion || reply) return { kind: "ask", gathered, nextQuestion: nextQuestion ?? "", reply };

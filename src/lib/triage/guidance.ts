@@ -4,6 +4,7 @@
  */
 import type { GatheredInfo } from "./types";
 import type { UnitProfile } from "@/lib/units/profile";
+import { LEAK_SOURCES, type SourceId } from "./fixtures";
 
 export const MAX_VIDEO_SECONDS = 60;
 export const MAX_UPLOAD_MB = 25;
@@ -13,12 +14,17 @@ export function buildPreventionSteps(gathered: GatheredInfo, profile: UnitProfil
   if (!gathered.leak_details_needed) return [];
   const spreading = /spread|lot|pour|flood|everywhere|puddle/i.test(gathered.leak_amount ?? "");
   const steps: string[] = [];
-  if (spreading) {
+  const source = gathered.leak_likely_source?.id ? LEAK_SOURCES[gathered.leak_likely_source.id as SourceId] : undefined;
+  if (source && !spreading) {
+    // e.g. drain/trap: "Don't run the tap or the dishwasher; put a bowl under the trap."
+    steps.push(source.prevention);
+  } else if (spreading) {
     steps.push(
       profile.water_shutoff
         ? `Turn off the main water: ${profile.water_shutoff}.`
         : "If water keeps spreading, turn off the main water shut-off (often near the water heater, laundry, or where the water line enters the home)."
     );
+    if (source) steps.push(source.prevention);
   } else if (/toilet/i.test(`${gathered.leak_where ?? ""} ${gathered.leak_timing ?? ""}`)) {
     steps.push("Turn off the toilet's shut-off valve (behind the toilet, near the floor): turn it clockwise.");
   } else if (/sink/i.test(gathered.leak_where ?? "")) {

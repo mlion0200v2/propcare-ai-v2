@@ -55,9 +55,20 @@ migration and seed in an in-process Postgres (PGlite).
 1. **Safety first, every turn**: each message is checked for emergencies
    before anything else.
 2. **Locate and describe**: one question at a time, with tap-answers from
-   the unit profile. Water leaks get a source deep-dive: where the water is,
-   how much, when it happens, and whether it's near anything electrical
-   (yes or "not sure" escalates as an emergency at once).
+   the unit profile. Tenant wording is normalised first ("rangehood",
+   "garburator", "hot water tank", "plugged" → range hood, garbage disposal,
+   water heater, clogged; `src/lib/triage/vocabulary.ts`), and a named
+   appliance settles the category, so it isn't asked. A model classifier is
+   a fallback only when no rule matches. Water leaks get a **fixture-aware**
+   deep-dive from a table (`src/lib/triage/fixtures.ts`): for a kitchen sink
+   "where on the sink?" (faucet base, spout, supply hoses/valves, P-trap,
+   disposal, dishwasher hose) and "when?" (tap running, draining, all the
+   time); toilets, tubs/showers, water heaters, dishwashers, washers, fridges
+   and ceilings/walls each have their own. The answers give a **likely
+   source** that goes on the summary and work order, steers the SOP search
+   and picks the first prevention step. Then how much water, and whether
+   it's near anything electrical (yes or "not sure" escalates at once).
+   `tests/eval/conversation-eval.ts` replays 50 scripted tenant chats in CI.
 3. **Damage prevention first** (shut-off from the unit profile, towels,
    bucket, move valuables), then a **shot list** for photos/video (wide
    shot, source, under the sink/behind the toilet, model label; videos up

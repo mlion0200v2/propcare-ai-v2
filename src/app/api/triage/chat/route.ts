@@ -60,6 +60,7 @@ import {
 import { escalateEmergency, setPrivilegedTicketFields } from "@/lib/triage/escalate-emergency";
 import { isSummaryConfirmation } from "@/lib/triage/confirmation";
 import { advanceGather, afterGather, getNextGatherQuestion, openConversation, turnEmergency } from "@/lib/triage/conversation";
+import { classifyWithModel } from "@/lib/triage/classify-model";
 import { buildMediaPrompt } from "@/lib/triage/guidance";
 import { readUnitProfile } from "@/lib/units/profile";
 import { triageChatRequestSchema } from "@/lib/utils/validation";
@@ -317,7 +318,10 @@ async function handleFirstMessage(
 
   // What the first message says, and the first question (src/lib/triage/conversation.ts).
   const { data: unitRow } = await supabase.from("units").select("profile").eq("id", unit.id).maybeSingle();
-  const opening = openConversation(message, { rooms: readUnitProfile(unitRow?.profile).rooms });
+  const opening = await openConversation(message, {
+    rooms: readUnitProfile(unitRow?.profile).rooms,
+    classifyFallback: classifyWithModel,
+  });
   const classification_result = opening.classification;
   const emergency = opening.emergency;
   const emergencyDetected = emergency !== null;

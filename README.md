@@ -181,7 +181,8 @@ Test suites cover: state machine logic, classification, safety detection, retrie
 | `npm run build` | Production build |
 | `npm run start` | Start production server |
 | `npm run lint` | Run ESLint |
-| `npx tsx scripts/ingest_sop_to_pinecone.ts scripts/propcare_sop_seed_50.jsonl` | Ingest SOPs into Pinecone |
+| `npx tsx scripts/ingest_sop_to_pinecone.ts scripts/propcare_sop_seed_50.jsonl` (then `…_fixtures.jsonl`) | Ingest SOPs into Pinecone |
+| `npx tsx tests/eval/conversation-eval.ts` | Conversation eval: scripted multi-turn tenant chats (also in CI) |
 | `npx tsx scripts/generate_sop_jsonl.ts` | Generate JSONL from YAML source |
 
 ## License

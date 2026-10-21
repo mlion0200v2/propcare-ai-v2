@@ -6,6 +6,7 @@
  * a full audit log for persistence in tickets.classification.retrieval.
  */
 
+import { LEAK_SOURCES, type SourceId } from "@/lib/triage/fixtures";
 import { getIndex } from "../pinecone/client";
 import { embedForRetrieval } from "./embedding";
 import type { GatheredInfo, RetrievalLog } from "../triage/types";
@@ -31,6 +32,11 @@ function getConfig() {
 /**
  * Build the query text from gathered issue info.
  */
+function likelySourceQuery(gathered: GatheredInfo): string | null {
+  const id = gathered.leak_likely_source?.id as SourceId | undefined;
+  return id && LEAK_SOURCES[id] ? `. Likely source: ${LEAK_SOURCES[id].sopQuery}` : null;
+}
+
 export function buildQueryText(gathered: GatheredInfo, description: string): string {
   const categoryPart = gathered.subcategory
     ? `${gathered.category ?? "general"} ${gathered.subcategory} issue`
@@ -44,6 +50,7 @@ export function buildQueryText(gathered: GatheredInfo, description: string): str
     gathered.brand_model && gathered.brand_model !== "unknown"
       ? `. Brand/model: ${gathered.brand_model}`
       : null,
+    likelySourceQuery(gathered),
   ].filter(Boolean);
   return parts.join("");
 }

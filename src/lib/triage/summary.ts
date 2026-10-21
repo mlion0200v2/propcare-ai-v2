@@ -83,6 +83,15 @@ export function generateTicketSummary(input: SummaryInput): string {
   if (gathered.brand_model) {
     parts.push(`Equipment: ${gathered.brand_model}`);
   }
+  if (gathered.leak_details_needed) {
+    const leak = [
+      gathered.leak_part ? `where: ${gathered.leak_part}` : null,
+      gathered.leak_timing ? `when: ${gathered.leak_timing}` : null,
+      gathered.leak_amount ? `amount: ${gathered.leak_amount}` : null,
+    ].filter(Boolean);
+    if (leak.length > 0) parts.push(`Leak: ${leak.join("; ")}`);
+    if (gathered.leak_likely_source) parts.push(`Likely source: ${gathered.leak_likely_source.label}`);
+  }
   parts.push(`Emergency: ${isEmergency ? "Yes" : "No"}`);
   parts.push(`Priority: ${priority}`);
 
