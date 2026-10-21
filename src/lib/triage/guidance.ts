@@ -97,3 +97,16 @@ export function buildMediaPrompt(gathered: GatheredInfo, profile: UnitProfile): 
   );
   return parts.join("\n");
 }
+
+/**
+ * Reports that go straight to the manager (neighbour noise): no troubleshooting
+ * steps, just what happens next. Null for everything else.
+ */
+export function managerOnlyReply(gathered: GatheredInfo): string | null {
+  const sop = gathered.sop ? sopByKey(gathered.sop.issue_key) : null;
+  if (!sop?.route_to_manager) return null;
+  return [
+    "Thanks, I've passed this to your property manager. There's nothing you need to try yourself.",
+    ...sop.escalate_if.map((e) => `${e}.`),
+  ].join("\n");
+}

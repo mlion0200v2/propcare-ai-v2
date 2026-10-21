@@ -67,7 +67,8 @@ const RULES: Rule[] = [
   // A smoke alarm actually sounding is treated as a possible fire.
   {
     kind: "fire",
-    pattern: /\bsmoke\s*(detector|alarm)s?\b[^.!?]{0,25}\b(going off|went off|sounding|blaring|won'?t stop|keeps going off|alarming)\b/,
+    // …unless it's the low-battery chirp ("battery chirp won't stop").
+    pattern: /\bsmoke\s*(detector|alarm)s?\b(?![^.!?]*\b(chirp\w*|batter(y|ies))\b)[^.!?]{0,25}\b(going off|went off|sounding|blaring|won'?t stop|keeps going off|alarming)\b/,
   },
   { kind: "fire", negatable: true, pattern: /\bburning\s+(smell|odou?r|plastic)\b|\bsmell(s|ing)?\s+(of\s+|like\s+)?(something\s+)?burning\b/ },
 
@@ -90,7 +91,8 @@ const RULES: Rule[] = [
   },
 
   // ── Sewage ──
-  { kind: "sewage", pattern: /\bsewage\b/ },
+  // Sewage itself, but not just a smell of it ("smells like sewage" is a drain smell).
+  { kind: "sewage", pattern: /(?<!\bsmells?\s(?:like\s|of\s)?)\bsewage\b/ },
   { kind: "sewage", pattern: /\bsewer\b[^.!?]{0,30}\bback(ing|ed|s)?[\s-]?up\b|\bback(ing|ed|s)?[\s-]?up\b[^.!?]{0,30}\bsewer\b|\bsewer\s+back[\s-]?up\b/ },
   {
     kind: "sewage",

@@ -48,10 +48,20 @@ export async function testSopCatalog(): Promise<TestResult> {
       }
       for (const s of Object.keys(q.only_if ?? {})) if (!slots.has(s)) problems.push(`${sop.issue_key}/${q.id}: only_if on unknown slot ${s}`);
     }
-    for (const c of sop.likely_causes) {
-      for (const s of Object.keys(c.when)) if (!slots.has(s)) problems.push(`${sop.issue_key}: cause ${c.cause.id} on unknown slot ${s}`);
-      if (c.cause.refine_to && !keys.has(c.cause.refine_to)) problems.push(`${sop.issue_key}: refine_to ${c.cause.refine_to} doesn't exist`);
+    const causeIds = new Set(sop.causes.map((c) => c.id));
+    for (const c of sop.causes) {
+      if (c.refine_to && !keys.has(c.refine_to)) problems.push(`${sop.issue_key}: refine_to ${c.refine_to} doesn't exist`);
+      if (!c.trade) problems.push(`${sop.issue_key}: cause ${c.id} has no trade`);
+      if (c.visit_minutes[0] > c.visit_minutes[1]) problems.push(`${sop.issue_key}: cause ${c.id} visit range reversed`);
     }
+    for (const q of sop.intake_questions) {
+      for (const o of q.options) {
+        for (const id of [...(o.rules_in ?? []), ...(o.rules_out ?? [])]) if (!causeIds.has(id)) problems.push(`${sop.issue_key}/${q.id}: rules ${id}, not one of its causes`);
+      }
+    }
+    for (const id of sop.diagnostic_questions) if (!sop.intake_questions.some((q) => q.id === id)) problems.push(`${sop.issue_key}: diagnostic question ${id} doesn't exist`);
+    if (sop.selectable && !sop.route_to_manager && sop.causes.length === 0) problems.push(`${sop.issue_key}: no causes`);
+    if (sop.selectable && sop.causes.length > 1 && sop.diagnostic_questions.length === 0) problems.push(`${sop.issue_key}: several causes but no question tells them apart`);
     if (sop.selectable && sop.tenant_steps.length === 0) problems.push(`${sop.issue_key}: no tenant steps`);
     for (const step of [...sop.tenant_steps, ...sop.prevention]) {
       // Clause by clause; "Don't use a ladder" is the rule, not a breach.

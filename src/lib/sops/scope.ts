@@ -37,6 +37,8 @@ export const DEFAULT_FIXTURE_ROOMS: Partial<Record<Equipment, Room[]>> = {
   bathroom_fan: ["bathroom", "laundry"],
   washer: ["laundry", "bathroom", "kitchen", "hallway", "basement"],
   dryer: ["laundry", "bathroom", "kitchen", "hallway", "basement"],
+  garage_door: ["garage", "exterior"],
+  gutter: ["exterior", "balcony"],
 };
 
 /** Parts and neighbours of a piece of equipment (a sink's disposal, a washer's taps, an appliance's own door). */
@@ -56,14 +58,21 @@ const RELATED: Partial<Record<Equipment, Equipment[]>> = {
   stove_oven: ["range_hood", "microwave", "door"],
   microwave: ["stove_oven", "range_hood", "door"],
   water_heater: ["faucet", "tub_shower", "kitchen_sink", "bathroom_sink", "sink"],
-  furnace: ["thermostat", "baseboard_heater"],
+  furnace: ["thermostat", "baseboard_heater", "vent"],
+  heat_pump: ["thermostat", "ac", "vent"],
+  vent: ["furnace", "thermostat", "heat_pump", "ac"],
+  blinds: ["window"],
+  gutter: ["roof"],
+  roof: ["gutter"],
+  garage_door: ["door", "lock"],
+  elevator: ["door"],
   baseboard_heater: ["thermostat"],
-  thermostat: ["furnace", "baseboard_heater", "ac"],
+  thermostat: ["furnace", "baseboard_heater", "ac", "heat_pump", "vent"],
   ac: ["thermostat"],
   smoke_alarm: ["co_alarm"],
   co_alarm: ["smoke_alarm"],
   lock: ["door", "window"],
-  window: ["lock"],
+  window: ["lock", "blinds"],
   door: ["lock", "intercom"],
   intercom: ["door", "lock"],
   bathroom_fan: [],
@@ -98,7 +107,6 @@ export function outOfScope(text: string, frame: ScopeFrame, profile: UnitProfile
   const surface = SURFACES.has(frame.equipment);
   if (frame.room !== "unknown" && !surface) {
     for (const e of named) {
-      if (parts.has(e)) continue; // part of what's known (a range hood's fan), wherever it is
       const rooms = roomsFor(e, profile);
       if (rooms && !rooms.includes(frame.room as Room)) return `${e} isn't in the ${frame.room}`;
     }

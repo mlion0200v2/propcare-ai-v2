@@ -30,7 +30,10 @@ export interface IntakeState {
   /** Frame slot values when last updated (for option filters). */
   slots: Record<string, string>;
   complete: boolean;
+  /** The leading cause once an answer points somewhere (null before that). */
   cause: (Cause & { refine_to?: string }) | null;
+  /** Ranked causes with the evidence, parts and trade (manager/vendor only). */
+  diagnosis?: Diagnosis | null;
   /** The unit's fixtures and their rooms (for the scope rule), copied at the start. */
   fixtures?: { name: string; room?: string }[];
 }
@@ -159,11 +162,65 @@ export function answerIntake(sop: Sop, state: IntakeState, question: IntakeQuest
   return { state: withCause(sop, next), frameUpdate, emergency: option?.emergency ?? null };
 }
 
-/** Likely cause: the first rule whose conditions all hold. */
+export interface RankedCause {
+  id: string;
+  label: string;
+  score: number;
+  candidate_parts: string[];
+  trade: string;
+  visit_minutes: [number, number];
+  /** "question: answer" lines that point to it. */
+  evidence: string[];
+}
+
+export interface Diagnosis {
+  /** Top causes, most likely first (at most 3). */
+  ranked: RankedCause[];
+  /**
+   * high: a diagnostic answer clearly separates the top cause (2+ points ahead);
+   * medium: ahead by 1; low: no diagnostic answers yet, or a tie.
+   */
+  confidence: "high" | "medium" | "low";
+  /** How many diagnostic questions got a real answer (not "not sure"). */
+  answered: number;
+}
+
+function shortQuestion(q: IntakeQuestion): string {
+  return q.question.replace(/\s*\(.*\)\s*$/, "").replace(/\?$/, "");
+}
+
+/** Rank the SOP's causes: prior, +2 for each answer that rules a cause in, −2 for each that rules it out. */
+export function diagnose(sop: Sop, state: IntakeState): Diagnosis | null {
+  if (sop.causes.length === 0) return null;
+  const score: Record<string, number> = Object.fromEntries(sop.causes.map((c) => [c.id, c.prior]));
+  const evidence: Record<string, string[]> = Object.fromEntries(sop.causes.map((c) => [c.id, []]));
+  let answered = 0;
+  for (const q of sop.intake_questions) {
+    const a = state.answers[q.slot];
+    if (!a || a.value === NOT_SURE) continue;
+    const o = q.options.find((x) => x.value === a.value);
+    if (!o || (!o.rules_in?.length && !o.rules_out?.length)) continue;
+    answered++;
+    for (const id of o.rules_in ?? []) if (id in score) {
+      score[id] += 2;
+      evidence[id].push(`${shortQuestion(q)}: ${a.label}`);
+    }
+    for (const id of o.rules_out ?? []) if (id in score) score[id] -= 2;
+  }
+  const ranked = sop.causes
+    .map((c) => ({ id: c.id, label: c.label, score: score[c.id], candidate_parts: c.candidate_parts, trade: c.trade, visit_minutes: c.visit_minutes, evidence: evidence[c.id] }))
+    .sort((x, y) => y.score - x.score)
+    .slice(0, 3);
+  const margin = ranked.length > 1 ? ranked[0].score - ranked[1].score : ranked[0].score;
+  const confidence = answered === 0 ? "low" : margin >= 2 ? "high" : margin >= 1 ? "medium" : "low";
+  return { ranked, confidence, answered };
+}
+
+/** Diagnosis, and the leading cause once an answer points somewhere. */
 export function withCause(sop: Sop, state: IntakeState): IntakeState {
-  const v = values(state);
-  const rule = sop.likely_causes.find((r) => holds(r.when, v));
-  return { ...state, cause: rule ? rule.cause : null };
+  const diagnosis = diagnose(sop, state);
+  const top = diagnosis && diagnosis.answered > 0 ? sop.causes.find((c) => c.id === diagnosis.ranked[0].id) ?? null : null;
+  return { ...state, diagnosis, cause: top };
 }
 
 /** Readable "question: answer" lines for the summary and work order. */

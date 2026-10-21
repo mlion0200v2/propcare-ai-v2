@@ -62,7 +62,7 @@ import { isSummaryConfirmation } from "@/lib/triage/confirmation";
 import { advanceGather, afterGather, getNextGatherQuestion, openConversation, turnEmergency, updateIssueFrame } from "@/lib/triage/conversation";
 import { openAIUnderstander } from "@/lib/understanding";
 import { classifyWithModel } from "@/lib/triage/classify-model";
-import { buildMediaPrompt } from "@/lib/triage/guidance";
+import { buildMediaPrompt, managerOnlyReply } from "@/lib/triage/guidance";
 import { readUnitProfile } from "@/lib/units/profile";
 import { triageChatRequestSchema } from "@/lib/utils/validation";
 import { triageChatLimiter } from "@/lib/rate-limit";
@@ -1938,6 +1938,10 @@ async function handleRetrievalAndCompletion(
     });
   }
   groundedResult = safeResult;
+
+  // Some reports go straight to the manager (neighbour noise): no troubleshooting.
+  const managerReply = managerOnlyReply(gathered);
+  if (managerReply) groundedResult = { ...groundedResult, reply: managerReply, steps: [] };
 
   // ── Guided troubleshooting bifurcation ──
   // SOP-driven: enter guided mode when steps contain safe, actionable content
