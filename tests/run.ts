@@ -33,6 +33,7 @@ import { testChatWorkflow } from "./integration/test-chat-workflow";
 import { testConversationEval } from "./eval/conversation-eval";
 import { testFrameEval } from "./eval/frame-eval";
 import { testUnderstanding } from "./integration/test-understanding";
+import { testSopCatalog } from "./integration/test-sop-catalog";
 
 import { testSupabaseConnection, testTableSchema } from "./integration/test-supabase";
 
@@ -78,6 +79,7 @@ async function main() {
   merge(testChatWorkflow());
   merge(await testConversationEval()); // scripted multi-turn chats, no network
   merge(await testUnderstanding()); // rules frame, model merge (stubbed), no network
+  merge(await testSopCatalog()); // SOP catalog schema, references, tenant safety
   merge(await testFrameEval()); // labelled first messages: understanding + questions, no network
 
   // ── Phase B: Integration tests (Supabase) ──

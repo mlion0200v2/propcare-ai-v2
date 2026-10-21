@@ -109,6 +109,8 @@ interface CaseResult {
   asked: string[];
   reasked: string[];
   irrelevant: string[];
+  /** SOP chosen from the rules frame, and from the expected (gold) frame. */
+  sop?: { expected: string | null; got: string | null; gotFromGold: string | null };
 }
 
 export interface FrameEvalReport {
@@ -122,6 +124,8 @@ export interface FrameEvalReport {
   irrelevantRate: number;
   forbiddenRate: number;
   avgQuestions: number;
+  /** Among cases with an expected SOP that aren't emergencies. */
+  sopAccuracy: { fromRules: number; fromGoldFrame: number; cases: number } | null;
   results: CaseResult[];
 }
 
@@ -136,6 +140,22 @@ async function loadRulesFrame(): Promise<RulesFrame | null> {
   }
 }
 
+type SelectSop = (frame: Record<string, unknown>, message: string) => { sop: { issue_key: string } } | null;
+
+async function loadSelectSop(): Promise<SelectSop | null> {
+  try {
+    const mod = await import("../../src/lib/sops/select");
+    return mod.selectSop as unknown as SelectSop;
+  } catch {
+    return null; // before the SOP catalog
+  }
+}
+
+/** The labelled frame as a full IssueFrame (confident, medium severity unless an emergency). */
+function goldFrame(c: CorpusCase, rules: Record<string, unknown>): Record<string, unknown> {
+  return { ...rules, ...c.expected, severity: c.emergency ? "emergency" : "medium" };
+}
+
 const FIELDS = ["equipment", "symptom", "substance", "room"] as const;
 
 function pct(n: number, d: number): number {
@@ -144,6 +164,7 @@ function pct(n: number, d: number): number {
 
 export async function runFrameEval(cases = loadCorpus()): Promise<FrameEvalReport> {
   const rulesFrame = await loadRulesFrame();
+  const selectSop = await loadSelectSop();
   const results: CaseResult[] = [];
   for (const c of cases) {
     const scenario: Scenario = { id: c.id, name: c.message, first: c.message, rooms: KITCHEN_ROOMS, fallback: null, expect: {} };
@@ -165,6 +186,13 @@ export async function runFrameEval(cases = loadCorpus()): Promise<FrameEvalRepor
       r.frame = Object.fromEntries(
         FIELDS.map((k) => [k, { expected: c.expected[k], got: String(f[k]), ok: String(f[k]) === c.expected[k] }])
       );
+      if (selectSop) {
+        r.sop = {
+          expected: c.sop,
+          got: selectSop(f, c.message)?.sop.issue_key ?? null,
+          gotFromGold: selectSop(goldFrame(c, f), c.message)?.sop.issue_key ?? null,
+        };
+      }
     }
     results.push(r);
   }
@@ -182,6 +210,7 @@ export async function runFrameEval(cases = loadCorpus()): Promise<FrameEvalRepor
   const fn = results.filter((r) => r.emergency.expected && !r.emergency.got).length;
   const fp = results.filter((r) => !r.emergency.expected && r.emergency.got).length;
   const nonEmergency = results.filter((r) => !r.emergency.got);
+  const sopCases = results.filter((r) => r.sop && r.sop.expected && !r.emergency.expected);
   return {
     cases: cases.length,
     byLang,
@@ -193,6 +222,13 @@ export async function runFrameEval(cases = loadCorpus()): Promise<FrameEvalRepor
     irrelevantRate: pct(nonEmergency.filter((r) => r.irrelevant.length > 0).length, nonEmergency.length),
     forbiddenRate: pct(nonEmergency.filter((r) => r.reasked.length + r.irrelevant.length > 0).length, nonEmergency.length),
     avgQuestions: Math.round((nonEmergency.reduce((n, r) => n + r.asked.length, 0) / Math.max(1, nonEmergency.length)) * 10) / 10,
+    sopAccuracy: selectSop
+      ? {
+          fromRules: pct(sopCases.filter((r) => r.sop!.got === r.sop!.expected).length, sopCases.length),
+          fromGoldFrame: pct(sopCases.filter((r) => r.sop!.gotFromGold === r.sop!.expected).length, sopCases.length),
+          cases: sopCases.length,
+        }
+      : null,
     results,
   };
 }
@@ -206,6 +242,9 @@ export function summarise(r: FrameEvalReport): string {
     `category accuracy: ${(r.categoryAccuracy * 100).toFixed(1)}%`,
     `emergency: recall ${(r.emergency.recall * 100).toFixed(1)}%, precision ${(r.emergency.precision * 100).toFixed(1)}% (tp ${r.emergency.tp}, fn ${r.emergency.fn}, fp ${r.emergency.fp})`,
     `re-ask rate: ${(r.reaskRate * 100).toFixed(1)}%  irrelevant-question rate: ${(r.irrelevantRate * 100).toFixed(1)}%  any forbidden: ${(r.forbiddenRate * 100).toFixed(1)}%`,
+    r.sopAccuracy
+      ? `SOP selection: ${(r.sopAccuracy.fromRules * 100).toFixed(1)}% from the rules frame, ${(r.sopAccuracy.fromGoldFrame * 100).toFixed(1)}% from the labelled frame (${r.sopAccuracy.cases} cases)`
+      : "SOP selection: n/a (no SOP catalog)",
     `avg questions before photos: ${r.avgQuestions}`,
   ];
   return lines.join("\n");
@@ -213,8 +252,8 @@ export function summarise(r: FrameEvalReport): string {
 
 /** CI floors (deterministic tier, rules only). Raise them as the rules improve; never lower to pass. */
 export const FLOORS = {
-  tuned: { frameField: 0.95, emergencyRecall: 1, emergencyPrecision: 0.95, forbiddenRate: 0.03 },
-  heldout: { equipment: 0.8, emergencyRecall: 1, forbiddenRate: 0.12 },
+  tuned: { frameField: 0.95, emergencyRecall: 1, emergencyPrecision: 0.95, forbiddenRate: 0.03, sopFromRules: 0.9 },
+  heldout: { equipment: 0.8, emergencyRecall: 1, forbiddenRate: 0.12, sopFromGoldFrame: 0.9 },
 };
 
 export async function testFrameEval(): Promise<TestResult> {
@@ -230,6 +269,8 @@ export async function testFrameEval(): Promise<TestResult> {
   check(tuned.emergency.precision >= FLOORS.tuned.emergencyPrecision, `corpus: emergency precision ≥ ${FLOORS.tuned.emergencyPrecision * 100}%`, tuned.emergency);
   check(tuned.forbiddenRate <= FLOORS.tuned.forbiddenRate, `corpus: forbidden-question rate ≤ ${FLOORS.tuned.forbiddenRate * 100}%`, tuned.forbiddenRate);
   check((heldout.frameAccuracy?.equipment ?? 0) >= FLOORS.heldout.equipment, `held out: equipment accuracy ≥ ${FLOORS.heldout.equipment * 100}%`, heldout.frameAccuracy);
+  if (tuned.sopAccuracy) check(tuned.sopAccuracy.fromRules >= FLOORS.tuned.sopFromRules, `corpus: SOP selection ≥ ${FLOORS.tuned.sopFromRules * 100}%`, tuned.sopAccuracy);
+  if (heldout.sopAccuracy) check(heldout.sopAccuracy.fromGoldFrame >= FLOORS.heldout.sopFromGoldFrame, `held out: SOP selection from the labelled frame ≥ ${FLOORS.heldout.sopFromGoldFrame * 100}%`, heldout.sopAccuracy);
   check(heldout.emergency.recall >= FLOORS.heldout.emergencyRecall, "held out: every emergency caught", heldout.emergency);
   check(heldout.forbiddenRate <= FLOORS.heldout.forbiddenRate, `held out: forbidden-question rate ≤ ${FLOORS.heldout.forbiddenRate * 100}%`, heldout.forbiddenRate);
   // Real transcripts and regressions must pass exactly.
@@ -270,6 +311,7 @@ if (isMain) {
         const misses = x.frame ? Object.entries(x.frame).filter(([, v]) => !v.ok).map(([k, v]) => `${k}: ${v.got}≠${v.expected}`) : [];
         const em = x.emergency.expected !== x.emergency.got ? [`emergency: ${x.emergency.got}≠${x.emergency.expected}`] : [];
         const q = [...x.reasked.map((a) => `re-ask ${a}`), ...x.irrelevant.map((a) => `irrelevant ${a}`)];
+        if (x.sop?.expected && x.sop.got !== x.sop.expected) q.push(`sop ${x.sop.got} (gold frame: ${x.sop.gotFromGold}) ≠ ${x.sop.expected}`);
         if (misses.length + em.length + q.length) console.log(`${x.id}  "${x.message}"\n    ${[...misses, ...em, ...q].join("; ")}`);
       }
     }
