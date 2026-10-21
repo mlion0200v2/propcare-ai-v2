@@ -20,7 +20,7 @@ const EXTENDED_QUESTIONS: Record<string, string> = {
   current_status:
     "What is the current status of the issue? (e.g., still happening, comes and goes, getting worse)",
   brand_model:
-    "What is the brand and model of the equipment, if known? (e.g., GE Profile dishwasher, Carrier AC unit). If unknown, reply \"unknown\".",
+    "What is the brand and model, if you can see it? (usually on a sticker on the side, the back or inside). If unknown, reply \"unknown\".",
 };
 
 // Extended fields asked in this order (after the base fields are complete)

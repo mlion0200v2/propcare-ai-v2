@@ -20,6 +20,8 @@ export interface LiveTurn {
   bot: string;
   options: string[];
   tenant?: string;
+  /** What the chat understood when it asked. */
+  known?: { equipment: string; substance: string; room: string };
 }
 
 export interface LiveTranscript {
@@ -65,7 +67,8 @@ export async function simulateConversation(
     const options = question
       ? buildChatHints({ currentQuestion: question, triageState: "GATHER_INFO", category: stored.gathered?.category ?? null, description: c.message, profile: readUnitProfile({ rooms: ROOMS }), gathered: stored.gathered }).quickReplies
       : [];
-    const turn: LiveTurn = { question, bot, options };
+    const f = stored.issue_frame;
+    const turn: LiveTurn = { question, bot, options, known: f ? { equipment: f.equipment, substance: f.substance, room: f.room } : undefined };
     t.turns.push(turn);
     if (!question) break;
     const history = t.turns.map((x) => `Assistant: ${x.bot}${x.tenant ? `\nYou: ${x.tenant}` : ""}`).join("\n");

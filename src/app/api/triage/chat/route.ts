@@ -321,6 +321,7 @@ async function handleFirstMessage(
   const { data: unitRow } = await supabase.from("units").select("profile").eq("id", unit.id).maybeSingle();
   const opening = await openConversation(message, {
     rooms: readUnitProfile(unitRow?.profile).rooms,
+    profile: readUnitProfile(unitRow?.profile),
     classifyFallback: classifyWithModel,
     understander: openAIUnderstander(),
   });

@@ -788,8 +788,7 @@
      "kitchen_sink",
      "bathroom_sink",
      "sink",
-     "faucet",
-     "pipe"
+     "faucet"
     ],
     "symptoms": [
      "leaking"
@@ -1845,7 +1844,7 @@
     {
      "id": "other_drains",
      "slot": "other_drains",
-     "question": "Are other drains slow too (tub, shower, other sinks)?",
+     "question": "Are other drains in your home slow too?",
      "options": [
       {
        "label": "Only this one",
@@ -1994,7 +1993,7 @@
     {
      "id": "other_drains",
      "slot": "other_drains",
-     "question": "Are other drains slow too (sinks, toilet)?",
+     "question": "Are other drains in your home slow too?",
      "options": [
       {
        "label": "Only this one",
@@ -3667,7 +3666,7 @@
     {
      "id": "ac_running",
      "slot": "running",
-     "question": "Is the AC running (fan blowing) but not cold?",
+     "question": "Is the AC running (air blowing) but not cold?",
      "options": [
       {
        "label": "Runs but blows warm air",
@@ -3723,7 +3722,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -3857,7 +3856,7 @@
     {
      "id": "thermostat_screen",
      "slot": "screen",
-     "question": "Is the thermostat screen on?",
+     "question": "Is the thermostat's display on?",
      "options": [
       {
        "label": "Blank",
@@ -3970,7 +3969,7 @@
      "question": "When do you hear it?",
      "options": [
       {
-       "label": "When the heat or AC starts",
+       "label": "When the heating or cooling starts",
        "value": "startup",
        "match": "\\b(start|turns on|kicks in)\\b"
       },
@@ -4559,7 +4558,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -4771,7 +4770,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -4911,19 +4910,29 @@
      "question": "Where is the water?",
      "options": [
       {
-       "label": "Under or behind the fridge",
+       "label": "In front of the fridge",
+       "value": "front",
+       "match": "\\b(in front|front)\\b"
+      },
+      {
+       "label": "Under it",
        "value": "under",
-       "match": "\\b(under|behind|floor|underneath)\\b"
+       "match": "\\b(under|underneath|below)\\b"
       },
       {
-       "label": "From the ice or water dispenser",
-       "value": "dispenser",
-       "match": "\\b(ice|dispenser)\\b"
+       "label": "Behind it",
+       "value": "behind",
+       "match": "\\bbehind\\b"
       },
       {
-       "label": "Inside the fridge, at the bottom",
+       "label": "Inside, under the crisper drawers",
        "value": "inside",
-       "match": "\\b(inside|bottom shelf|crisper|in the fridge)\\b"
+       "match": "\\b(inside|crisper|drawer|bottom shelf|in the fridge)\\b"
+      },
+      {
+       "label": "On the freezer floor",
+       "value": "freezer_floor",
+       "match": "\\bfreezer\\b"
       },
       {
        "label": "Not sure",
@@ -4934,24 +4943,70 @@
      "prefill": true
     },
     {
-     "id": "amount",
-     "slot": "amount",
-     "question": "How much water is there right now?",
+     "id": "fridge_supply_line",
+     "slot": "supply_line",
+     "question": "Without moving the fridge, can you see water or ice on the water/ice-maker line or any pipe behind it?",
      "options": [
       {
-       "label": "A few drops",
-       "value": "drops",
-       "match": "\\b(drops?|drip|little|tiny)\\b"
+       "label": "Water on it",
+       "value": "water",
+       "match": "\\b(water|wet|drip)"
       },
       {
-       "label": "A small puddle",
-       "value": "puddle",
-       "match": "\\bpuddle|small\\b"
+       "label": "Ice on it",
+       "value": "ice",
+       "match": "\\b(ice|frost|frozen)\\b"
       },
       {
-       "label": "It's spreading",
-       "value": "spreading",
-       "match": "\\b(spread|spreading|a lot|lots|everywhere|flood|pouring)\\b"
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope|dry)\\b"
+      },
+      {
+       "label": "I can't see it",
+       "value": "cant_see",
+       "match": "\\b(can'?t|cannot|don'?t) see\\b|\\bnot sure\\b"
+      }
+     ],
+     "prefill": false
+    },
+    {
+     "id": "fridge_freezer_ice",
+     "slot": "freezer_ice",
+     "question": "Is there ice building up in the freezer?",
+     "options": [
+      {
+       "label": "Yes",
+       "value": "yes",
+       "match": "^\\s*(yes|yeah|lots|a lot)\\b|\\bice\\b"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|nope)\\b"
+      }
+     ],
+     "prefill": false
+    },
+    {
+     "id": "fridge_dispenser",
+     "slot": "dispenser",
+     "question": "Do you use the water dispenser or ice maker?",
+     "options": [
+      {
+       "label": "Yes",
+       "value": "yes",
+       "match": "^\\s*(yes|yeah|daily|sometimes)\\b"
+      },
+      {
+       "label": "No",
+       "value": "no",
+       "match": "^\\s*(no|never)\\b"
+      },
+      {
+       "label": "It doesn't have one",
+       "value": "none",
+       "match": "\\b(doesn'?t have|no dispenser|none)\\b"
       }
      ],
      "prefill": false
@@ -4997,7 +5052,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -5011,29 +5066,106 @@
    "likely_causes": [
     {
      "when": {
-      "part": [
-       "under",
-       "dispenser"
+      "supply_line": [
+       "water",
+       "ice"
       ]
      },
      "cause": {
       "id": "fridge_water_line",
-      "label": "Fridge water line or ice maker",
-      "sop_query": "refrigerator ice maker water line leak",
-      "prevention": "Turn off the fridge's water line valve (behind the fridge or under the sink)."
+      "label": "Water inlet valve or ice-maker supply line",
+      "sop_query": "refrigerator ice maker water line inlet valve leak",
+      "prevention": "Put towels down. Pull the fridge out only if it's light and safe to (otherwise don't move it). Never unplug it with wet hands or while standing in water. If you can reach it without moving the fridge, close the fridge's water valve (behind it or under the sink)."
      }
     },
     {
      "when": {
       "part": [
-       "inside"
+       "inside",
+       "freezer_floor"
+      ],
+      "freezer_ice": [
+       "yes"
+      ]
+     },
+     "cause": {
+      "id": "fridge_cooling_fault",
+      "label": "Defrost or cooling fault (ice building up)",
+      "sop_query": "refrigerator defrost heater ice build up freezer",
+      "prevention": "Put towels down. Pull the fridge out only if it's light and safe to (otherwise don't move it). Never unplug it with wet hands or while standing in water."
+     }
+    },
+    {
+     "when": {
+      "part": [
+       "inside",
+       "freezer_floor"
       ]
      },
      "cause": {
       "id": "fridge_drain",
-      "label": "Fridge defrost drain",
-      "sop_query": "refrigerator defrost drain water inside",
-      "prevention": "Wipe up the water and keep food off the bottom shelf."
+      "label": "Defrost drain blocked or drain pan overflowing",
+      "sop_query": "refrigerator defrost drain clogged drain pan water inside",
+      "prevention": "Put towels down. Pull the fridge out only if it's light and safe to (otherwise don't move it). Never unplug it with wet hands or while standing in water."
+     }
+    },
+    {
+     "when": {
+      "part": [
+       "behind"
+      ],
+      "dispenser": [
+       "yes"
+      ]
+     },
+     "cause": {
+      "id": "fridge_water_line",
+      "label": "Water inlet valve or ice-maker supply line",
+      "sop_query": "refrigerator ice maker water line inlet valve leak",
+      "prevention": "Put towels down. Pull the fridge out only if it's light and safe to (otherwise don't move it). Never unplug it with wet hands or while standing in water. If you can reach it without moving the fridge, close the fridge's water valve (behind it or under the sink)."
+     }
+    },
+    {
+     "when": {
+      "part": [
+       "front"
+      ],
+      "freezer_ice": [
+       "yes"
+      ]
+     },
+     "cause": {
+      "id": "fridge_door_seal",
+      "label": "Door seal (gasket) not sealing",
+      "sop_query": "refrigerator door gasket seal leaking condensation",
+      "prevention": "Put towels down. Pull the fridge out only if it's light and safe to (otherwise don't move it). Never unplug it with wet hands or while standing in water."
+     }
+    },
+    {
+     "when": {
+      "part": [
+       "front",
+       "under"
+      ]
+     },
+     "cause": {
+      "id": "fridge_drain",
+      "label": "Defrost drain blocked or drain pan overflowing",
+      "sop_query": "refrigerator defrost drain clogged drain pan water inside",
+      "prevention": "Put towels down. Pull the fridge out only if it's light and safe to (otherwise don't move it). Never unplug it with wet hands or while standing in water."
+     }
+    },
+    {
+     "when": {
+      "dispenser": [
+       "yes"
+      ]
+     },
+     "cause": {
+      "id": "fridge_water_line",
+      "label": "Water inlet valve or ice-maker supply line",
+      "sop_query": "refrigerator ice maker water line inlet valve leak",
+      "prevention": "Put towels down. Pull the fridge out only if it's light and safe to (otherwise don't move it). Never unplug it with wet hands or while standing in water. If you can reach it without moving the fridge, close the fridge's water valve (behind it or under the sink)."
      }
     }
    ],
@@ -5048,8 +5180,8 @@
     "leaking"
    ],
    "prevention": [
-    "Turn off the fridge's water line valve (behind the fridge or under the sink).",
-    "Wipe up the water and keep food off the bottom shelf."
+    "Put towels down. Pull the fridge out only if it's light and safe to (otherwise don't move it). Never unplug it with wet hands or while standing in water. If you can reach it without moving the fridge, close the fridge's water valve (behind it or under the sink).",
+    "Put towels down. Pull the fridge out only if it's light and safe to (otherwise don't move it). Never unplug it with wet hands or while standing in water."
    ],
    "tenant_steps": [
     "Move items away from water on the floor.",
@@ -5174,7 +5306,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -5307,7 +5439,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -5524,7 +5656,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -5715,7 +5847,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -5851,7 +5983,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -10396,7 +10528,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -10565,7 +10697,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -10707,7 +10839,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -10835,7 +10967,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -10967,7 +11099,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -11083,7 +11215,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -11221,7 +11353,7 @@
     {
      "id": "brand_model",
      "slot": "brand_model",
-     "question": "What's the brand and model, if you can see it? (often on a sticker inside the door or on the side)",
+     "question": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
      "options": [
       {
        "label": "Unknown",
@@ -12092,6 +12224,12 @@
        "match": "\\b(whole|everywhere|all)\\b"
       }
      ],
+     "only_if": {
+      "equipment": [
+       "unknown",
+       "drain"
+      ]
+     },
      "prefill": true
     },
     {

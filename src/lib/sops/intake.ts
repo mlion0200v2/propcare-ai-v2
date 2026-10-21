@@ -8,7 +8,9 @@
  * (part, timing, amount, electrical_near…), stored on the intake.
  */
 import type { IssueFrame } from "@/lib/understanding/frame";
+import type { UnitProfile } from "@/lib/units/profile";
 import type { Cause, IntakeOption, IntakeQuestion, Sop } from "./schema";
+import { NOT_A_SOURCE, scopeOptions } from "./scope";
 
 export const FRAME_SLOTS = ["equipment", "symptom", "substance", "room", "onset", "status"] as const;
 
@@ -29,6 +31,8 @@ export interface IntakeState {
   slots: Record<string, string>;
   complete: boolean;
   cause: (Cause & { refine_to?: string }) | null;
+  /** The unit's fixtures and their rooms (for the scope rule), copied at the start. */
+  fixtures?: { name: string; room?: string }[];
 }
 
 const NOT_SURE = "not_sure";
@@ -37,8 +41,22 @@ export function frameSlots(frame: IssueFrame): Record<string, string> {
   return Object.fromEntries(FRAME_SLOTS.map((s) => [s, frame[s]]));
 }
 
-export function startIntake(sop: Sop, frame: IssueFrame, confidence: "high" | "low"): IntakeState {
-  return { issue_key: sop.issue_key, title: sop.title, confidence, answers: {}, asked: [], slots: frameSlots(frame), complete: false, cause: null };
+export function startIntake(sop: Sop, frame: IssueFrame, confidence: "high" | "low", profile?: UnitProfile | null): IntakeState {
+  return {
+    issue_key: sop.issue_key,
+    title: sop.title,
+    confidence,
+    answers: {},
+    asked: [],
+    slots: frameSlots(frame),
+    complete: false,
+    cause: null,
+    fixtures: profile?.fixtures.map((f) => ({ name: f.name, room: f.room })) ?? [],
+  };
+}
+
+function profileOf(state: IntakeState): UnitProfile {
+  return { rooms: [], fixtures: (state.fixtures ?? []).map((f) => ({ name: f.name, room: f.room })) };
 }
 
 /** Values for conditions: answers first, then the frame. */
@@ -53,16 +71,30 @@ function holds(condition: Record<string, string[]> | undefined, v: Record<string
   return Object.entries(condition).every(([slot, allowed]) => allowed.includes(v[slot] ?? "unknown"));
 }
 
-/** Options that make sense now (no disposal for a bathroom sink). */
+/**
+ * The question as it can be asked now, through the scope rule (src/lib/sops/scope.ts):
+ * null when it doesn't fit what's known. Every question and option goes through here.
+ */
+export function scopedQuestion(question: IntakeQuestion, state: IntakeState) {
+  const v = values(state);
+  const frame = { equipment: v.equipment ?? "unknown", substance: v.substance ?? "unknown", room: v.room ?? "unknown" };
+  return scopeOptions(frame, profileOf(state), question);
+}
+
+/** Options that make sense now: the SOP's own conditions, then the scope rule (no shower for a fridge). */
 export function optionsFor(question: IntakeQuestion, state: IntakeState): IntakeOption[] {
   const v = values(state);
-  return question.options.filter((o) => holds(o.only_if, v));
+  const scoped = scopedQuestion(question, state);
+  if (!scoped) return [];
+  return scoped.options.filter((o) => holds(o.only_if, v));
 }
 
 /** Is the slot already known? Frame slots count when the frame has them. */
 export function isFilled(slot: string, state: IntakeState, known: { room?: boolean } = {}): boolean {
   if (state.answers[slot]) return true;
   if (slot === "room") return !!known.room;
+  // Water on the floor or a pipe: where it comes from is still the question.
+  if (slot === "equipment") return !NOT_A_SOURCE.has(state.slots.equipment ?? "unknown");
   if ((FRAME_SLOTS as readonly string[]).includes(slot)) return (state.slots[slot] ?? "unknown") !== "unknown";
   return false;
 }
@@ -72,6 +104,7 @@ export function nextIntakeQuestion(sop: Sop, state: IntakeState, known: { room?:
   const v = values(state);
   for (const q of sop.intake_questions) {
     if (state.asked.includes(q.id) || isFilled(q.slot, state, known) || !holds(q.only_if, v)) continue;
+    if (!scopedQuestion(q, state)) continue; // out of scope (water questions for grease…)
     // A question whose only option left is "Not sure" isn't worth asking (free text excepted).
     if (q.options.length > 0 && optionsFor(q, state).every((o) => o.value === NOT_SURE)) continue;
     return q;
