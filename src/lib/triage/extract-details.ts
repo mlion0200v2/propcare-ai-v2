@@ -5,6 +5,7 @@
  * Used on the initial issue message to pre-fill gathered fields
  * so the system doesn't ask redundant questions.
  */
+import { normalizeVocabulary } from "./vocabulary";
 
 // Sorted longest-first so "master bathroom" matches before "bathroom"
 const LOCATION_KEYWORDS = [
@@ -242,9 +243,14 @@ export function extractEntryPoint(text: string): string | null {
 
 // Sorted longest-first so "range hood" matches before "range", etc.
 const EQUIPMENT_KEYWORDS = [
+  "carbon monoxide alarm",
   "air conditioning",
+  "baseboard heater",
   "air conditioner",
   "washing machine",
+  "bathroom fan",
+  "water heater",
+  "smoke alarm",
   "range hood",
   "hood fan",
   "vent hood",
@@ -258,6 +264,10 @@ const EQUIPMENT_KEYWORDS = [
   "freezer",
   "fridge",
   "furnace",
+  "thermostat",
+  "toilet",
+  "faucet",
+  "outlet",
   "washer",
   "dryer",
   "stove",
@@ -278,7 +288,8 @@ const EQUIPMENT_REGEX_RULES: Array<{ pattern: RegExp; equipment: string }> = [
  * Uses word-boundary-aware matching (same pattern as extractLocation).
  * Normalizes aliases to canonical names (e.g., "fridge" → "refrigerator").
  */
-export function extractEquipment(text: string): string | null {
+export function extractEquipment(raw: string): string | null {
+  const text = normalizeVocabulary(raw);
   const lower = text.toLowerCase();
 
   for (const kw of EQUIPMENT_KEYWORDS) {
@@ -309,7 +320,8 @@ export function extractEquipment(text: string): string | null {
  * Extract ALL equipment types mentioned in free text.
  * Returns array of normalized equipment names (may contain duplicates removed).
  */
-export function extractAllEquipment(text: string): string[] {
+export function extractAllEquipment(raw: string): string[] {
+  const text = normalizeVocabulary(raw);
   const lower = text.toLowerCase();
   const found = new Set<string>();
 
@@ -439,6 +451,15 @@ const EQUIPMENT_CATEGORY_MAP: Record<string, string> = {
   "garbage disposal": "appliance",
   "furnace": "hvac",
   "air conditioner": "hvac",
+  "water heater": "plumbing",
+  "baseboard heater": "hvac",
+  "thermostat": "hvac",
+  "smoke alarm": "electrical",
+  "carbon monoxide alarm": "electrical",
+  "bathroom fan": "electrical",
+  "outlet": "electrical",
+  "toilet": "plumbing",
+  "faucet": "plumbing",
 };
 
 /**
@@ -572,7 +593,7 @@ const EQUIPMENT_LOCATION_MAP: Array<{ keywords: string[]; location: string }> = 
     location: "kitchen",
   },
   {
-    keywords: ["bathtub", "shower", "toilet"],
+    keywords: ["bathtub", "shower", "toilet", "bathroom fan"],
     location: "bathroom",
   },
   {
@@ -596,8 +617,8 @@ const EQUIPMENT_LOCATION_ENTRIES: Array<{ keyword: string; location: string }> =
  * e.g. "stove is not working" → "kitchen", "toilet handle is broken" → "bathroom"
  * Returns null if no appliance implies a location.
  */
-export function inferLocationFromEquipment(text: string): string | null {
-  const lower = text.toLowerCase();
+export function inferLocationFromEquipment(raw: string): string | null {
+  const lower = normalizeVocabulary(raw).toLowerCase();
 
   for (const { keyword, location } of EQUIPMENT_LOCATION_ENTRIES) {
     const idx = lower.indexOf(keyword);

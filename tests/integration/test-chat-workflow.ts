@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { createRunner, printSection, runStandalone, type TestResult } from "./helpers";
 import {
   extractLeakWhere,
+  refreshLeakDetails,
   getNextExtendedQuestion,
   isGatherComplete,
   isWaterLeak,
@@ -20,6 +21,8 @@ import { buildChatHints } from "../../src/lib/triage/hints";
 import { buildOwnerUpdate } from "../../src/lib/messages";
 import { matchingRooms, readUnitProfile, whichRoomQuestion } from "../../src/lib/units/profile";
 import type { GatheredInfo } from "../../src/lib/triage/types";
+import { generateTicketSummary } from "../../src/lib/triage/summary";
+import { buildQueryText } from "../../src/lib/retrieval/pinecone";
 
 const SRC = join(__dirname, "..", "..", "src");
 
@@ -48,8 +51,8 @@ export function testChatWorkflow(): TestResult {
   const candidateChips = buildChatHints({ currentQuestion: "location_in_unit", triageState: "GATHER_INFO", category: "plumbing", description: "leak", profile: readUnitProfile({ rooms }), locationCandidates: ["Main bathroom (upstairs hallway)", "Ensuite"] });
   check(candidateChips.quickReplies.join("|") === "Main bathroom (upstairs hallway)|Ensuite", "chips offer just the matching rooms");
   {
-    const routeSrc = readFileSync(join(SRC, "app", "api", "triage", "chat", "route.ts"), "utf8");
-    check(/initialGathered\.leak_where = extractLeakWhere\(message\)/.test(routeSrc) && /whichRoomQuestion\(roomWord/.test(routeSrc), "first message fills in the water location and narrows the room");
+    const convSrc = readFileSync(join(SRC, "lib", "triage", "conversation.ts"), "utf8");
+    check(/gathered\.leak_where = extractLeakWhere\(message\)/.test(convSrc) && /whichRoomQuestion\(roomWord/.test(convSrc), "first message fills in the water location and narrows the room");
   }
 
   // Electrical answer: safety-critical
@@ -68,10 +71,14 @@ export function testChatWorkflow(): TestResult {
     leak_details_needed: true,
   };
   check(!isGatherComplete(base) && getNextExtendedQuestion(base) === "leak_where", "leak deep-dive starts with 'where is the water?'");
-  let g = processExtendedAnswer(base, "leak_where", "Ceiling");
+  // With a fixture (here: the ceiling) the questions come from the fixture table.
+  let g = refreshLeakDetails(processExtendedAnswer(base, "leak_where", "Ceiling"), "water is leaking");
+  check(g.leak_fixture === "ceiling_wall" && getNextExtendedQuestion(g) === "leak_part", "a 'Ceiling' answer picks the ceiling questions ('what's above it?')");
+  g = refreshLeakDetails(processExtendedAnswer(g, "leak_part", "A bathroom"), "water is leaking");
+  check(getNextExtendedQuestion(g) === "leak_timing", "then when it drips");
+  g = refreshLeakDetails(processExtendedAnswer(g, "leak_timing", "Only when that's used (shower, toilet or tap above)"), "water is leaking");
+  check(getNextExtendedQuestion(g) === "leak_amount" && g.leak_likely_source?.id === "above_bathroom", "then how much; likely source recorded");
   g = processExtendedAnswer(g, "leak_amount", "It's spreading");
-  check(getNextExtendedQuestion(g) === "leak_timing", "then how much, then when");
-  g = processExtendedAnswer(g, "leak_timing", "When the shower or bath is used");
   check(getNextExtendedQuestion(g) === "leak_electrical", "electrical question last");
   const safe = processExtendedAnswer(g, "leak_electrical", "No");
   check(isGatherComplete(safe) && safe.is_emergency !== true, "'no' completes the gather without an emergency");
@@ -81,16 +88,34 @@ export function testChatWorkflow(): TestResult {
   check(isGatherComplete(notLeak), "non-leak reports skip the leak questions");
 
   const route = readFileSync(join(SRC, "app", "api", "triage", "chat", "route.ts"), "utf8");
-  check(/currentQuestion === "leak_electrical" && gathered\.leak_electrical !== "no"[\s\S]{0,200}handleEmergency\(/.test(route), "the chat escalates immediately on water near electricity");
-  check(/isWaterLeak\(message\)/.test(route) && /buildMediaPrompt\(/.test(route), "leaks flagged from the first message; media step uses the guided prompt");
+  const conv = readFileSync(join(SRC, "lib", "triage", "conversation.ts"), "utf8");
+  check(
+    /currentQuestion === "leak_electrical" && gathered\.leak_electrical !== "no"[\s\S]{0,120}kind: "emergency"/.test(conv) &&
+      /gatherStep\.kind === "emergency"[\s\S]{0,200}handleEmergency\(/.test(route),
+    "the chat escalates immediately on water near electricity"
+  );
+  check(/isWaterLeak\(message\)/.test(conv) && /buildMediaPrompt\(/.test(route), "leaks flagged from the first message; media step uses the guided prompt");
 
   // Prevention first
   const profile = readUnitProfile({ water_shutoff: "Laundry closet, blue lever", breaker_panel: "Hallway" });
   const prevention = buildPreventionSteps(safe, profile);
   check(prevention[0] === "Turn off the main water: Laundry closet, blue lever.", "spreading water: shut-off location first", prevention);
   check(prevention.some((s) => /bucket/.test(s)) && prevention.some((s) => /electronics/.test(s)) && prevention.some((s) => /sagging/.test(s)), "towels/bucket, move valuables, ceiling warning");
-  const toilet = buildPreventionSteps({ ...safe, leak_amount: "A few drops", leak_where: "Around the toilet" }, readUnitProfile({}));
-  check(/toilet's shut-off valve/.test(toilet[0]), "toilet leak: the toilet's own valve");
+  const toilet = buildPreventionSteps(
+    { ...safe, leak_fixture: null, leak_likely_source: null, leak_amount: "A few drops", leak_where: "Around the toilet" },
+    readUnitProfile({})
+  );
+  check(/toilet's shut-off valve/.test(toilet[0]), "toilet leak (source unknown): the toilet's own valve");
+  const toiletBase = buildPreventionSteps(
+    { ...safe, leak_fixture: "toilet", leak_amount: "A few drops", leak_likely_source: { id: "toilet_base", label: "Wax ring at the toilet base" } },
+    readUnitProfile({})
+  );
+  check(/Don't flush this toilet/.test(toiletBase[0]), "toilet base leak: don't flush (likely source picks the step)");
+  const trap = buildPreventionSteps(
+    { ...safe, leak_fixture: "kitchen_sink", leak_amount: "A few drops", leak_likely_source: { id: "drain_trap", label: "Drain pipe / P-trap slip nut" } },
+    readUnitProfile({})
+  );
+  check(/Don't run the tap or the dishwasher; put a bowl under the trap/.test(trap[0]), "drain/trap leak: don't run the tap or dishwasher, bowl under the trap");
   check(buildPreventionSteps(notLeak, profile).length === 0, "no prevention block for non-leaks");
 
   // Shot list
@@ -102,8 +127,16 @@ export function testChatWorkflow(): TestResult {
   check(prompt.indexOf("limit the damage") >= 0 && prompt.indexOf("limit the damage") < prompt.indexOf("Photos help") && /60 seconds/.test(prompt), "media prompt: prevention first, then shots, video ≤ 60 s");
 
   // Chips for the new questions
-  const chips = (q: string) => buildChatHints({ currentQuestion: q, triageState: "GATHER_INFO", category: "plumbing", description: "leak", profile }).quickReplies;
-  check(chips("leak_where").includes("Under the sink") && chips("leak_amount").includes("It's spreading") && chips("leak_electrical").join() === "No,Yes,Not sure", "tap-answers for every leak question");
+  const chips = (q: string) =>
+    buildChatHints({ currentQuestion: q, triageState: "GATHER_INFO", category: "plumbing", description: "leak", profile, gathered: g }).quickReplies;
+  check(
+    chips("leak_where").includes("Toilet") &&
+      chips("leak_part").includes("Another unit (a neighbour's)") &&
+      chips("leak_timing").includes("When it rains") &&
+      chips("leak_amount").includes("It's spreading") &&
+      chips("leak_electrical").join() === "No,Yes,Not sure",
+    "tap-answers for every leak question, from the fixture table"
+  );
 
   // Media limits in the browser
   const chat = readFileSync(join(SRC, "components", "triage", "chat.tsx"), "utf8");
@@ -112,6 +145,43 @@ export function testChatWorkflow(): TestResult {
   // Access details
   const access = readFileSync(join(SRC, "lib", "actions", "access.ts"), "utf8");
   check(/\.eq\("tenant_id", user\.id\)/.test(access) && /createServiceClient\(\)/.test(access), "access details: ownership checked with the tenant's session before writing");
+
+  // The likely source reaches the summary (and so the work order) and the SOP search
+  {
+    const trapGathered = {
+      ...safe,
+      leak_fixture: "kitchen_sink",
+      leak_part: "The drain pipe / P-trap under the sink",
+      leak_timing: "Only while water is draining",
+      leak_likely_source: { id: "drain_trap", label: "Drain pipe / P-trap slip nut" },
+    };
+    const summary = generateTicketSummary({
+      ticketId: "t1",
+      traceId: "t1",
+      description: "my sink is leaking",
+      gathered: trapGathered,
+      steps: [],
+      mediaCount: 0,
+      timestamp: "2026-10-21T10:00:00Z",
+    });
+    check(/Likely source: Drain pipe \/ P-trap slip nut/.test(summary) && /when: Only while water is draining/.test(summary), "summary lists the likely source and when it leaks");
+    check(/p-trap slip nut drain pipe/.test(buildQueryText(trapGathered, "my sink is leaking")), "SOP search is steered to the likely source");
+  }
+
+  // The SOP seeds cover the likely sources the chat can name
+  {
+    const seeds = ["propcare_sop_seed_50.jsonl", "propcare_sop_seed_fixtures.jsonl"].flatMap((f) =>
+      readFileSync(join(__dirname, "..", "..", "scripts", f), "utf8")
+        .split("\n")
+        .filter((l) => l.trim())
+        .map((l) => JSON.parse(l) as { id: string; title: string; text: string; metadata: { keywords: string[]; tenant_safe: boolean } })
+    );
+    const corpus = seeds.map((r) => `${r.title} ${r.text} ${r.metadata.keywords.join(" ")}`.toLowerCase()).join(" ");
+    const needed = ["cartridge", "aerator", "supply hose", "slip nut", "garbage disposal", "dishwasher drain hose", "flapper", "fill valve", "wax ring", "range hood", "grease filter", "relief valve", "ice maker", "caulking"];
+    const missing = needed.filter((k) => !corpus.includes(k));
+    check(missing.length === 0, "SOP seeds cover every likely source (cartridge, slip nut, disposal, flapper, wax ring, range hood…)", missing);
+    check(new Set(seeds.map((r) => r.id)).size === seeds.length && seeds.every((r) => r.metadata.tenant_safe && /Stop and escalate immediately if:/.test(r.text)), "SOP ids are unique; every SOP is tenant-safe with escalation rules");
+  }
 
   // Owner update
   const update = buildOwnerUpdate({

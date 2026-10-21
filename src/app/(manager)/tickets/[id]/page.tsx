@@ -253,6 +253,15 @@ export default async function TicketDetailPage({
               )}
               <dt className="text-muted">Likely trade</dt>
               <dd className="capitalize">{(gathered?.category ?? ticket.category).replace(/_/g, " ")}</dd>
+              {gathered?.leak_likely_source && (
+                <>
+                  <dt className="text-muted">Likely source</dt>
+                  <dd>
+                    {gathered.leak_likely_source.label}
+                    {gathered.leak_timing ? ` · ${gathered.leak_timing.toLowerCase()}` : ""}
+                  </dd>
+                </>
+              )}
               {(ticket.entry_permission !== null || ticket.availability || ticket.tenant_pets) && (
                 <>
                   <dt className="text-muted">Access</dt>

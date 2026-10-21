@@ -30,6 +30,7 @@ import { testDemoPure } from "./integration/test-demo-pure";
 import { testDemoSandbox } from "./integration/test-demo-sandbox";
 import { testUnitProfile } from "./integration/test-unit-profile";
 import { testChatWorkflow } from "./integration/test-chat-workflow";
+import { testConversationEval } from "./eval/conversation-eval";
 
 import { testSupabaseConnection, testTableSchema } from "./integration/test-supabase";
 
@@ -73,6 +74,7 @@ async function main() {
   merge(await testDemoSandbox()); // PGlite
   merge(await testUnitProfile()); // pure + PGlite
   merge(testChatWorkflow());
+  merge(await testConversationEval()); // scripted multi-turn chats, no network
 
   // ── Phase B: Integration tests (Supabase) ──
   console.log("\n\x1b[1m-- Phase B: Integration Tests (Supabase) --\x1b[0m");

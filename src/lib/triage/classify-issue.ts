@@ -5,6 +5,9 @@
  * Replaces the numbered category menu with system-driven classification.
  */
 
+import { normalizeVocabulary } from "./vocabulary";
+import { extractEquipment, getEquipmentCategory } from "./extract-details";
+
 const CATEGORY_OPTIONS = [
   "plumbing",
   "electrical",
@@ -54,6 +57,7 @@ const KEYWORD_RULES: KeywordRule[] = [
   { category: "electrical", weight: 8, patterns: [/\b(wiring|wire|wires|spark|sparking|sparks)\b/i] },
   { category: "electrical", weight: 7, patterns: [/\b(power|power out|no power|blackout|outage)\b/i] },
   { category: "electrical", weight: 6, patterns: [/\b(ceiling fan|fan)\b/i] },
+  { category: "electrical", weight: 10, patterns: [/\b(smoke alarm|carbon monoxide alarm|bathroom fan)\b/i] },
 
   // HVAC
   { category: "hvac", weight: 10, patterns: [/\b(hvac|furnace|heater|heating)\b/i] },
@@ -198,7 +202,22 @@ export function buildClarifyingCategoryQuestion(
  * question (low/medium confidence).
  */
 export function classifyIssue(description: string): ClassificationResult {
-  const keywordResult = classifyByKeywords(description);
+  // "rangehood", "dish washer", "garburator"… → the words the rules know.
+  const text = normalizeVocabulary(description);
+  const keywordResult = classifyByKeywords(text);
+
+  // A named appliance or fixture decides the category ("microwave stopped
+  // heating" is an appliance, not HVAC), except for pest reports ("roaches
+  // in the dishwasher").
+  const equipment = extractEquipment(text);
+  const equipmentCategory = equipment ? (getEquipmentCategory(equipment) as IssueCategory | null) : null;
+  if (equipmentCategory && keywordResult?.category !== "pest_control") {
+    return {
+      category: equipmentCategory,
+      confidence: "high",
+      rationale: `equipment: ${equipment} → ${equipmentCategory}${keywordResult ? ` (keywords: ${keywordResult.category})` : ""}`,
+    };
+  }
 
   if (keywordResult) {
     return keywordResult;

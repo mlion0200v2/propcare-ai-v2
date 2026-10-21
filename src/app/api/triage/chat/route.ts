@@ -19,48 +19,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { demoChatTurnLimit, isDemoMode } from "@/lib/demo/config";
 import {
-  step,
-  buildInitialReply,
-  buildInitialReplyWithClarification,
   buildInitialGathered,
   buildInitialTenantInfo,
-  buildTenantInfoInitialReply,
-  buildConfirmProfileReply,
   stepTenantInfo,
   getNextMissingTenantInfo,
-  getNextMissingField,
   validateTenantInfo,
   TENANT_INFO_QUESTIONS,
-  QUESTIONS,
 } from "@/lib/triage/state-machine";
-import { extractLocation, extractTiming, extractCurrentStatus, extractEntryPoint, extractEquipment, detectEquipmentCorrection, inferLocationFromEquipment, getEquipmentCategory, detectEquipmentAmbiguity } from "@/lib/triage/extract-details";
+import { extractLocation, extractTiming, extractCurrentStatus, extractEntryPoint, extractEquipment, detectEquipmentCorrection, inferLocationFromEquipment, getEquipmentCategory } from "@/lib/triage/extract-details";
 import { logTriageStep, logError, logWarn } from "@/lib/triage/logger";
 import { sendTicketSummaryEmail, getManagerEmailForTicket } from "@/lib/email/send-ticket-email";
 import {
-  isGatherComplete,
-  isExtendedField,
-  getNextExtendedQuestion,
-  getExtendedQuestionText,
-  processExtendedAnswer,
-  isWaterLeak,
-  extractLeakWhere,
-} from "@/lib/triage/gather-issue";
-import { buildAcknowledgement } from "@/lib/triage/acknowledgement";
-import {
-  classifyIssue,
-  classifyPest,
-  classifyMold,
-  classifyPlumbing,
-  classifyStructural,
-  classifyApplianceSymptom,
-  classifyHvacSymptom,
-  classifyLandscaping,
-  parseClarifyingResponse,
   parseCategoryCorrection,
-  buildClarifyingCategoryQuestion,
 } from "@/lib/triage/classify-issue";
 import {
-  detectSafety,
   checkPestEscalation,
 } from "@/lib/triage/detect-safety";
 import { querySnippets } from "@/lib/retrieval/pinecone";
@@ -81,22 +53,21 @@ import { classifyStepHybrid } from "@/lib/triage/interpret-step-response";
 import { generateStepHelp } from "@/lib/triage/step-help";
 import {
   detectEmergency,
-  classifySafetyAnswer,
   buildEmergencyReply,
   buildEmergencyFollowUpReply,
   type EmergencyMatch,
 } from "@/lib/triage/emergency";
 import { escalateEmergency, setPrivilegedTicketFields } from "@/lib/triage/escalate-emergency";
 import { isSummaryConfirmation } from "@/lib/triage/confirmation";
+import { advanceGather, afterGather, getNextGatherQuestion, openConversation, turnEmergency } from "@/lib/triage/conversation";
+import { classifyWithModel } from "@/lib/triage/classify-model";
 import { buildMediaPrompt } from "@/lib/triage/guidance";
-import { matchingRooms, readUnitProfile, whichRoomQuestion } from "@/lib/units/profile";
+import { readUnitProfile } from "@/lib/units/profile";
 import { triageChatRequestSchema } from "@/lib/utils/validation";
 import { triageChatLimiter } from "@/lib/rate-limit";
 import type {
-  TriageContext,
   TriageClassification,
   ValidationResult,
-  IssueClassification,
   GuidedTroubleshootingState,
   TroubleshootingLogEntry,
 } from "@/lib/triage/types";
@@ -302,23 +273,6 @@ export async function POST(request: NextRequest) {
 
 // ────────────────────────────────────────────────────────────
 
-/**
- * Find the next gather question to ask (base or extended).
- * Returns null when ALL gather fields are already filled.
- */
-function getNextGatherQuestion(
-  gathered: import("@/lib/triage/types").GatheredInfo
-): { field: string; text: string } | null {
-  const nextBase = getNextMissingField(gathered);
-  if (nextBase) {
-    return { field: nextBase, text: QUESTIONS[nextBase] };
-  }
-  const nextExtended = getNextExtendedQuestion(gathered);
-  if (nextExtended) {
-    return { field: nextExtended, text: getExtendedQuestionText(nextExtended) };
-  }
-  return null;
-}
 
 /**
  * The tenancy a new ticket is filed under: the one the client names, or the
@@ -361,278 +315,20 @@ async function handleFirstMessage(
   }
   const unit = { id: tenancy.unit_id };
   const hasUnit = true;
-  const leakDetailsNeeded = isWaterLeak(message);
-  let roomWord: string | null = null;
 
-  // ── Auto-classify issue ──
-  const classification_result = classifyIssue(message);
-  const issueClassification: IssueClassification = {
-    category: classification_result.category,
-    confidence: classification_result.confidence,
-    rationale: classification_result.rationale,
-  };
-
-  // ── Shared emergency detector ──
-  const emergency = detectEmergency(message);
-  const emergencyDetected = emergency !== null;
-
-  // ── Extract structured details from initial description ──
-  const extractedLocation = extractLocation(message) ?? inferLocationFromEquipment(message);
-  const extractedTiming = extractTiming(message);
-  const extractedStatus = extractCurrentStatus(message);
-  const extractedEntryPoint = extractEntryPoint(message);
-  const extractedEquipment = extractEquipment(message);
-
-  // ── Pest subcategory ──
-  const pestResult = classification_result.category === "pest_control"
-    ? classifyPest(message)
-    : null;
-
-  // ── Mold subcategory ──
-  const moldResult = classification_result.category === "structural"
-    ? classifyMold(message)
-    : null;
-
-  // ── Plumbing subcategory ──
-  const plumbingResult = classification_result.category === "plumbing"
-    ? classifyPlumbing(message)
-    : null;
-
-  // ── Structural subcategory (window/screen) ──
-  const structuralResult = classification_result.category === "structural"
-    ? classifyStructural(message)
-    : null;
-
-  // ── Appliance symptom subcategory ──
-  const applianceSymptom = classification_result.category === "appliance"
-    ? classifyApplianceSymptom(message)
-    : null;
-
-  // ── HVAC symptom subcategory ──
-  const hvacSymptom = classification_result.category === "hvac"
-    ? classifyHvacSymptom(message)
-    : null;
-
-  // ── Landscaping subcategory ──
-  const landscapingResult = classification_result.category === "landscaping"
-    ? classifyLandscaping(message)
-    : null;
-
-  // ── Multi-equipment ambiguity ──
-  const { candidates: equipmentCandidates } = detectEquipmentAmbiguity(message);
-
-  // ── Build acknowledgement ──
-  const acknowledgement = buildAcknowledgement(message, {
-    timing: extractedTiming,
-    status: extractedStatus,
+  // What the first message says, and the first question (src/lib/triage/conversation.ts).
+  const { data: unitRow } = await supabase.from("units").select("profile").eq("id", unit.id).maybeSingle();
+  const opening = await openConversation(message, {
+    rooms: readUnitProfile(unitRow?.profile).rooms,
+    classifyFallback: classifyWithModel,
   });
-
-  // Build classification and determine initial state/reply
-  let triageClassification: TriageClassification;
-  let triageState: string;
-  let reply: string;
-
-  if (hasUnit) {
-    const initialGathered = buildInitialGathered();
-
-    // Set category from auto-classification
-    if (classification_result.confidence === "high" || classification_result.confidence === "medium") {
-      initialGathered.category = classification_result.category;
-    }
-
-    // Set emergency from auto-detection
-    if (emergencyDetected) {
-      initialGathered.is_emergency = true;
-    }
-
-    // Set pre-extracted fields
-    if (extractedLocation) {
-      initialGathered.location_in_unit = extractedLocation;
-    }
-    if (extractedTiming) {
-      initialGathered.started_when = extractedTiming;
-    }
-    if (extractedStatus) {
-      initialGathered.current_status = extractedStatus;
-    }
-    if (pestResult) {
-      initialGathered.subcategory = pestResult.species;
-    }
-    if (moldResult) {
-      initialGathered.subcategory = moldResult;
-    }
-    if (plumbingResult) {
-      initialGathered.subcategory = plumbingResult;
-    }
-    if (structuralResult) {
-      initialGathered.subcategory = structuralResult;
-    }
-    if (applianceSymptom) {
-      initialGathered.subcategory = applianceSymptom;
-    }
-    if (hvacSymptom) {
-      initialGathered.subcategory = hvacSymptom;
-    }
-    if (landscapingResult) {
-      initialGathered.subcategory = landscapingResult;
-    }
-    if (extractedEntryPoint) {
-      initialGathered.entry_point = extractedEntryPoint;
-    }
-    if (extractedEquipment) {
-      initialGathered.equipment = extractedEquipment;
-    }
-    if (equipmentCandidates.length > 0) {
-      initialGathered.equipment_candidates = equipmentCandidates;
-    }
-
-    // Use what the first message already says, and the unit's own rooms:
-    // "water dripping from the bathroom ceiling" → water at the ceiling;
-    // two bathrooms in the profile → ask "Which bathroom?" with those two.
-    if (leakDetailsNeeded) {
-      initialGathered.leak_details_needed = true;
-      initialGathered.leak_where = extractLeakWhere(message);
-    }
-    if (initialGathered.location_in_unit) {
-      const { data: unitRow } = await supabase.from("units").select("profile").eq("id", unit.id).maybeSingle();
-      const rooms = readUnitProfile(unitRow?.profile).rooms;
-      const candidates = matchingRooms(initialGathered.location_in_unit, rooms);
-      if (candidates.length > 1) {
-        initialGathered.location_candidates = candidates;
-        roomWord = initialGathered.location_in_unit;
-        initialGathered.location_in_unit = null;
-      } else if (candidates.length === 1) {
-        initialGathered.location_in_unit = candidates[0];
-      }
-    }
-
-    if (classification_result.confidence === "low") {
-      // Low confidence — ask a clarifying question
-      const clarifyingQ = buildClarifyingCategoryQuestion(
-        message,
-        [classification_result.category]
-      );
-      triageClassification = {
-        gathered: initialGathered,
-        current_question: "classify_category",
-        issue_classification: issueClassification,
-      };
-      triageState = "GATHER_INFO";
-      reply = buildInitialReplyWithClarification(acknowledgement, clarifyingQ);
-    } else {
-      // High/medium confidence — ask the next missing field (skip any pre-extracted fields)
-      const nextQ = getNextGatherQuestion(initialGathered);
-      triageClassification = {
-        gathered: initialGathered,
-        current_question: nextQ?.field ?? null,
-        issue_classification: issueClassification,
-      };
-      triageState = "GATHER_INFO";
-      reply = buildInitialReply(
-        acknowledgement,
-        (nextQ?.field === "location_in_unit" && roomWord && initialGathered.location_candidates
-          ? whichRoomQuestion(roomWord, initialGathered.location_candidates)
-          : nextQ?.text) ??
-          "Thanks for all the details! Is there anything else about the issue you'd like to mention before I proceed?"
-      );
-    }
-  } else {
-    // Load profile to seed tenant info from previous tickets
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("phone, email, default_property_address, default_unit_number")
-      .eq("id", userId)
-      .single();
-
-    const initialGathered = buildInitialGathered();
-
-    // Set category from auto-classification
-    if (classification_result.confidence === "high" || classification_result.confidence === "medium") {
-      initialGathered.category = classification_result.category;
-    }
-
-    // Set emergency from auto-detection
-    if (emergencyDetected) {
-      initialGathered.is_emergency = true;
-    }
-
-    // Set pre-extracted fields
-    if (extractedLocation) {
-      initialGathered.location_in_unit = extractedLocation;
-    }
-    if (extractedTiming) {
-      initialGathered.started_when = extractedTiming;
-    }
-    if (extractedStatus) {
-      initialGathered.current_status = extractedStatus;
-    }
-    if (pestResult) {
-      initialGathered.subcategory = pestResult.species;
-    }
-    if (moldResult) {
-      initialGathered.subcategory = moldResult;
-    }
-    if (plumbingResult) {
-      initialGathered.subcategory = plumbingResult;
-    }
-    if (structuralResult) {
-      initialGathered.subcategory = structuralResult;
-    }
-    if (applianceSymptom) {
-      initialGathered.subcategory = applianceSymptom;
-    }
-    if (hvacSymptom) {
-      initialGathered.subcategory = hvacSymptom;
-    }
-    if (landscapingResult) {
-      initialGathered.subcategory = landscapingResult;
-    }
-    if (extractedEntryPoint) {
-      initialGathered.entry_point = extractedEntryPoint;
-    }
-    if (extractedEquipment) {
-      initialGathered.equipment = extractedEquipment;
-    }
-    if (equipmentCandidates.length > 0) {
-      initialGathered.equipment_candidates = equipmentCandidates;
-    }
-
-    const tenantInfo = {
-      reported_address: profile?.default_property_address ?? null,
-      reported_unit_number: profile?.default_unit_number ?? null,
-      contact_phone: profile?.phone ?? null,
-      contact_email: profile?.email ?? null,
-    };
-
-    const firstMissing = getNextMissingTenantInfo(tenantInfo);
-
-    if (!firstMissing) {
-      // All fields present — returning tenant, confirm stored info
-      triageClassification = {
-        gathered: initialGathered,
-        current_question: null,
-        tenant_info: tenantInfo,
-        issue_classification: issueClassification,
-      };
-      triageState = "CONFIRM_PROFILE";
-      reply = buildConfirmProfileReply(tenantInfo);
-    } else {
-      // Some or all fields missing — collect the missing ones
-      triageClassification = {
-        gathered: initialGathered,
-        current_question: firstMissing,
-        tenant_info: tenantInfo,
-        issue_classification: issueClassification,
-      };
-      triageState = "COLLECT_TENANT_INFO";
-      reply = buildTenantInfoInitialReply();
-    }
-  }
-
-  // Water leaks get the source deep-dive (where, how much, when, electrical).
-  if (leakDetailsNeeded && triageClassification.gathered) {
-    triageClassification.gathered.leak_details_needed = true;
-  }
+  const classification_result = opening.classification;
+  const emergency = opening.emergency;
+  const emergencyDetected = emergency !== null;
+  const triageClassification = opening.triageClassification;
+  const triageState = "GATHER_INFO";
+  const reply = opening.reply;
+  const { location: extractedLocation, timing: extractedTiming, status: extractedStatus } = opening.extracted;
 
   // Create ticket (unit_id is null when tenant has no assigned unit)
   const insertPayload = {
@@ -790,29 +486,7 @@ async function handleFollowUp(
   // any question (address, location, a troubleshooting step, the summary…)
   // gets safety guidance immediately and stops troubleshooting.
   // (Phone/email answers are format-validated and skipped: "sparks@…" is not a fire.)
-  const isContactAnswer =
-    ticket.triage_state === "COLLECT_TENANT_INFO" &&
-    (stored.current_question === "contact_phone" || stored.current_question === "contact_email");
-  let emergency: EmergencyMatch | null =
-    message && !isContactAnswer ? detectEmergency(message) : null;
-
-  // Answer to the targeted safety question: only a clear "no" clears it;
-  // a "yes" or an unclear answer escalates.
-  if (
-    !emergency &&
-    ticket.triage_state === "GATHER_INFO" &&
-    stored.current_question === "safety_check"
-  ) {
-    const answer = classifySafetyAnswer(message);
-    if (answer !== "no_concern") {
-      emergency = { kind: "unconfirmed_safety", phrase: message.slice(0, 120) };
-      stored.safety_detection = {
-        detected: true,
-        method: answer === "concern" ? "user_confirmed" : "user_unclear",
-        rationale: `user_response: "${message.slice(0, 50)}"`,
-      };
-    }
-  }
+  const emergency = turnEmergency(message, ticket.triage_state, stored);
 
   if (emergency) {
     return handleEmergency(supabase, userId, ticket, stored, message, emergency, start, {
@@ -1721,332 +1395,160 @@ async function handleFollowUp(
 
   // ── GATHER_INFO branch ──
   const traceId = ticket.trace_id ?? ticket.id;
-  let gathered = stored.gathered ?? buildInitialGathered();
-  let currentQuestion = stored.current_question ?? null;
-  let stepReply: string | null = null;
+  const gatherStep = advanceGather({
+    stored,
+    description: ticket.description,
+    triageState: ticket.triage_state,
+    message,
+  });
+  const gathered = gatherStep.gathered;
 
-  // 1. Process the user's answer
-  if (currentQuestion === "classify_category") {
-    // Clarifying category question — parse the response
-    const prevClassification = stored.issue_classification ?? {
-      category: "general" as const,
-      confidence: "low" as const,
-      rationale: "default",
-    };
-    const updated = parseClarifyingResponse(message, {
-      category: prevClassification.category as import("@/lib/triage/classify-issue").IssueCategory,
-      confidence: prevClassification.confidence,
-      rationale: prevClassification.rationale,
-    });
-    gathered.category = updated.category;
-
-    // Update issue classification
-    stored.issue_classification = {
-      category: updated.category,
-      confidence: updated.confidence,
-      rationale: updated.rationale,
-    };
-
-    currentQuestion = null; // Move to next field
-  } else if (currentQuestion === "safety_check") {
-    // Targeted safety question. Concern or unclear answers were already
-    // escalated above (handleEmergency), so only a clear "no" reaches here.
-    gathered.is_emergency = false;
-
-    stored.safety_detection = {
-      detected: false,
-      method: "user_denied",
-      rationale: `user_response: "${message.slice(0, 50)}"`,
-    };
-
-    currentQuestion = null; // Move to next field
-  } else if (currentQuestion && isExtendedField(currentQuestion)) {
-    // Extended field — process directly
-    gathered = processExtendedAnswer(gathered, currentQuestion, message);
-
-    // Leak deep-dive: water near an outlet/light (or "not sure") → stop and
-    // escalate now, before any more questions.
-    if (currentQuestion === "leak_electrical" && gathered.leak_electrical !== "no") {
-      return handleEmergency(
-        supabase,
-        userId,
-        ticket,
-        { ...stored, gathered },
-        message,
-        {
-          kind: gathered.leak_electrical === "yes" ? "water_electrical" : "unconfirmed_safety",
-          phrase: `water near electrical: "${message.slice(0, 80)}"`,
-        },
-        start,
-        { insertUserMessage: true }
-      );
-    }
-  } else {
-    // Base field — run state machine
-    const context: TriageContext = {
-      triage_state: ticket.triage_state as "GATHER_INFO" | "DONE",
-      description: ticket.description,
-      gathered,
-      current_question: currentQuestion,
-    };
-    const result = step(context, message);
-    gathered = result.gathered;
-    if (result.next_state === "GATHER_INFO") {
-      stepReply = result.reply;
-      currentQuestion = result.current_question;
-    } else {
-      currentQuestion = null;
-    }
-  }
-
-  // 2. Emergencies in this message were already handled above (handleEmergency).
-
-  // 2b. Extract entry point from every GATHER_INFO message
-  if (!gathered.entry_point) {
-    const ep = extractEntryPoint(message);
-    if (ep) gathered.entry_point = ep;
-  }
-
-  // 2b2. Extract equipment from every GATHER_INFO message
-  if (!gathered.equipment) {
-    const eq = extractEquipment(message);
-    if (eq) gathered.equipment = eq;
-  }
-
-  // 2c. Classify pest subcategory if pest_control and not yet classified
-  if (gathered.category === "pest_control" && !gathered.subcategory) {
-    const pest = classifyPest(message);
-    if (pest) gathered.subcategory = pest.species;
-  }
-
-  // 2d. Classify mold subcategory if structural and not yet classified
-  if (gathered.category === "structural" && !gathered.subcategory) {
-    const mold = classifyMold(message);
-    if (mold) gathered.subcategory = mold;
-  }
-
-  // 2e. Classify plumbing subcategory if plumbing and not yet classified
-  if (gathered.category === "plumbing" && !gathered.subcategory) {
-    const plumbing = classifyPlumbing(message);
-    if (plumbing) gathered.subcategory = plumbing;
-  }
-
-  // 2f. Classify structural subcategory (window/screen) if structural and not yet classified
-  if (gathered.category === "structural" && !gathered.subcategory) {
-    const structural = classifyStructural(message);
-    if (structural) gathered.subcategory = structural;
-  }
-
-  // 2g. Classify appliance symptom if appliance and not yet classified
-  if (gathered.category === "appliance" && !gathered.subcategory) {
-    const symptom = classifyApplianceSymptom(message);
-    if (symptom) gathered.subcategory = symptom;
-  }
-
-  // 2h. Classify HVAC symptom if hvac and not yet classified
-  if (gathered.category === "hvac" && !gathered.subcategory) {
-    const symptom = classifyHvacSymptom(message);
-    if (symptom) gathered.subcategory = symptom;
-  }
-
-  // 2i. Classify landscaping subcategory if landscaping and not yet classified
-  if (gathered.category === "landscaping" && !gathered.subcategory) {
-    const landscaping = classifyLandscaping(message);
-    if (landscaping) gathered.subcategory = landscaping;
-  }
-
-  // 3. Check if ALL fields (base + extended) are complete
-  if (!isGatherComplete(gathered)) {
-    // Determine what to ask next
-    let nextQuestion: string | null;
-    let botReply: string;
-
-    if (stepReply && currentQuestion && !isExtendedField(currentQuestion)) {
-      // step() already produced a reply asking a base field question
-      nextQuestion = currentQuestion;
-      botReply = stepReply;
-    } else {
-      // Need an extended question
-      nextQuestion = getNextExtendedQuestion(gathered);
-      botReply = nextQuestion ? getExtendedQuestionText(nextQuestion) : "";
-    }
-
-    // Safety guard: if no next question exists, force gather complete to
-    // prevent empty-reply deadlock (no question to ask but gather says incomplete)
-    if (!nextQuestion && !botReply) {
-      logWarn("chat_safety_guard", "No next question but gather incomplete", {
-        ticketId: ticket.id,
-        gathered_fields: Object.entries(gathered)
-          .filter(([, v]) => v !== null)
-          .map(([k]) => k),
-        null_fields: Object.entries(gathered)
-          .filter(([, v]) => v === null)
-          .map(([k]) => k),
-      });
-      // Fall through to safety detection + completion below
-    } else {
-      const updatedClassification: TriageClassification = {
-        gathered,
-        current_question: nextQuestion,
-        tenant_info: stored.tenant_info,
-        issue_classification: stored.issue_classification,
-        safety_detection: stored.safety_detection,
-        media_refs: stored.media_refs,
-        retrieval: stored.retrieval,
-        summary: stored.summary,
-      };
-
-      const { error: gatherUpdateErr } = await supabase
-        .from("tickets")
-        .update({
-          triage_state: "GATHER_INFO",
-          classification: updatedClassification as unknown as Json,
-        })
-        .eq("id", ticket.id)
-        .select("id")
-        .single();
-      if (gatherUpdateErr) {
-        logError("chat_gather_update", gatherUpdateErr, { ticketId: ticket.id });
-      }
-
-      await supabase.from("messages").insert({
-        ticket_id: ticket.id,
-        sender_id: userId,
-        body: message,
-        is_bot_reply: false,
-      });
-      if (botReply) {
-        await supabase.from("messages").insert({
-          ticket_id: ticket.id,
-          sender_id: userId,
-          body: botReply,
-          is_bot_reply: true,
-        });
-      }
-
-      logTriageStep({
-        trace_id: traceId,
-        ticket_id: ticket.id,
-        triage_state: "GATHER_INFO",
-        action: "gather_info",
-        latency_ms: Date.now() - start,
-        timestamp: new Date().toISOString(),
-        metadata: {
-          question: nextQuestion,
-          gathered_fields: Object.entries(gathered)
-            .filter(([, v]) => v !== null)
-            .map(([k]) => k),
-        },
-      });
-
-      return NextResponse.json({
-        ticket_id: ticket.id,
-        reply: botReply,
-        triage_state: "GATHER_INFO",
-        is_complete: false,
-      });
-    }
-  }
-
-  // ── All fields gathered — run safety detection before proceeding ──
-  if (gathered.is_emergency === null) {
-    const safetyResult = detectSafety(ticket.description, gathered);
-
-    if (safetyResult.detected) {
-      // Auto-detected emergency (e.g. electrical + burning) → escalate now.
-      gathered.is_emergency = true;
-      stored.safety_detection = {
-        detected: true,
-        method: "auto",
-        rationale: safetyResult.rationale,
-      };
-      return handleEmergency(
-        supabase,
-        userId,
-        ticket,
-        { ...stored, gathered },
-        message,
-        { kind: safetyResult.kind ?? "unconfirmed_safety", phrase: safetyResult.rationale },
-        start,
-        { insertUserMessage: true }
-      );
-    } else if (safetyResult.needsQuestion && !stored.safety_detection) {
-      // Need to ask a targeted safety question
-      const updatedClassification: TriageClassification = {
-        gathered,
-        current_question: "safety_check",
-        tenant_info: stored.tenant_info,
-        issue_classification: stored.issue_classification,
-        media_refs: stored.media_refs,
-        retrieval: stored.retrieval,
-        summary: stored.summary,
-      };
-
-      const { error: safetyUpdateErr } = await supabase
-        .from("tickets")
-        .update({
-          triage_state: "GATHER_INFO",
-          classification: updatedClassification as unknown as Json,
-        })
-        .eq("id", ticket.id)
-        .select("id")
-        .single();
-      if (safetyUpdateErr) {
-        logError("chat_safety_update", safetyUpdateErr, { ticketId: ticket.id });
-      }
-
-      await supabase.from("messages").insert({
-        ticket_id: ticket.id,
-        sender_id: userId,
-        body: message,
-        is_bot_reply: false,
-      });
-      await supabase.from("messages").insert({
-        ticket_id: ticket.id,
-        sender_id: userId,
-        body: safetyResult.question!,
-        is_bot_reply: true,
-      });
-
-      logTriageStep({
-        trace_id: traceId,
-        ticket_id: ticket.id,
-        triage_state: "GATHER_INFO",
-        action: "safety_check",
-        latency_ms: Date.now() - start,
-        timestamp: new Date().toISOString(),
-      });
-
-      return NextResponse.json({
-        ticket_id: ticket.id,
-        reply: safetyResult.question!,
-        triage_state: "GATHER_INFO",
-        is_complete: false,
-      });
-    } else {
-      // No safety concern
-      gathered.is_emergency = false;
-      stored.safety_detection = {
-        detected: false,
-        method: "skipped",
-        rationale: safetyResult.rationale,
-      };
-    }
-  }
-
-  // Emergency flagged earlier in the conversation but not escalated yet
-  // (e.g. a ticket created before this release) → escalate now.
-  if (gathered.is_emergency === true) {
+  // Water near an outlet/light (or "not sure") → stop and escalate now.
+  if (gatherStep.kind === "emergency") {
     return handleEmergency(
       supabase,
       userId,
       ticket,
       { ...stored, gathered },
       message,
-      { kind: "unconfirmed_safety", phrase: stored.safety_detection?.rationale ?? "flagged during triage" },
+      gatherStep.emergency,
       start,
       { insertUserMessage: true }
     );
+  }
+
+  if (gatherStep.kind === "ask") {
+    const nextQuestion = gatherStep.nextQuestion || null;
+    const botReply = gatherStep.reply;
+    const updatedClassification: TriageClassification = {
+      gathered,
+      current_question: nextQuestion,
+      tenant_info: stored.tenant_info,
+      issue_classification: stored.issue_classification,
+      safety_detection: stored.safety_detection,
+      media_refs: stored.media_refs,
+      retrieval: stored.retrieval,
+      summary: stored.summary,
+    };
+
+    const { error: gatherUpdateErr } = await supabase
+      .from("tickets")
+      .update({
+        triage_state: "GATHER_INFO",
+        classification: updatedClassification as unknown as Json,
+      })
+      .eq("id", ticket.id)
+      .select("id")
+      .single();
+    if (gatherUpdateErr) {
+      logError("chat_gather_update", gatherUpdateErr, { ticketId: ticket.id });
+    }
+
+    await supabase.from("messages").insert({
+      ticket_id: ticket.id,
+      sender_id: userId,
+      body: message,
+      is_bot_reply: false,
+    });
+    if (botReply) {
+      await supabase.from("messages").insert({
+        ticket_id: ticket.id,
+        sender_id: userId,
+        body: botReply,
+        is_bot_reply: true,
+      });
+    }
+
+    logTriageStep({
+      trace_id: traceId,
+      ticket_id: ticket.id,
+      triage_state: "GATHER_INFO",
+      action: "gather_info",
+      latency_ms: Date.now() - start,
+      timestamp: new Date().toISOString(),
+      metadata: {
+        question: nextQuestion,
+        gathered_fields: Object.entries(gathered)
+          .filter(([, v]) => v !== null)
+          .map(([k]) => k),
+      },
+    });
+
+    return NextResponse.json({
+      ticket_id: ticket.id,
+      reply: botReply,
+      triage_state: "GATHER_INFO",
+      is_complete: false,
+    });
+  }
+
+  // ── All fields gathered — danger check before photos ──
+  const next = afterGather(gathered, ticket.description, stored);
+  if (next.kind === "emergency") {
+    return handleEmergency(
+      supabase,
+      userId,
+      ticket,
+      { ...stored, gathered },
+      message,
+      next.emergency,
+      start,
+      { insertUserMessage: true }
+    );
+  }
+  if (next.kind === "safety_question") {
+    // Need to ask a targeted safety question
+    const updatedClassification: TriageClassification = {
+      gathered,
+      current_question: "safety_check",
+      tenant_info: stored.tenant_info,
+      issue_classification: stored.issue_classification,
+      media_refs: stored.media_refs,
+      retrieval: stored.retrieval,
+      summary: stored.summary,
+    };
+
+    const { error: safetyUpdateErr } = await supabase
+      .from("tickets")
+      .update({
+        triage_state: "GATHER_INFO",
+        classification: updatedClassification as unknown as Json,
+      })
+      .eq("id", ticket.id)
+      .select("id")
+      .single();
+    if (safetyUpdateErr) {
+      logError("chat_safety_update", safetyUpdateErr, { ticketId: ticket.id });
+    }
+
+    await supabase.from("messages").insert({
+      ticket_id: ticket.id,
+      sender_id: userId,
+      body: message,
+      is_bot_reply: false,
+    });
+    await supabase.from("messages").insert({
+      ticket_id: ticket.id,
+      sender_id: userId,
+      body: next.question,
+      is_bot_reply: true,
+    });
+
+    logTriageStep({
+      trace_id: traceId,
+      ticket_id: ticket.id,
+      triage_state: "GATHER_INFO",
+      action: "safety_check",
+      latency_ms: Date.now() - start,
+      timestamp: new Date().toISOString(),
+    });
+
+    return NextResponse.json({
+      ticket_id: ticket.id,
+      reply: next.question,
+      triage_state: "GATHER_INFO",
+      is_complete: false,
+    });
   }
 
   // ── Transition to AWAITING_MEDIA ──

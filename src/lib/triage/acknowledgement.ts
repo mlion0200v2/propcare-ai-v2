@@ -15,9 +15,10 @@
  */
 export function buildAcknowledgement(
   description: string,
-  extras?: { timing?: string | null; status?: string | null }
+  extras?: { timing?: string | null; status?: string | null; understood?: boolean }
 ): string {
-  const issuePhrase = extractIssuePhrase(description);
+  // Don't echo a phrase we didn't understand ("It sounds like your rangehood…").
+  const issuePhrase = extras?.understood === false ? null : extractIssuePhrase(description);
 
   // Build context suffix from extracted timing/status (e.g. " — started yesterday, still happening")
   const contextParts: string[] = [];

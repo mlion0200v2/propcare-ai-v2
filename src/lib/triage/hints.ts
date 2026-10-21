@@ -4,6 +4,8 @@
  * always works too; these only save typing and mistakes.
  */
 import { fixtureLabel, type UnitProfile } from "@/lib/units/profile";
+import { FIXTURES, LEAK_WHERE_OPTIONS, type FixtureId } from "./fixtures";
+import type { GatheredInfo } from "./types";
 
 export interface ChatHints {
   quickReplies: string[];
@@ -24,8 +26,11 @@ export function buildChatHints(params: {
   profile: UnitProfile;
   /** Rooms the tenant may mean (e.g. two bathrooms): offered instead of all rooms. */
   locationCandidates?: string[] | null;
+  /** Conversation so far: the leak questions' options depend on the fixture. */
+  gathered?: GatheredInfo | null;
 }): ChatHints {
-  const { currentQuestion, triageState, category, description, profile, locationCandidates } = params;
+  const { currentQuestion, triageState, category, description, profile, locationCandidates, gathered } = params;
+  const fixture = gathered?.leak_fixture ? FIXTURES[gathered.leak_fixture as FixtureId] ?? null : null;
   const quickReplies: string[] = [];
   const notes: string[] = [];
 
@@ -44,19 +49,17 @@ export function buildChatHints(params: {
       quickReplies.push("Still happening", "Comes and goes", "Getting worse", "It stopped");
       break;
     case "leak_where":
-      quickReplies.push("Ceiling", "Wall", "Floor", "Under the sink", "Around an appliance", "Around the toilet");
+      quickReplies.push(...LEAK_WHERE_OPTIONS);
+      break;
+    case "leak_part":
+      quickReplies.push(...(fixture?.part?.options.map((o) => o.label) ?? []));
       break;
     case "leak_amount":
       quickReplies.push("A few drops", "A small puddle", "It's spreading");
       break;
     case "leak_timing":
-      quickReplies.push(
-        "All the time",
-        "When the shower or bath is used",
-        "When the toilet is flushed",
-        "When an appliance runs",
-        "Not sure"
-      );
+      // Only options that make sense for this fixture (no "shower" for a kitchen sink).
+      quickReplies.push(...(fixture?.timing?.options.map((o) => o.label) ?? []));
       break;
     case "leak_electrical":
       quickReplies.push("No", "Yes", "Not sure");
@@ -77,5 +80,5 @@ export function buildChatHints(params: {
     notes.push(`Breaker panel: ${profile.breaker_panel}. Only touch it if your hands and the floor are dry.`);
   }
 
-  return { quickReplies: [...new Set(quickReplies)].slice(0, 10), notes };
+  return { quickReplies: [...new Set(quickReplies)].slice(0, 12), notes };
 }

@@ -7,6 +7,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { buildChatHints } from "@/lib/triage/hints";
 import { readUnitProfile } from "@/lib/units/profile";
+import type { GatheredInfo } from "@/lib/triage/types";
 
 export async function GET(request: NextRequest) {
   const ticketId = request.nextUrl.searchParams.get("ticket_id") ?? "";
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
 
   const c = (ticket.classification ?? {}) as {
     current_question?: string | null;
-    gathered?: { category?: string | null; location_candidates?: string[] | null };
+    gathered?: GatheredInfo | null;
   };
   return NextResponse.json(
     buildChatHints({
@@ -38,6 +39,7 @@ export async function GET(request: NextRequest) {
       description: ticket.description,
       profile: readUnitProfile(ticket.units?.profile),
       locationCandidates: c.gathered?.location_candidates ?? null,
+      gathered: c.gathered ?? null,
     })
   );
 }

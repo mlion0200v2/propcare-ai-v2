@@ -10,6 +10,7 @@
  */
 
 import type { GatheredInfo } from "./types";
+import { FIXTURES, LEAK_SOURCES, detectFixture, matchOption, resolveLikelySource, type FixtureId } from "./fixtures";
 
 // Categories that require brand_model
 const BRAND_MODEL_CATEGORIES = ["appliance", "hvac"] as const;
@@ -21,19 +22,69 @@ const EXTENDED_QUESTIONS: Record<string, string> = {
   brand_model:
     "What is the brand and model of the equipment, if known? (e.g., GE Profile dishwasher, Carrier AC unit). If unknown, reply \"unknown\".",
   leak_where:
-    "Where is the water? (the ceiling, a wall, the floor, under the sink, or around an appliance)",
+    "Where is the water? (the ceiling, a wall, the floor, or which fixture: a sink, the toilet, the tub or shower, an appliance)",
   leak_amount:
     "How much water is there right now? (a few drops, a small puddle, or spreading)",
-  leak_timing:
-    "When does it leak? (all the time, only when the shower or bath is used, when the toilet is flushed, or when an appliance runs)",
   leak_electrical:
     "Is the water near an outlet, a light, or anything plugged in? (yes / no / not sure)",
 };
 
-const LEAK_FIELDS = ["leak_where", "leak_amount", "leak_timing", "leak_electrical"] as const;
+// Leak deep-dive, in order. leak_part / leak_timing come from the fixture table.
+const LEAK_FIELDS = ["leak_where", "leak_part", "leak_timing", "leak_amount", "leak_electrical"] as const;
+type LeakField = (typeof LEAK_FIELDS)[number];
+
+function fixtureOf(gathered: GatheredInfo) {
+  return gathered.leak_fixture ? FIXTURES[gathered.leak_fixture as FixtureId] ?? null : null;
+}
+
+/** Leak questions this conversation needs (depends on the fixture). */
+function leakFieldNeeded(gathered: GatheredInfo, field: LeakField): boolean {
+  const spec = fixtureOf(gathered);
+  switch (field) {
+    case "leak_where":
+      return !spec; // only when no fixture is known
+    case "leak_part":
+      return !!spec?.part;
+    case "leak_timing":
+      return !!spec?.timing;
+    default:
+      return true;
+  }
+}
+
+function missingLeakField(gathered: GatheredInfo): LeakField | null {
+  return LEAK_FIELDS.find((f) => leakFieldNeeded(gathered, f) && gathered[f] == null) ?? null;
+}
+
+/**
+ * Work out the fixture from the description, room and "where" answer, and
+ * fill in whatever the tenant has already said about it. Call after every
+ * answer (a room answer can make "sink" a kitchen sink).
+ */
+export function refreshLeakDetails(gathered: GatheredInfo, description: string, firstMessage = false): GatheredInfo {
+  if (!gathered.leak_details_needed) return gathered;
+  const updated = { ...gathered };
+  if (!updated.leak_fixture) {
+    updated.leak_fixture = detectFixture(`${description} ${updated.leak_where ?? ""}`, updated.location_in_unit);
+    const spec = updated.leak_fixture ? FIXTURES[updated.leak_fixture as FixtureId] : null;
+    // What the tenant already said about where/when on this fixture.
+    // (For ceilings/walls the room named is where the tenant is, not what's above.)
+    if (spec?.part && updated.leak_part == null && spec.id !== "ceiling_wall") {
+      const said = matchOption(spec.part, `${description} ${updated.leak_where ?? ""}`);
+      if (said && said.source) updated.leak_part = said.label;
+    }
+    if (spec?.timing && updated.leak_timing == null && firstMessage) {
+      const said = matchOption(spec.timing, description);
+      if (said && said.label !== "Not sure") updated.leak_timing = said.label;
+    }
+  }
+  const source = resolveLikelySource((updated.leak_fixture as FixtureId) ?? null, updated.leak_part, updated.leak_timing);
+  updated.leak_likely_source = source ? { id: source, label: LEAK_SOURCES[source].label } : updated.leak_likely_source ?? null;
+  return updated;
+}
 
 const LEAK_WORDS =
-  /\b(leak|leaks|leaking|leaked|drip|drips|dripping|water (?:is )?(?:coming|pouring|on the floor|everywhere)|puddle|flood|flooding|flooded|overflow|overflowing|burst|seeping|wet (?:ceiling|wall|floor)|water stain)\b/i;
+  /\b(leak|leaks|leaking|leaked|drip|drips|dripping|water (?:is )?(?:coming|pouring|on the floor|everywhere|under|underneath|around|behind|below|pooling|collecting|seeping)|puddle|puddles|pooling|flood|flooding|flooded|overflow|overflowing|burst|seeping|wet (?:ceiling|wall|floor|carpet|cabinet)|water stain|water damage)\b/i;
 
 /** True when the report is about water escaping somewhere (asks the leak deep-dive). */
 export function isWaterLeak(text: string): boolean {
@@ -43,7 +94,7 @@ export function isWaterLeak(text: string): boolean {
 const LEAK_WHERE_PATTERNS: [RegExp, string][] = [
   [/\bceiling\b/i, "Ceiling"],
   [/\b(under|underneath|below) (the )?(kitchen |bathroom )?sink\b|\bsink\b.*\b(underneath|under it|below it|cabinet)\b/i, "Under the sink"],
-  [/\b(behind|around|base of|under) (the )?toilet\b|\btoilet (is )?(leak|leaking|overflow)/i, "Around the toilet"],
+  [/\b(behind|around|base of|under) (the |my )?toilet\b/i, "Around the toilet"],
   [/\b(dishwasher|washing machine|washer|fridge|refrigerator|water heater|hot water tank)\b/i, "Around an appliance"],
   [/\bwalls?\b/i, "Wall"],
   [/\bfloor\b/i, "Floor"],
@@ -103,8 +154,8 @@ export function isGatherComplete(gathered: GatheredInfo): boolean {
     return false;
   }
 
-  // Extended: leak deep-dive for water leaks
-  if (gathered.leak_details_needed && LEAK_FIELDS.some((f) => gathered[f] == null)) {
+  // Extended: leak deep-dive for water leaks (fixture-specific)
+  if (gathered.leak_details_needed && missingLeakField(gathered)) {
     return false;
   }
 
@@ -127,7 +178,7 @@ export function getNextExtendedQuestion(gathered: GatheredInfo): string | null {
   }
 
   if (gathered.leak_details_needed) {
-    const missing = LEAK_FIELDS.find((f) => gathered[f] == null);
+    const missing = missingLeakField(gathered);
     if (missing) return missing;
   }
 
@@ -141,8 +192,16 @@ export function getNextExtendedQuestion(gathered: GatheredInfo): string | null {
 /**
  * Get the question text for an extended field.
  */
-export function getExtendedQuestionText(field: string): string {
+export function getExtendedQuestionText(field: string, gathered?: GatheredInfo): string {
+  const spec = gathered ? fixtureOf(gathered) : null;
+  if (field === "leak_part" && spec?.part) return withOptions(spec.part.question, spec.part.options.map((o) => o.label));
+  if (field === "leak_timing" && spec?.timing) return withOptions(spec.timing.question, spec.timing.options.map((o) => o.label));
   return EXTENDED_QUESTIONS[field] ?? "";
+}
+
+function withOptions(question: string, labels: string[]): string {
+  const shown = labels.filter((l) => l !== "Not sure").map((l) => l.charAt(0).toLowerCase() + l.slice(1));
+  return `${question} (${shown.join("; ")}; or not sure)`;
 }
 
 /**
@@ -166,9 +225,17 @@ export function processExtendedAnswer(
       break;
     case "leak_where":
     case "leak_amount":
-    case "leak_timing":
       updated[field] = trimmed.slice(0, 200);
       break;
+    case "leak_part":
+    case "leak_timing": {
+      // Store the option it means (so the likely source is known), else the words.
+      const spec = fixtureOf(updated);
+      const question = field === "leak_part" ? spec?.part : spec?.timing;
+      const option = question ? matchOption(question, trimmed) : null;
+      updated[field] = option ? option.label : trimmed.slice(0, 200);
+      break;
+    }
     case "leak_electrical": {
       const answer = normaliseYesNo(trimmed);
       updated.leak_electrical = answer;
