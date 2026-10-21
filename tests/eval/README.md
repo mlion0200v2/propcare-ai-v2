@@ -68,7 +68,8 @@ The live tier only calls OpenAI, using `OPENAI_API_KEY`. It never touches Supaba
 
 1. **Model frames.** Every corpus and held-out message goes through the understanding layer with the model on. Field accuracy, SOP selection and emergency recall and precision are scored against the labels.
 2. **Simulated chats.** The model plays the tenant from a hidden card built from the labels, and answers whatever the real conversation module asks. Simone's transcripts and the regression cases are always included; the rest is a seeded sample.
-3. **Judge.** A model scores each chat against a rubric: understood, relevance, efficiency, safety, and overall. It lists irrelevant and re-asked questions verbatim.
+3. **Judge.** A model scores each chat against a rubric: understood, relevance, efficiency, safety, **tradesperson-ready** and overall. For tradesperson-ready, the judge also sees the manager-facing diagnosis, and asks whether a tradesperson would have what they need before the visit. It lists irrelevant and re-asked questions verbatim.
+4. **Diagnosis cards** (`--diagnosis N|all`, default 20). The model plays a tenant whose hidden card fixes the true cause and lists what they would notice. The check is whether the ticket lists that cause first or second, with the right trade. Results are reported per area.
 
 **Cost cap:** `--max-usd` or `LIVE_EVAL_MAX_USD`, default $2. The run stops and still writes its report when the cap is reached. Prices are in `live/llm.ts`; override them with `LIVE_EVAL_PRICE_IN` and `LIVE_EVAL_PRICE_OUT`.
 
@@ -82,8 +83,8 @@ The live tier only calls OpenAI, using `OPENAI_API_KEY`. It never touches Supaba
 **Estimated cost** (gpt-4o-mini, from the dry run in `reports/live-2026-10-21-dry-run.md`):
 - One understanding call: about $0.00026.
 - A production conversation: about $0.001 (one call per tenant message).
-- A full live run (424 messages through the model, plus 424 simulated chats with the judge): about $0.66.
-- The default run (40 chats): about $0.20.
+- A full live run (every message as a chat, plus all 220 diagnosis cards): about $1.18.
+- The default run (all messages through the model, 40 chats, 20 diagnosis cards): about $0.23.
 
 **Nightly:** `.github/workflows/eval-live.yml` runs nightly only when the repository variable `LIVE_EVAL` is `1` and the `OPENAI_API_KEY` secret is set. It can also be started by hand (Actions → Live eval → Run workflow). The report is uploaded as a build artifact.
 

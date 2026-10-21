@@ -2308,7 +2308,7 @@
      "id": "sink_drain_clog",
      "label": "Clog in the sink drain or trap (hair, grease, food)",
      "sop_query": "sink drain clogged trap hair grease",
-     "prevention": "Don't pour drain cleaner; it makes the plumber's job dangerous.",
+     "prevention": "Don't pour drain cleaner: it's dangerous for whoever clears the drain.",
      "candidate_parts": [
       "hand auger",
       "P-trap kit if corroded",
@@ -11989,7 +11989,7 @@
     "disposal"
    ],
    "prevention": [
-    "Don't pour drain cleaner; it makes the plumber's job dangerous."
+    "Don't pour drain cleaner: it's dangerous for whoever clears the drain."
    ],
    "tenant_steps": [
     "Turn the disposal switch off. Never put your hand inside the disposal.",
@@ -12045,7 +12045,7 @@
      "id": "sink_drain_clog",
      "label": "Clog in the sink drain or trap (hair, grease, food)",
      "sop_query": "sink drain clogged trap hair grease",
-     "prevention": "Don't pour drain cleaner; it makes the plumber's job dangerous.",
+     "prevention": "Don't pour drain cleaner: it's dangerous for whoever clears the drain.",
      "candidate_parts": [
       "hand auger",
       "P-trap kit if corroded",

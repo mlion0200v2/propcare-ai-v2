@@ -5,7 +5,7 @@
  *   LIVE_EVAL=1 npx tsx tests/eval/live/run-live.ts --sample all       # every message as a conversation
  *   npx tsx tests/eval/live/run-live.ts --dry-run                      # no network: stubs + cost estimate
  *
- * Options: --sample N|all  --max-usd 2 (or LIVE_EVAL_MAX_USD)  --out tests/eval/reports
+ * Options: --sample N|all  --diagnosis N|all (default 20 cards)  --max-usd 2 (or LIVE_EVAL_MAX_USD)  --out tests/eval/reports
  * Needs OPENAI_API_KEY (from .env.local or the environment). Writes
  * reports/live-YYYY-MM-DD.md (+ .json): baseline vs after table, model
  * frame accuracy, judge scores, worst transcripts, and what it cost.
@@ -21,6 +21,25 @@ import { HELDOUT_FILES, TUNED_FILES, loadCorpus, runFrameEval, type CorpusCase, 
 import { Budget, BudgetExceeded, estimateTokens, openAICall, type StructuredCall } from "./llm";
 import { JUDGE_SYSTEM, TENANT_SYSTEM, judge, simulateConversation, type LiveTranscript, type Verdict } from "./simulate";
 import { isPickList, scopeViolation } from "../scope-check";
+import { buildCards, type DiagnosisCard } from "../diagnosis-eval";
+import { AREAS } from "../coverage";
+import { loadCatalog } from "../../../src/lib/sops/catalog";
+
+/** The hidden card for a diagnosis chat: the true cause and what the tenant would notice. */
+export function diagnosisCardText(card: DiagnosisCard): string {
+  const sop = loadCatalog().find((s) => s.issue_key === card.sop)!;
+  const cause = sop.causes.find((c) => c.id === card.cause)!;
+  const signs = sop.intake_questions
+    .map((q) => ({ q, o: q.options.find((o) => o.rules_in?.includes(card.cause)) }))
+    .filter((x) => x.o)
+    .map((x) => `- ${x.q.question} → ${x.o!.label}`);
+  return [
+    `First message you sent: "${card.first}"`,
+    `What's really wrong (never say this outright; you're a tenant, not a technician): ${cause.label}.`,
+    signs.length ? `What you'd notice if asked:\n${signs.join("\n")}` : "You don't notice anything special beyond the problem itself.",
+    "It is not dangerous: no sparks, no burning smell, no gas, water is not near anything electrical.",
+  ].join("\n");
+}
 
 /** Out-of-scope questions/options in a simulated chat: vs the truth, and vs what the chat understood (a filter bypass). */
 export function liveScope(t: LiveTranscript, c: CorpusCase): { vsTruth: string[]; bypass: string[] } {
@@ -59,7 +78,7 @@ function stubCall(budget: Budget): StructuredCall {
       const options = /Tap options: (.*)\n/.exec(user)?.[1]?.split(" | ").filter((o) => o && o !== "(none)" && !/not sure/i.test(o)) ?? [];
       return { reply: options[0] ?? "not sure" };
     }
-    return { understood: 4, relevance: 4, irrelevant_questions: [], reasked_questions: [], safety_ok: true, efficiency: 4, overall: 4, notes: "dry run" };
+    return { understood: 4, relevance: 4, irrelevant_questions: [], reasked_questions: [], safety_ok: true, efficiency: 4, tradesperson_ready: 4, overall: 4, notes: "dry run" };
   }) as StructuredCall;
 }
 
@@ -115,12 +134,14 @@ function renderReport(r: {
   conversations: { transcript: LiveTranscript; verdict: Verdict; case: CorpusCase }[];
   budget: Budget;
   stoppedEarly: string | null;
+  diagnoses?: { card: DiagnosisCard; transcript: LiveTranscript; top2: boolean; tradeOk: boolean }[];
 }): string {
   const lines: string[] = [];
   const conv = r.conversations;
   const avg = (k: keyof Verdict) => (conv.length ? conv.reduce((n, c) => n + (c.verdict[k] as number), 0) / conv.length : 0);
   const rate = (f: (c: (typeof conv)[number]) => boolean) => (conv.length ? conv.filter(f).length / conv.length : 0);
-  const perConv = conv.length ? (r.budget.byPurpose.tenant?.usd ?? 0) / conv.length + (r.budget.byPurpose.judge?.usd ?? 0) / conv.length : 0;
+  const chats = conv.length + (r.diagnoses?.length ?? 0);
+  const perConv = chats ? ((r.budget.byPurpose.tenant?.usd ?? 0) + (r.budget.byPurpose.judge?.usd ?? 0)) / chats : 0;
   const und = r.budget.byPurpose.understanding;
   const perUnderstanding = und ? und.usd / und.calls : 0;
   const turns = conv.length ? conv.reduce((n, c) => n + c.transcript.turns.filter((t) => t.tenant).length, 0) / conv.length : 0;
@@ -143,6 +164,7 @@ function renderReport(r: {
   lines.push(`## Simulated conversations (${conv.length}; the model plays the tenant, a judge scores)`, "");
   if (conv.length) {
     lines.push("| judge metric | value |", "|---|---|");
+    lines.push(`| Tradesperson-ready (1–5) | ${avg("tradesperson_ready").toFixed(2)} |`);
     lines.push(`| Understood (1–5) | ${avg("understood").toFixed(2)} |`, `| Relevance (1–5) | ${avg("relevance").toFixed(2)} |`, `| Efficiency (1–5) | ${avg("efficiency").toFixed(2)} |`, `| Overall (1–5) | ${avg("overall").toFixed(2)} |`);
     lines.push(`| Out-of-scope question/option (vs the truth) | ${p(rate((c) => liveScope(c.transcript, c.case).vsTruth.length > 0))} |`);
     lines.push(`| Scope filter bypassed (must be 0) | ${p(rate((c) => liveScope(c.transcript, c.case).bypass.length > 0))} |`);
@@ -158,6 +180,22 @@ function renderReport(r: {
     }
   }
 
+  const dg = r.diagnoses ?? [];
+  if (dg.length) {
+    lines.push(`## Diagnosis (${dg.length} cards: the model plays a tenant whose problem has a known cause)`, "");
+    if (r.dryRun) lines.push("> Dry run: the stub tenant taps the first option and ignores the card, so these numbers only show the pipeline runs. The deterministic tier (tests/eval/diagnosis-eval.ts) has the scripted-tenant result.", "");
+    lines.push(`True cause first or second, with the right trade: **${p(dg.filter((d) => d.top2 && d.tradeOk).length / dg.length)}**`, "");
+    lines.push("| Area | Cards | Cause in top 2 |", "|---|---|---|");
+    for (const [area, keys] of Object.entries(AREAS)) {
+      const inArea = dg.filter((d) => keys.includes(d.card.sop));
+      if (inArea.length) lines.push(`| ${area} | ${inArea.length} | ${p(inArea.filter((d) => d.top2).length / inArea.length)} |`);
+    }
+    const missed = dg.filter((d) => !d.top2).slice(0, 5);
+    if (missed.length) {
+      lines.push("", "Missed:", ...missed.map((d) => `- ${d.card.sop} / ${d.card.cause}: got ${(d.transcript.ranked ?? []).join(", ") || "nothing"} (SOP ${d.transcript.sop ?? "none"})`));
+    }
+    lines.push("");
+  }
   lines.push("## Cost", "", "| purpose | calls | input tokens | output tokens | USD |", "|---|---|---|---|---|");
   for (const [k, v] of Object.entries(r.budget.byPurpose)) lines.push(`| ${k} | ${v.calls} | ${v.input} | ${v.output} | $${v.usd.toFixed(4)} |`);
   lines.push(`| **total** | ${r.budget.calls} | | | **$${r.budget.spent.toFixed(4)}** (cap $${r.budget.maxUsd}) |`, "");
@@ -188,6 +226,7 @@ async function main() {
   let stoppedEarly: string | null = null;
   let model: { tuned: FrameScore; heldout: FrameScore } | null = null;
   const conversations: { transcript: LiveTranscript; verdict: Verdict; case: CorpusCase }[] = [];
+  const diagnoses: { card: DiagnosisCard; transcript: LiveTranscript; top2: boolean; tradeOk: boolean }[] = [];
   try {
     model = { tuned: await modelFrames(tuned, understander, budget), heldout: await modelFrames(heldout, understander, budget) };
     const sampleArg = arg("--sample") ?? "40";
@@ -201,6 +240,19 @@ async function main() {
       conversations.push({ transcript, verdict, case: c });
       process.stdout.write(".");
     }
+    // Diagnosis cards: the model plays a tenant whose problem has a known cause.
+    const catalog = loadCatalog();
+    const cardSample = arg("--diagnosis") === "all" ? buildCards() : seededSample(buildCards(), Number(arg("--diagnosis") ?? 20), 7);
+    for (const card of cardSample) {
+      budget.check();
+      const c = tuned.find((x) => x.message === card.first) ?? { ...tuned[0], id: `card-${card.sop}-${card.cause}`, message: card.first, sop: card.sop, emergency: false };
+      const transcript = await simulateConversation({ ...c, message: card.first }, call, understander, 14, diagnosisCardText(card));
+      const ranked = transcript.ranked ?? [];
+      const truth = catalog.find((s) => s.issue_key === card.sop)!.causes.find((x) => x.id === card.cause)!;
+      const leadTrade = catalog.flatMap((s) => s.causes).find((x) => x.id === card.cause)?.trade;
+      diagnoses.push({ card, transcript, top2: ranked.slice(0, 2).includes(card.cause), tradeOk: leadTrade === truth.trade });
+      process.stdout.write("d");
+    }
   } catch (e) {
     if (!(e instanceof BudgetExceeded)) throw e;
     stoppedEarly = e.message;
@@ -210,7 +262,7 @@ async function main() {
   const outDir = arg("--out") ?? join(__dirname, "..", "reports");
   mkdirSync(outDir, { recursive: true });
   const name = `live-${date}${dryRun ? "-dry-run" : ""}`;
-  const report = renderReport({ date, dryRun, baselines, rules, model, conversations, budget, stoppedEarly });
+  const report = renderReport({ date, dryRun, baselines, rules, model, conversations, budget, stoppedEarly, diagnoses });
   writeFileSync(join(outDir, `${name}.md`), report);
   writeFileSync(join(outDir, `${name}.json`), JSON.stringify({ date, dryRun, model, budget: { spent: budget.spent, byPurpose: budget.byPurpose }, conversations }, null, 1));
   console.log(`\n${report}\nWrote ${join(outDir, name)}.md`);

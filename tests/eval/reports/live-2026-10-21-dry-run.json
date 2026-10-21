@@ -1,0 +1,4536 @@
+{
+ "date": "2026-10-21",
+ "dryRun": true,
+ "model": {
+  "tuned": {
+   "cases": 451,
+   "accuracy": {
+    "equipment": 0.971,
+    "symptom": 0.958,
+    "substance": 0.973,
+    "room": 0.973
+   },
+   "sop": 0.935,
+   "emergencyRecall": 1,
+   "emergencyPrecision": 1
+  },
+  "heldout": {
+   "cases": 59,
+   "accuracy": {
+    "equipment": 0.864,
+    "symptom": 0.712,
+    "substance": 0.763,
+    "room": 0.983
+   },
+   "sop": 0.593,
+   "emergencyRecall": 1,
+   "emergencyPrecision": 1
+  }
+ },
+ "budget": {
+  "spent": 0.23010795000000053,
+  "byPurpose": {
+   "understanding": {
+    "usd": 0.20889330000000028,
+    "calls": 805,
+    "input": 813022,
+    "output": 144900
+   },
+   "tenant": {
+    "usd": 0.01435259999999999,
+    "calls": 242,
+    "input": 81164,
+    "output": 3630
+   },
+   "judge": {
+    "usd": 0.006862050000000002,
+    "calls": 44,
+    "input": 19347,
+    "output": 6600
+   }
+  }
+ },
+ "conversations": [
+  {
+   "transcript": {
+    "id": "range_hood-not_working-1",
+    "first": "my rangehood is not working",
+    "turns": [
+     {
+      "question": "intake:hood_fan_behaviour",
+      "bot": "I'm sorry to hear that. It sounds like your range hood is not working.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhat happens when you press the fan button? (nothing at all (no fan, no light); the light works but the fan doesn't; it hums but doesn't spin; it runs but is loud or rattles; it runs but doesn't pull the smoke out)",
+      "options": [
+       "Nothing at all (no fan, no light)",
+       "The light works but the fan doesn't",
+       "It hums but doesn't spin",
+       "It runs but is loud or rattles",
+       "It runs but doesn't pull the smoke out"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Nothing at all (no fan, no light)"
+     },
+     {
+      "question": "intake:hood_speeds",
+      "bot": "Have you tried every speed setting?",
+      "options": [
+       "Yes, none work",
+       "No"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes, none work"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "range_hood_fan_not_working",
+    "emergency": null,
+    "cause": "Hood switch, plug or power",
+    "ranked": [
+     "hood_switch",
+     "hood_airflow",
+     "hood_blower_loose"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Range hood fan not working, noisy or weak\nConfidence: High\nLikely cause: Hood switch, plug or power\nEvidence: What happens when you press the fan button: Nothing at all (no fan, no light); Have you tried every speed setting: Yes, none work; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: electrician (about 30–60 min)\nBring: switch / control board, power check\nAsk for / check: The model/serial label (behind the grease filters); The hood's buttons"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "range_hood-not_working-1",
+    "message": "my rangehood is not working",
+    "lang": "en",
+    "style": "terse",
+    "expected": {
+     "equipment": "range_hood",
+     "symptom": "not_working",
+     "substance": "none",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "range_hood_fan_not_working",
+    "source": "transcript"
+   }
+  },
+  {
+   "transcript": {
+    "id": "sink-leaking-1",
+    "first": "my sink is leaking",
+    "turns": [
+     {
+      "question": "location_in_unit",
+      "bot": "I'm sorry to hear that. It sounds like your sink is leaking.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere in your unit is the issue? (e.g., kitchen, bathroom, bedroom)",
+      "options": [
+       "Kitchen",
+       "Main bathroom (hallway)",
+       "Laundry closet",
+       "Bedroom",
+       "Living room"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "Kitchen"
+     },
+     {
+      "question": "intake:sink_part",
+      "bot": "Where on the sink is the water coming from? (around the faucet base or handle; from the spout (it drips when off); the supply hoses or shut-off valves under the sink; the drain pipe / P-trap under the sink; the garbage disposal; the dishwasher hose; or not sure)",
+      "options": [
+       "Around the faucet base or handle",
+       "From the spout (it drips when off)",
+       "The supply hoses or shut-off valves under the sink",
+       "The drain pipe / P-trap under the sink",
+       "The garbage disposal",
+       "The dishwasher hose",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Around the faucet base or handle"
+     },
+     {
+      "question": "intake:sink_timing",
+      "bot": "When does it leak? (only while the tap is running; only while water is draining; all the time, even with the tap off; or not sure)",
+      "options": [
+       "Only while the tap is running",
+       "Only while water is draining",
+       "All the time, even with the tap off",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Only while the tap is running"
+     },
+     {
+      "question": "intake:amount",
+      "bot": "How much water is there right now?",
+      "options": [
+       "A few drops",
+       "A small puddle",
+       "It's spreading"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "A few drops"
+     },
+     {
+      "question": "intake:electrical_near",
+      "bot": "Is the water near an outlet, a light, or anything plugged in?",
+      "options": [
+       "No",
+       "Yes",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "No"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "under_sink_leak",
+    "emergency": null,
+    "cause": "Faucet seal or cartridge (base/handle)",
+    "ranked": [
+     "faucet_seal",
+     "drain_trap",
+     "faucet_cartridge"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Under-sink leak (P-trap / supply line)\nConfidence: High\nLikely cause: Faucet seal or cartridge (base/handle)\nEvidence: Where on the sink is the water coming from: Around the faucet base or handle; When does it leak: Only while the tap is running; How much water is there right now: A few drops; Is the water near an outlet, a light, or anything plugged in: No; When did it start: Just now\nTrade: plumber (about 30–60 min)\nBring: faucet cartridge, O-rings, faucet base gasket\nAsk for / check: Under the sink with the doors open: the pipes, valves and any disposal or dishwasher hose; The faucet (brand logo, one handle or two) and the valves under the sink"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "sink-leaking-1",
+    "message": "my sink is leaking",
+    "lang": "en",
+    "style": "terse",
+    "expected": {
+     "equipment": "sink",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "under_sink_leak",
+    "source": "transcript"
+   }
+  },
+  {
+   "transcript": {
+    "id": "range_hood-leaking-1",
+    "first": "rangehood is leaking gease",
+    "turns": [
+     {
+      "question": "intake:hood_where",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere does it drip from? (the filter area underneath; the edges or seams of the hood; the top, where the duct goes into the wall or ceiling; or not sure)",
+      "options": [
+       "The filter area underneath",
+       "The edges or seams of the hood",
+       "The top, where the duct goes into the wall or ceiling",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "grease",
+       "room": "kitchen"
+      },
+      "tenant": "The filter area underneath"
+     },
+     {
+      "question": "intake:hood_filters_cleaned",
+      "bot": "When were the filters last cleaned? (in the last month; a few months ago or more; never / don't know)",
+      "options": [
+       "In the last month",
+       "A few months ago or more",
+       "Never / don't know"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "grease",
+       "room": "kitchen"
+      },
+      "tenant": "In the last month"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "range_hood_grease_drip",
+    "emergency": null,
+    "cause": "Grease filters full (grease drips from the filter area)",
+    "ranked": [
+     "grease_filter",
+     "hood_seams",
+     "hood_duct"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Range hood dripping grease or water\nConfidence: Medium\nLikely cause: Grease filters full (grease drips from the filter area); or Grease collecting in the hood and leaking at the seams\nEvidence: Where does it drip from: The filter area underneath; When were the filters last cleaned: In the last month\nTrade: handyperson (about 30–90 min)\nBring: mesh grease filters (measure size), degreaser, grease filters, degreasing service\nAsk for / check: The model/serial label (behind the grease filters); The grease filters (size printed on the frame)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "range_hood-leaking-1",
+    "message": "rangehood is leaking gease",
+    "lang": "en",
+    "style": "typo",
+    "expected": {
+     "equipment": "range_hood",
+     "symptom": "leaking",
+     "substance": "grease",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "range_hood_grease_drip",
+    "source": "transcript"
+   }
+  },
+  {
+   "transcript": {
+    "id": "regression-2026-10-21-pv9o",
+    "first": "my fridge is leaking",
+    "turns": [
+     {
+      "question": "intake:fridge_part",
+      "bot": "I'm sorry to hear that. It sounds like your fridge is leaking.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere is the water? (in front of the fridge; under it; behind it; inside, under the crisper drawers; on the freezer floor; or not sure)",
+      "options": [
+       "In front of the fridge",
+       "Under it",
+       "Behind it",
+       "Inside, under the crisper drawers",
+       "On the freezer floor",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "In front of the fridge"
+     },
+     {
+      "question": "intake:fridge_supply_line",
+      "bot": "Without moving the fridge, can you see water or ice on the water/ice-maker line or any pipe behind it? (water on it; ice on it; no; i can't see it)",
+      "options": [
+       "Water on it",
+       "Ice on it",
+       "No",
+       "I can't see it"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Water on it"
+     },
+     {
+      "question": "intake:fridge_freezer_ice",
+      "bot": "Is there ice building up in the freezer?",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:fridge_dispenser",
+      "bot": "Do you use the water dispenser or ice maker? (yes; no; it doesn't have one)",
+      "options": [
+       "Yes",
+       "No",
+       "It doesn't have one"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "fridge_leak",
+    "emergency": null,
+    "cause": "Door seal (gasket) not sealing",
+    "ranked": [
+     "fridge_door_seal",
+     "fridge_drain",
+     "fridge_water_line"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Refrigerator leaking water\nConfidence: Medium\nLikely cause: Door seal (gasket) not sealing; or Defrost drain blocked or drain pan overflowing\nEvidence: Where is the water: In front of the fridge; Without moving the fridge, can you see water or ice on the water/ice-maker line or any pipe behind it: Water on it; Is there ice building up in the freezer: Yes; Do you use the water dispenser or ice maker: Yes; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 45–90 min)\nBring: door gasket (match model), defrost drain heater or drain clip, drain pan\nAsk for / check: The model/serial label (inside the fridge on a side wall, or behind the crisper drawer); Behind the fridge, only if you can see it without moving it: the water line"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "regression-2026-10-21-pv9o",
+    "message": "my fridge is leaking",
+    "lang": "en",
+    "style": "real",
+    "expected": {
+     "equipment": "fridge",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "fridge_leak",
+    "source": "regression"
+   }
+  },
+  {
+   "transcript": {
+    "id": "fridge-leaking-4",
+    "first": "冰箱漏水",
+    "turns": [
+     {
+      "question": "intake:fridge_part",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere is the water? (in front of the fridge; under it; behind it; inside, under the crisper drawers; on the freezer floor; or not sure)",
+      "options": [
+       "In front of the fridge",
+       "Under it",
+       "Behind it",
+       "Inside, under the crisper drawers",
+       "On the freezer floor",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "In front of the fridge"
+     },
+     {
+      "question": "intake:fridge_supply_line",
+      "bot": "Without moving the fridge, can you see water or ice on the water/ice-maker line or any pipe behind it? (water on it; ice on it; no; i can't see it)",
+      "options": [
+       "Water on it",
+       "Ice on it",
+       "No",
+       "I can't see it"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Water on it"
+     },
+     {
+      "question": "intake:fridge_freezer_ice",
+      "bot": "Is there ice building up in the freezer?",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:fridge_dispenser",
+      "bot": "Do you use the water dispenser or ice maker? (yes; no; it doesn't have one)",
+      "options": [
+       "Yes",
+       "No",
+       "It doesn't have one"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "fridge_leak",
+    "emergency": null,
+    "cause": "Door seal (gasket) not sealing",
+    "ranked": [
+     "fridge_door_seal",
+     "fridge_drain",
+     "fridge_water_line"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Refrigerator leaking water\nConfidence: Medium\nLikely cause: Door seal (gasket) not sealing; or Defrost drain blocked or drain pan overflowing\nEvidence: Where is the water: In front of the fridge; Without moving the fridge, can you see water or ice on the water/ice-maker line or any pipe behind it: Water on it; Is there ice building up in the freezer: Yes; Do you use the water dispenser or ice maker: Yes; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 45–90 min)\nBring: door gasket (match model), defrost drain heater or drain clip, drain pan\nAsk for / check: The model/serial label (inside the fridge on a side wall, or behind the crisper drawer); Behind the fridge, only if you can see it without moving it: the water line"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "fridge-leaking-4",
+    "message": "冰箱漏水",
+    "lang": "zh",
+    "style": "plain",
+    "expected": {
+     "equipment": "fridge",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "fridge_leak",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "dishwasher-clogged-1",
+    "first": "Dishwasher won't drain",
+    "turns": [
+     {
+      "question": "intake:dw_filter",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nHave you cleaned the filter at the bottom of the dishwasher?",
+      "options": [
+       "Yes",
+       "No / not sure how"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:sink_backup",
+      "bot": "Does the kitchen sink drain normally?",
+      "options": [
+       "Yes",
+       "No, it's slow too"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:dw_new_disposal",
+      "bot": "Was a garbage disposal installed recently?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:dw_pump_noise",
+      "bot": "At the end of the cycle, do you hear the pump hum or buzz?",
+      "options": [
+       "It hums or buzzes",
+       "It's silent",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "It hums or buzzes"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "dishwasher_not_draining",
+    "emergency": null,
+    "cause": "Dishwasher drain pump",
+    "ranked": [
+     "dishwasher_drain_pump",
+     "dishwasher_filter",
+     "dishwasher_knockout"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Dishwasher not draining\nConfidence: Medium\nLikely cause: Dishwasher drain pump; or Blocked dishwasher filter or sump\nEvidence: Have you cleaned the filter at the bottom of the dishwasher: Yes; Does the kitchen sink drain normally: Yes; Was a garbage disposal installed recently: Yes; At the end of the cycle, do you hear the pump hum or buzz: It hums or buzzes; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 30–90 min)\nBring: drain pump (match model), filter assembly\nAsk for / check: The model/serial label (on the edge of the door or the tub opening); Under the sink with the doors open: the pipes, valves and any disposal or dishwasher hose"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "dishwasher-clogged-1",
+    "message": "Dishwasher won't drain",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "dishwasher",
+     "symptom": "clogged",
+     "substance": "water",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "dishwasher_not_draining",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "washer-leaking-2",
+    "first": "washer leeking all over laundry room floor",
+    "turns": [
+     {
+      "question": "intake:washer_part",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere is the water coming from? (behind the machine (hoses or taps); from the door; the drain pipe or standpipe; underneath; or not sure)",
+      "options": [
+       "Behind the machine (hoses or taps)",
+       "From the door",
+       "The drain pipe or standpipe",
+       "Underneath",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "washer",
+       "substance": "water",
+       "room": "laundry"
+      },
+      "tenant": "Behind the machine (hoses or taps)"
+     },
+     {
+      "question": "intake:washer_timing",
+      "bot": "When does it leak? (only while it's filling; only while it's draining or spinning; all the time, even when off; or not sure)",
+      "options": [
+       "Only while it's filling",
+       "Only while it's draining or spinning",
+       "All the time, even when off",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "washer",
+       "substance": "water",
+       "room": "laundry"
+      },
+      "tenant": "Only while it's filling"
+     },
+     {
+      "question": "intake:amount",
+      "bot": "How much water is there right now?",
+      "options": [
+       "A few drops",
+       "A small puddle",
+       "It's spreading"
+      ],
+      "known": {
+       "equipment": "washer",
+       "substance": "water",
+       "room": "laundry"
+      },
+      "tenant": "A few drops"
+     },
+     {
+      "question": "intake:electrical_near",
+      "bot": "Is the water near an outlet, a light, or anything plugged in?",
+      "options": [
+       "No",
+       "Yes",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "washer",
+       "substance": "water",
+       "room": "laundry"
+      },
+      "tenant": "No"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "washer",
+       "substance": "water",
+       "room": "laundry"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "washer",
+       "substance": "water",
+       "room": "laundry"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "washer_leak",
+    "emergency": null,
+    "cause": "Washer fill hose or tap",
+    "ranked": [
+     "washer_hose",
+     "washer_drain",
+     "washer_door"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Washer leaking\nConfidence: High\nLikely cause: Washer fill hose or tap\nEvidence: Where is the water coming from: Behind the machine (hoses or taps); When does it leak: Only while it's filling; How much water is there right now: A few drops; Is the water near an outlet, a light, or anything plugged in: No; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: plumber (about 30–60 min)\nBring: washer fill hoses (braided, pair), washer box valves\nAsk for / check: The model/serial label (inside the lid or door rim, or on the back); Behind the washer, only if you can see without moving it: the hoses and taps"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "washer-leaking-2",
+    "message": "washer leeking all over laundry room floor",
+    "lang": "en",
+    "style": "typo",
+    "expected": {
+     "equipment": "washer",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "laundry"
+    },
+    "emergency": false,
+    "sop": "washer_leak",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "unknown-pests-15",
+    "first": "Il y a des souris dans l'appartement",
+    "turns": [
+     {
+      "question": "location_in_unit",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere in your unit is the issue? (e.g., kitchen, bathroom, bedroom)",
+      "options": [
+       "Kitchen",
+       "Main bathroom (hallway)",
+       "Laundry closet",
+       "Bedroom",
+       "Living room"
+      ],
+      "known": {
+       "equipment": "unknown",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Kitchen"
+     },
+     {
+      "question": "intake:rodent_signs_seen",
+      "bot": "What have you noticed? (droppings; scratching or noises; saw a mouse or rat)",
+      "options": [
+       "Droppings",
+       "Scratching or noises",
+       "Saw a mouse or rat"
+      ],
+      "known": {
+       "equipment": "unknown",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Droppings"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "unknown",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "rodent_signs",
+    "emergency": null,
+    "cause": null,
+    "ranked": [
+     "rodents"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Possible rodent activity\nConfidence: Low (few answers)\nLikely cause: Mice or rats\nEvidence: What have you noticed: Droppings; When did it start: Just now\nTrade: pest control (about 45–90 min)\nBring: snap traps / bait stations, entry-point sealing (steel wool, sealant)\nAsk for / check: Droppings next to a coin for size; Any gaps or holes around pipes"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "unknown-pests-15",
+    "message": "Il y a des souris dans l'appartement",
+    "lang": "fr",
+    "style": "plain",
+    "expected": {
+     "equipment": "unknown",
+     "symptom": "pests",
+     "substance": "none",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "rodent_signs",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "toilet-leaking-1",
+    "first": "Water leaks around the base of the toilet when I flush",
+    "turns": [
+     {
+      "question": "intake:amount",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nHow much water is there right now?",
+      "options": [
+       "A few drops",
+       "A small puddle",
+       "It's spreading"
+      ],
+      "known": {
+       "equipment": "toilet",
+       "substance": "water",
+       "room": "bathroom"
+      },
+      "tenant": "A few drops"
+     },
+     {
+      "question": "intake:electrical_near",
+      "bot": "Is the water near an outlet, a light, or anything plugged in?",
+      "options": [
+       "No",
+       "Yes",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "toilet",
+       "substance": "water",
+       "room": "bathroom"
+      },
+      "tenant": "No"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "toilet",
+       "substance": "water",
+       "room": "bathroom"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "toilet_base_leak",
+    "emergency": null,
+    "cause": "Wax ring at the toilet base",
+    "ranked": [
+     "toilet_base",
+     "toilet_tank",
+     "toilet_clog"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Toilet leaking at base\nConfidence: High\nLikely cause: Wax ring at the toilet base\nEvidence: Where is the water coming from: Around the base, on the floor; When does it happen: Only when it's flushed; How much water is there right now: A few drops; Is the water near an outlet, a light, or anything plugged in: No; When did it start: Just now\nTrade: plumber (about 45–90 min)\nBring: wax ring (or wax-free seal), closet bolts, toilet shims\nAsk for / check: Inside the tank with the lid off (look only): the flapper and fill valve, and the brand under the lid; Behind the toilet: the supply line and valve"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "toilet-leaking-1",
+    "message": "Water leaks around the base of the toilet when I flush",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "toilet",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "bathroom"
+    },
+    "emergency": false,
+    "sop": "toilet_base_leak",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "range_hood-noisy-1",
+    "first": "the hood fan is making a loud rattling noise",
+    "turns": [
+     {
+      "question": "intake:onset",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhen did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "range_hood_fan_not_working",
+    "emergency": null,
+    "cause": "Loose blower or filter (rattling)",
+    "ranked": [
+     "hood_blower_loose",
+     "hood_motor",
+     "hood_switch"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Range hood fan not working, noisy or weak\nConfidence: Medium\nLikely cause: Loose blower or filter (rattling); or Hood fan motor or capacitor\nEvidence: What happens when you press the fan button: It runs but is loud or rattles; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: handyperson (about 30–90 min)\nBring: blower wheel, filter clips, blower motor (match model), run capacitor\nAsk for / check: The model/serial label (behind the grease filters); The hood's buttons"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "range_hood-noisy-1",
+    "message": "the hood fan is making a loud rattling noise",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "range_hood",
+     "symptom": "noisy",
+     "substance": "none",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "range_hood_fan_not_working",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "heldout-dryer-not_working-1",
+    "first": "clothes are still damp after a full dryer cycle",
+    "turns": [
+     {
+      "question": "started_when",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhen did this start? (e.g., today, yesterday, a few days ago)",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago"
+      ],
+      "known": {
+       "equipment": "dryer",
+       "substance": "unknown",
+       "room": "laundry"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "current_status",
+      "bot": "What is the current status of the issue? (e.g., still happening, comes and goes, getting worse)",
+      "options": [
+       "Still happening",
+       "Comes and goes",
+       "Getting worse",
+       "It stopped"
+      ],
+      "known": {
+       "equipment": "dryer",
+       "substance": "unknown",
+       "room": "laundry"
+      },
+      "tenant": "Still happening"
+     },
+     {
+      "question": "brand_model",
+      "bot": "What is the brand and model, if you can see it? (usually on a sticker on the side, the back or inside). If unknown, reply \"unknown\".",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "dryer",
+       "substance": "unknown",
+       "room": "laundry"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": null,
+    "emergency": null,
+    "cause": null,
+    "ranked": [],
+    "diagnosis": null
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "heldout-dryer-not_working-1",
+    "message": "clothes are still damp after a full dryer cycle",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "dryer",
+     "symptom": "not_working",
+     "substance": "none",
+     "room": "laundry"
+    },
+    "emergency": false,
+    "sop": "dryer_not_heating",
+    "source": "heldout"
+   }
+  },
+  {
+   "transcript": {
+    "id": "window-draft-1",
+    "first": "cold draft coming in around the window",
+    "turns": [
+     {
+      "question": "intake:draft_light",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nCan you see daylight around the edge?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "window",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "location_in_unit",
+      "bot": "Where in your unit is the issue? (e.g., kitchen, bathroom, bedroom)",
+      "options": [
+       "Kitchen",
+       "Main bathroom (hallway)",
+       "Laundry closet",
+       "Bedroom",
+       "Living room"
+      ],
+      "known": {
+       "equipment": "window",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Kitchen"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "drafts",
+    "emergency": null,
+    "cause": "Weatherstripping or door sweep worn (drafts)",
+    "ranked": [
+     "weatherstripping",
+     "window_hardware"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Drafts from windows or doors\nConfidence: Medium\nLikely cause: Weatherstripping or door sweep worn (drafts); or Window latch, crank or balance\nEvidence: Where do you feel it: Around a window; Can you see daylight around the edge: Yes\nTrade: handyperson (about 30–90 min)\nBring: weatherstripping (foam/V-strip), door sweep, window seal, window operator (crank) match brand, sash lock, balance springs\nAsk for / check: The gap"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "window-draft-1",
+    "message": "cold draft coming in around the window",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "window",
+     "symptom": "draft",
+     "substance": "none",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "drafts",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "unknown-leaking-2",
+    "first": "Water is flooding the apartment",
+    "turns": [],
+    "sop": "water_leak_unknown",
+    "emergency": "flooding",
+    "cause": null,
+    "ranked": [
+     "supply_line",
+     "drain_trap",
+     "pipe_in_ceiling"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Water leak, source not known yet\nConfidence: Low (few answers)\nLikely cause: Supply hose or shut-off valve under the sink; or Drain pipe / P-trap slip nut\nTrade: plumber (about 30–60 min)\nBring: braided supply line (3/8\" compression), quarter-turn angle stop valve, P-trap kit (1-1/2\" or 1-1/4\"), slip-nut washers\nAsk for / check: Where the water is, and anything above it"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "unknown-leaking-2",
+    "message": "Water is flooding the apartment",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "unknown",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "unknown"
+    },
+    "emergency": true,
+    "sop": null,
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "water_heater-leaking-4",
+    "first": "热水器漏水",
+    "turns": [
+     {
+      "question": "intake:water_heater_part",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere is the water coming from? (dripping from a pipe or valve on top; from the side pipe (relief valve); pooling under the tank; or not sure)",
+      "options": [
+       "Dripping from a pipe or valve on top",
+       "From the side pipe (relief valve)",
+       "Pooling under the tank",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "water_heater",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "Dripping from a pipe or valve on top"
+     },
+     {
+      "question": "intake:amount",
+      "bot": "How much water is there right now?",
+      "options": [
+       "A few drops",
+       "A small puddle",
+       "It's spreading"
+      ],
+      "known": {
+       "equipment": "water_heater",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "A few drops"
+     },
+     {
+      "question": "intake:electrical_near",
+      "bot": "Is the water near an outlet, a light, or anything plugged in?",
+      "options": [
+       "No",
+       "Yes",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "water_heater",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "No"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "water_heater",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "water_heater_leak",
+    "emergency": null,
+    "cause": "Water heater fittings on top (pipes or valve)",
+    "ranked": [
+     "water_heater_fittings",
+     "water_heater_relief",
+     "water_heater_tank"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Water heater leaking\nConfidence: High\nLikely cause: Water heater fittings on top (pipes or valve)\nEvidence: Where is the water coming from: Dripping from a pipe or valve on top; How much water is there right now: A few drops; Is the water near an outlet, a light, or anything plugged in: No; When did it start: Just now\nTrade: plumber (about 45–90 min)\nBring: dielectric unions, flex water connectors\nAsk for / check: The water heater's label (side of the tank: brand, capacity, gas or electric, year)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "water_heater-leaking-4",
+    "message": "热水器漏水",
+    "lang": "zh",
+    "style": "plain",
+    "expected": {
+     "equipment": "water_heater",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "water_heater_leak",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "wall-noisy-1",
+    "first": "loud humming noise in the walls at night",
+    "turns": [
+     {
+      "question": "intake:noise_when",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhen do you hear it? (when the heating or cooling starts; when water is turned off; all the time; or not sure)",
+      "options": [
+       "When the heating or cooling starts",
+       "When water is turned off",
+       "All the time",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "wall",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "When the heating or cooling starts"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "wall",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "hvac_noise",
+    "emergency": null,
+    "cause": "Blower, motor or ducts expanding (noise)",
+    "ranked": [
+     "hvac_mechanical",
+     "water_hammer"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Unusual HVAC noise\nConfidence: High\nLikely cause: Blower, motor or ducts expanding (noise)\nEvidence: When do you hear it: When the heating or cooling starts; When did it start: Just now\nTrade: HVAC technician (about 45–90 min)\nBring: blower wheel, motor mounts, duct straps\nAsk for / check: A short video with the sound"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "wall-noisy-1",
+    "message": "loud humming noise in the walls at night",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "wall",
+     "symptom": "noisy",
+     "substance": "none",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "hvac_noise",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "lock-other-2",
+    "first": "locked myself out lol, keys inside",
+    "turns": [
+     {
+      "question": "intake:safe_now",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nAre you somewhere safe and warm while you wait?",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "known": {
+       "equipment": "lock",
+       "substance": "unknown",
+       "room": "unknown"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "lockout",
+    "emergency": null,
+    "cause": null,
+    "ranked": [
+     "lockout_entry"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Locked out of unit\nConfidence: Low (few answers)\nLikely cause: Lockout: entry needed\nEvidence: Are you somewhere safe and warm while you wait: Yes\nTrade: locksmith (about 30–60 min)\nBring: entry / lockout service, spare key\nAsk for / check: Which door, and the lock type (keyed deadbolt, keypad)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "lock-other-2",
+    "message": "locked myself out lol, keys inside",
+    "lang": "en",
+    "style": "slang",
+    "expected": {
+     "equipment": "lock",
+     "symptom": "other",
+     "substance": "none",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "lockout",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "unknown-smell-4",
+    "first": "闻到煤气味",
+    "turns": [],
+    "sop": "gas_smell",
+    "emergency": "gas",
+    "cause": null,
+    "ranked": [
+     "gas_leak"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Gas smell\nConfidence: Low (few answers)\nLikely cause: Gas leak\nTrade: HVAC technician (about 60–120 min)\nBring: gas utility (FortisBC) check, appliance connector"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "unknown-smell-4",
+    "message": "闻到煤气味",
+    "lang": "zh",
+    "style": "plain",
+    "expected": {
+     "equipment": "unknown",
+     "symptom": "smell",
+     "substance": "gas",
+     "room": "unknown"
+    },
+    "emergency": true,
+    "sop": "gas_smell",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "heldout-fridge-not_cooling-1",
+    "first": "my freezer is defrosting and the ice cream melted",
+    "turns": [
+     {
+      "question": "intake:freezer_fridge_side",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nIs the fridge side still cold?",
+      "options": [
+       "Yes",
+       "No, both are warm"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:freezer_back_ice",
+      "bot": "Is there frost or ice on the back wall inside the freezer?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:freezer_door",
+      "bot": "Does the freezer door close fully and seal?",
+      "options": [
+       "Yes",
+       "No, it doesn't seal"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "freezer_not_freezing",
+    "emergency": null,
+    "cause": "Defrost or cooling fault (ice building up)",
+    "ranked": [
+     "fridge_cooling_fault",
+     "fridge_door_seal",
+     "fridge_compressor"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Freezer not freezing\nConfidence: High\nLikely cause: Defrost or cooling fault (ice building up)\nEvidence: Is the fridge side still cold: Yes; Is there frost or ice on the back wall inside the freezer: Yes; Does the freezer door close fully and seal: Yes; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 60–120 min)\nBring: defrost heater, defrost thermostat, defrost timer or control board\nAsk for / check: The model/serial label (inside the fridge on a side wall, or behind the crisper drawer)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "heldout-fridge-not_cooling-1",
+    "message": "my freezer is defrosting and the ice cream melted",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "fridge",
+     "symptom": "not_cooling",
+     "substance": "none",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "freezer_not_freezing",
+    "source": "heldout"
+   }
+  },
+  {
+   "transcript": {
+    "id": "outlet-not_working-1",
+    "first": "Outlet not working",
+    "turns": [
+     {
+      "question": "location_in_unit",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere in your unit is the issue? (e.g., kitchen, bathroom, bedroom)",
+      "options": [
+       "Kitchen",
+       "Main bathroom (hallway)",
+       "Laundry closet",
+       "Bedroom",
+       "Living room"
+      ],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Kitchen"
+     },
+     {
+      "question": "intake:outlet_scope",
+      "bot": "Is it one outlet, or several in the room?",
+      "options": [
+       "Just one",
+       "Several"
+      ],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just one"
+     },
+     {
+      "question": "intake:outlet_same_wall",
+      "bot": "Do the other outlets on the same wall work?",
+      "options": [
+       "Yes",
+       "No, those are dead too",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:outlet_gfci_anywhere",
+      "bot": "Is there an outlet with TEST/RESET buttons anywhere in the unit (kitchen, bathroom, outside)?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "safety_check",
+      "bot": "One quick safety check -- do you notice any sparks, a burning smell, or warmth coming from the outlet or panel?",
+      "options": [],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "not sure"
+     }
+    ],
+    "sop": "outlet_not_working",
+    "emergency": "unconfirmed_safety",
+    "cause": "Failed outlet or loose wire (one outlet)",
+    "ranked": [
+     "outlet_failed",
+     "breaker_or_gfci"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Outlet not working\nConfidence: High\nLikely cause: Failed outlet or loose wire (one outlet)\nEvidence: Is it one outlet, or several in the room: Just one; Do the other outlets on the same wall work: Yes; Is there an outlet with TEST/RESET buttons anywhere in the unit (kitchen, bathroom, outside): Yes; When did it start: Just now\nTrade: electrician (about 30–60 min)\nBring: receptacle (15A/20A, tamper-resistant), cover plate\nAsk for / check: The dead outlet and any outlet with TEST/RESET buttons; The breaker panel labels (door open, look only; never remove the cover)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "outlet-not_working-1",
+    "message": "Outlet not working",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "outlet",
+     "symptom": "not_working",
+     "substance": "none",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "outlet_not_working",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "unknown-leaking-1",
+    "first": "something is leaking",
+    "turns": [
+     {
+      "question": "intake:leak_where",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere is the water? (pick the closest) (ceiling; wall; floor; under the kitchen sink; bathroom sink; toilet; tub or shower; water heater; dishwasher; washing machine; fridge; or not sure)",
+      "options": [
+       "Ceiling",
+       "Wall",
+       "Floor",
+       "Under the kitchen sink",
+       "Bathroom sink",
+       "Toilet",
+       "Tub or shower",
+       "Water heater",
+       "Dishwasher",
+       "Washing machine",
+       "Fridge",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "unknown",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "Ceiling"
+     },
+     {
+      "question": "location_in_unit",
+      "bot": "Where in your unit is the issue? (e.g., kitchen, bathroom, bedroom)",
+      "options": [
+       "Kitchen",
+       "Main bathroom (hallway)",
+       "Laundry closet",
+       "Bedroom",
+       "Living room"
+      ],
+      "known": {
+       "equipment": "ceiling",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "Kitchen"
+     },
+     {
+      "question": "intake:ceiling_above",
+      "bot": "What's above it, or behind that wall? (a bathroom; a kitchen; another unit (a neighbour's); the roof or attic; or not sure)",
+      "options": [
+       "A bathroom",
+       "A kitchen",
+       "Another unit (a neighbour's)",
+       "The roof or attic",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "ceiling",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "A bathroom"
+     },
+     {
+      "question": "intake:ceiling_timing",
+      "bot": "When does it drip? (only when that's used (shower, toilet or tap above); all the time; when it rains; or not sure)",
+      "options": [
+       "Only when that's used (shower, toilet or tap above)",
+       "All the time",
+       "When it rains",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "ceiling",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Only when that's used (shower, toilet or tap above)"
+     },
+     {
+      "question": "intake:amount",
+      "bot": "How much water is there right now?",
+      "options": [
+       "A few drops",
+       "A small puddle",
+       "It's spreading"
+      ],
+      "known": {
+       "equipment": "ceiling",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "A few drops"
+     },
+     {
+      "question": "intake:electrical_near",
+      "bot": "Is the water near an outlet, a light, or anything plugged in?",
+      "options": [
+       "No",
+       "Yes",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "ceiling",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "No"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "ceiling",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "ceiling_stain",
+    "emergency": null,
+    "cause": "Bathroom above (tub, shower, toilet or sink)",
+    "ranked": [
+     "above_bathroom",
+     "above_kitchen",
+     "above_unit"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Ceiling stain or slow leak\nConfidence: High\nLikely cause: Bathroom above (tub, shower, toilet or sink)\nEvidence: What's above it, or behind that wall: A bathroom; When does it drip: Only when that's used (shower, toilet or tap above); How much water is there right now: A few drops; Is the water near an outlet, a light, or anything plugged in: No; When did it start: Just now\nTrade: plumber (about 60–120 min)\nBring: access panel, caulk/grout, drain gasket\nAsk for / check: The stain or drip, and the size (next to a hand or tape measure)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "unknown-leaking-1",
+    "message": "something is leaking",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "unknown",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "water_leak_unknown",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "dishwasher-clogged-7",
+    "first": "Ran the dishwasher last night and this morning there's still dirty water at the bottom, I cleaned the filter thing and it's still not draining",
+    "turns": [
+     {
+      "question": "intake:dw_filter",
+      "bot": "Thanks for letting us know about this. Got it — started this morning. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nHave you cleaned the filter at the bottom of the dishwasher?",
+      "options": [
+       "Yes",
+       "No / not sure how"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:sink_backup",
+      "bot": "Does the kitchen sink drain normally?",
+      "options": [
+       "Yes",
+       "No, it's slow too"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:dw_new_disposal",
+      "bot": "Was a garbage disposal installed recently?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:dw_pump_noise",
+      "bot": "At the end of the cycle, do you hear the pump hum or buzz?",
+      "options": [
+       "It hums or buzzes",
+       "It's silent",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "It hums or buzzes"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "dishwasher_not_draining",
+    "emergency": null,
+    "cause": "Dishwasher drain pump",
+    "ranked": [
+     "dishwasher_drain_pump",
+     "dishwasher_filter",
+     "dishwasher_knockout"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Dishwasher not draining\nConfidence: Medium\nLikely cause: Dishwasher drain pump; or Blocked dishwasher filter or sump\nEvidence: Have you cleaned the filter at the bottom of the dishwasher: Yes; Does the kitchen sink drain normally: Yes; Was a garbage disposal installed recently: Yes; At the end of the cycle, do you hear the pump hum or buzz: It hums or buzzes; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 30–90 min)\nBring: drain pump (match model), filter assembly\nAsk for / check: The model/serial label (on the edge of the door or the tub opening); Under the sink with the doors open: the pipes, valves and any disposal or dishwasher hose"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "dishwasher-clogged-7",
+    "message": "Ran the dishwasher last night and this morning there's still dirty water at the bottom, I cleaned the filter thing and it's still not draining",
+    "lang": "en",
+    "style": "rambling",
+    "expected": {
+     "equipment": "dishwasher",
+     "symptom": "clogged",
+     "substance": "water",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "dishwasher_not_draining",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "stove_oven-not_working-3",
+    "first": "One of the stove burners won't turn on",
+    "turns": [
+     {
+      "question": "intake:stove_type",
+      "bot": "I'm sorry to hear that. It sounds like your stove burners won't turn on.\n\nLet me ask a couple quick questions so we can help faster.\n\nIs your stove electric or gas?",
+      "options": [
+       "Electric",
+       "Gas",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "stove_oven",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Electric"
+     },
+     {
+      "question": "intake:burner_scope",
+      "bot": "Is it one burner, or all of them?",
+      "options": [
+       "Just one",
+       "All of them"
+      ],
+      "known": {
+       "equipment": "stove_oven",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just one"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "stove_oven",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "stove_oven",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "stove_burner_not_working",
+    "emergency": null,
+    "cause": "Burner element or switch (electric)",
+    "ranked": [
+     "burner_element",
+     "burner_igniter"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Stove burner or element not working\nConfidence: High\nLikely cause: Burner element or switch (electric)\nEvidence: Is your stove electric or gas: Electric; Is it one burner, or all of them: Just one; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 30–60 min)\nBring: surface element (match size), infinite switch, element receptacle\nAsk for / check: The model/serial label (inside the oven door frame or the bottom drawer); The burner (size, coil or glass top)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "stove_oven-not_working-3",
+    "message": "One of the stove burners won't turn on",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "stove_oven",
+     "symptom": "not_working",
+     "substance": "none",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "stove_burner_not_working",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "kitchen_sink-no_water-1",
+    "first": "no water coming out of the kitchen sink",
+    "turns": [
+     {
+      "question": "intake:no_water_scope",
+      "bot": "I'm sorry to hear that. It sounds like you have no water.\n\nLet me ask a couple quick questions so we can help faster.\n\nIs it everywhere in your home, or just one fixture?",
+      "options": [
+       "Everywhere",
+       "Just one"
+      ],
+      "known": {
+       "equipment": "kitchen_sink",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Everywhere"
+     },
+     {
+      "question": "intake:no_water_notice",
+      "bot": "Was there a notice about water being shut off, or do neighbours have water? (there was a notice; neighbours have water; neighbours don't either; or not sure)",
+      "options": [
+       "There was a notice",
+       "Neighbours have water",
+       "Neighbours don't either",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "kitchen_sink",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "There was a notice"
+     },
+     {
+      "question": "intake:no_water_cold",
+      "bot": "Is it below freezing outside?",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "known": {
+       "equipment": "kitchen_sink",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "kitchen_sink",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "no_water",
+    "emergency": null,
+    "cause": "Building or city water shut-off",
+    "ranked": [
+     "building_water_off",
+     "frozen_pipe",
+     "fixture_valve_closed"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: No water (one tap or the whole unit)\nConfidence: Medium\nLikely cause: Building or city water shut-off; or Frozen pipe (cold weather)\nEvidence: Is it everywhere in your home, or just one fixture: Everywhere; Was there a notice about water being shut off, or do neighbours have water: There was a notice; Is it below freezing outside: Yes; When did it start: Just now\nTrade: building manager (about 0–180 min)\nBring: pipe insulation, heat tape\nAsk for / check: The tap with no water and the valves under it"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "kitchen_sink-no_water-1",
+    "message": "no water coming out of the kitchen sink",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "kitchen_sink",
+     "symptom": "no_water",
+     "substance": "none",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "no_water",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "kitchen_sink-clogged-2",
+    "first": "kitchn sink is cloged",
+    "turns": [
+     {
+      "question": "location_in_unit",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere in your unit is the issue? (e.g., kitchen, bathroom, bedroom)",
+      "options": [
+       "Kitchen",
+       "Main bathroom (hallway)",
+       "Laundry closet",
+       "Bedroom",
+       "Living room"
+      ],
+      "known": {
+       "equipment": "kitchen_sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Kitchen"
+     },
+     {
+      "question": "intake:clog_severity",
+      "bot": "Is it completely blocked, or draining slowly?",
+      "options": [
+       "Completely blocked",
+       "Draining slowly"
+      ],
+      "known": {
+       "equipment": "kitchen_sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Completely blocked"
+     },
+     {
+      "question": "intake:other_drains",
+      "bot": "Are other drains in your home slow too?",
+      "options": [
+       "Only this one",
+       "Yes, others too"
+      ],
+      "known": {
+       "equipment": "kitchen_sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Only this one"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "kitchen_sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "sink_clog",
+    "emergency": null,
+    "cause": "Clog in the sink drain or trap (hair, grease, food)",
+    "ranked": [
+     "sink_drain_clog",
+     "main_line_clog"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Sink draining slowly or clogged\nConfidence: High\nLikely cause: Clog in the sink drain or trap (hair, grease, food)\nEvidence: Is it completely blocked, or draining slowly: Completely blocked; Are other drains in your home slow too: Only this one; When did it start: Just now\nTrade: plumber (about 30–60 min)\nBring: hand auger, P-trap kit if corroded, pop-up stopper\nAsk for / check: Under the sink with the doors open: the pipes, valves and any disposal or dishwasher hose"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "kitchen_sink-clogged-2",
+    "message": "kitchn sink is cloged",
+    "lang": "en",
+    "style": "typo",
+    "expected": {
+     "equipment": "kitchen_sink",
+     "symptom": "clogged",
+     "substance": "water",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "sink_clog",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "lock-stuck-2",
+    "first": "my key is stuck in the lock",
+    "turns": [
+     {
+      "question": "intake:lock_which",
+      "bot": "I'm sorry to hear that. It sounds like your key is stuck.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhich door?",
+      "options": [
+       "Front door",
+       "Another door"
+      ],
+      "known": {
+       "equipment": "lock",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Front door"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "key_stuck",
+    "emergency": null,
+    "cause": null,
+    "ranked": [
+     "key_or_cylinder"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Key stuck in lock\nConfidence: Low (few answers)\nLikely cause: Worn key or cylinder (key stuck)\nEvidence: Which door: Front door\nTrade: locksmith (about 30–60 min)\nBring: cylinder, key copy\nAsk for / check: The lock (brand on the face) and the key"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "lock-stuck-2",
+    "message": "my key is stuck in the lock",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "lock",
+     "symptom": "stuck",
+     "substance": "none",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "key_stuck",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "unknown-smell-5",
+    "first": "Je sens une odeur de gaz",
+    "turns": [],
+    "sop": "gas_smell",
+    "emergency": "gas",
+    "cause": null,
+    "ranked": [
+     "gas_leak"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Gas smell\nConfidence: Low (few answers)\nLikely cause: Gas leak\nTrade: HVAC technician (about 60–120 min)\nBring: gas utility (FortisBC) check, appliance connector"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "unknown-smell-5",
+    "message": "Je sens une odeur de gaz",
+    "lang": "fr",
+    "style": "plain",
+    "expected": {
+     "equipment": "unknown",
+     "symptom": "smell",
+     "substance": "gas",
+     "room": "unknown"
+    },
+    "emergency": true,
+    "sop": "gas_smell",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "washer-clogged-1",
+    "first": "the washer won't drain, water stays in the drum",
+    "turns": [
+     {
+      "question": "intake:onset",
+      "bot": "I'm sorry to hear that. It sounds like your washer won't drain.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhen did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "washer",
+       "substance": "water",
+       "room": "laundry"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "washer",
+       "substance": "water",
+       "room": "laundry"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "washer_not_spinning",
+    "emergency": null,
+    "cause": "Washer drain pump or blockage",
+    "ranked": [
+     "washer_pump",
+     "washer_belt_bearing",
+     "washer_lid_switch"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Washer will not spin\nConfidence: High\nLikely cause: Washer drain pump or blockage\nEvidence: What happens: Water stays in the drum; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 45–90 min)\nBring: drain pump (match model), pump filter clearing\nAsk for / check: The model/serial label (inside the lid or door rim, or on the back)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "washer-clogged-1",
+    "message": "the washer won't drain, water stays in the drum",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "washer",
+     "symptom": "clogged",
+     "substance": "water",
+     "room": "laundry"
+    },
+    "emergency": false,
+    "sop": "washer_not_spinning",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "faucet-leaking-3",
+    "first": "kitchen tap won't turn off all the way",
+    "turns": [
+     {
+      "question": "intake:sink_part",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere on the sink is the water coming from? (around the faucet base or handle; from the spout (it drips when off); the supply hoses or shut-off valves under the sink; the drain pipe / P-trap under the sink; the garbage disposal; the dishwasher hose; or not sure)",
+      "options": [
+       "Around the faucet base or handle",
+       "From the spout (it drips when off)",
+       "The supply hoses or shut-off valves under the sink",
+       "The drain pipe / P-trap under the sink",
+       "The garbage disposal",
+       "The dishwasher hose",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "faucet",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Around the faucet base or handle"
+     },
+     {
+      "question": "intake:sink_timing",
+      "bot": "When does it leak? (only while the tap is running; only while water is draining; all the time, even with the tap off; or not sure)",
+      "options": [
+       "Only while the tap is running",
+       "Only while water is draining",
+       "All the time, even with the tap off",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "faucet",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Only while the tap is running"
+     },
+     {
+      "question": "intake:amount",
+      "bot": "How much water is there right now?",
+      "options": [
+       "A few drops",
+       "A small puddle",
+       "It's spreading"
+      ],
+      "known": {
+       "equipment": "faucet",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "A few drops"
+     },
+     {
+      "question": "intake:electrical_near",
+      "bot": "Is the water near an outlet, a light, or anything plugged in?",
+      "options": [
+       "No",
+       "Yes",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "faucet",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "No"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "faucet",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "faucet_leak_continuous",
+    "emergency": null,
+    "cause": "Faucet seal or cartridge (base/handle)",
+    "ranked": [
+     "faucet_seal",
+     "drain_trap",
+     "faucet_cartridge"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Faucet leak (continuous)\nConfidence: High\nLikely cause: Faucet seal or cartridge (base/handle)\nEvidence: Where on the sink is the water coming from: Around the faucet base or handle; When does it leak: Only while the tap is running; How much water is there right now: A few drops; Is the water near an outlet, a light, or anything plugged in: No; When did it start: Just now\nTrade: plumber (about 30–60 min)\nBring: faucet cartridge, O-rings, faucet base gasket\nAsk for / check: Under the sink with the doors open: the pipes, valves and any disposal or dishwasher hose; The faucet (brand logo, one handle or two) and the valves under the sink"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "faucet-leaking-3",
+    "message": "kitchen tap won't turn off all the way",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "faucet",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "faucet_leak_continuous",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "window-draft-2",
+    "first": "卧室窗户漏风",
+    "turns": [
+     {
+      "question": "intake:draft_light",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nCan you see daylight around the edge?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "window",
+       "substance": "none",
+       "room": "bedroom"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "drafts",
+    "emergency": null,
+    "cause": null,
+    "ranked": [
+     "weatherstripping",
+     "window_hardware"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Drafts from windows or doors\nConfidence: Low (few answers)\nLikely cause: Weatherstripping or door sweep worn (drafts); or Window latch, crank or balance\nEvidence: Can you see daylight around the edge: Yes\nTrade: handyperson (about 30–90 min)\nBring: weatherstripping (foam/V-strip), door sweep, window seal, window operator (crank) match brand, sash lock, balance springs\nAsk for / check: The gap"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "window-draft-2",
+    "message": "卧室窗户漏风",
+    "lang": "zh",
+    "style": "plain",
+    "expected": {
+     "equipment": "window",
+     "symptom": "draft",
+     "substance": "none",
+     "room": "bedroom"
+    },
+    "emergency": false,
+    "sop": "drafts",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "heldout-unknown-pests-2",
+    "first": "mouse droppings under the sink",
+    "turns": [
+     {
+      "question": "location_in_unit",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere in your unit is the issue? (e.g., kitchen, bathroom, bedroom)",
+      "options": [
+       "Kitchen",
+       "Main bathroom (hallway)",
+       "Laundry closet",
+       "Bedroom",
+       "Living room"
+      ],
+      "known": {
+       "equipment": "unknown",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Kitchen"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "unknown",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "rodent_signs",
+    "emergency": null,
+    "cause": null,
+    "ranked": [
+     "rodents"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Possible rodent activity\nConfidence: Low (few answers)\nLikely cause: Mice or rats\nEvidence: What have you noticed: Droppings; When did it start: Just now\nTrade: pest control (about 45–90 min)\nBring: snap traps / bait stations, entry-point sealing (steel wool, sealant)\nAsk for / check: Droppings next to a coin for size; Any gaps or holes around pipes"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "heldout-unknown-pests-2",
+    "message": "mouse droppings under the sink",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "unknown",
+     "symptom": "pests",
+     "substance": "none",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "rodent_signs",
+    "source": "heldout"
+   }
+  },
+  {
+   "transcript": {
+    "id": "smoke_alarm-beeping-11",
+    "first": "L'alarme de fumée sonne sans arrêt",
+    "turns": [],
+    "sop": "smoke_alarm_sounding",
+    "emergency": "unconfirmed_safety",
+    "cause": null,
+    "ranked": [
+     "smoke_or_fire"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Smoke alarm sounding (alarm, not a chirp)\nConfidence: Low (few answers)\nLikely cause: Smoke or fire (alarm sounding)\nTrade: building manager (about 0–30 min)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "smoke_alarm-beeping-11",
+    "message": "L'alarme de fumée sonne sans arrêt",
+    "lang": "fr",
+    "style": "plain",
+    "expected": {
+     "equipment": "smoke_alarm",
+     "symptom": "beeping",
+     "substance": "none",
+     "room": "unknown"
+    },
+    "emergency": true,
+    "sop": "smoke_alarm_sounding",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "drain-clogged-6",
+    "first": "阳台排水口堵了",
+    "turns": [
+     {
+      "question": "intake:balcony_depth",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nHow much water is pooling? (a puddle; covering the balcony; up to the threshold)",
+      "options": [
+       "A puddle",
+       "Covering the balcony",
+       "Up to the threshold"
+      ],
+      "known": {
+       "equipment": "drain",
+       "substance": "water",
+       "room": "balcony"
+      },
+      "tenant": "A puddle"
+     },
+     {
+      "question": "intake:balcony_debris",
+      "bot": "Can you see leaves or debris on the drain?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "drain",
+       "substance": "water",
+       "room": "balcony"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:balcony_below",
+      "bot": "Has the neighbour below mentioned water?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "drain",
+       "substance": "water",
+       "room": "balcony"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "balcony_drain",
+    "emergency": null,
+    "cause": "Balcony drain or scupper blocked (leaves, debris)",
+    "ranked": [
+     "balcony_drain_clog",
+     "balcony_membrane"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Balcony drain blocked or water pooling\nConfidence: High\nLikely cause: Balcony drain or scupper blocked (leaves, debris)\nEvidence: How much water is pooling: A puddle; Can you see leaves or debris on the drain: Yes; Has the neighbour below mentioned water: Yes\nTrade: handyperson (about 30–60 min)\nBring: drain clearing, drain strainer\nAsk for / check: The drain"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "drain-clogged-6",
+    "message": "阳台排水口堵了",
+    "lang": "zh",
+    "style": "plain",
+    "expected": {
+     "equipment": "drain",
+     "symptom": "clogged",
+     "substance": "water",
+     "room": "balcony"
+    },
+    "emergency": false,
+    "sop": "balcony_drain",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "unknown-pests-8",
+    "first": "I think I have bed bugs, bites every morning",
+    "turns": [
+     {
+      "question": "intake:onset",
+      "bot": "I'm sorry to hear that. It sounds like you've noticed bed bugs.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhen did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "unknown",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "bedbug_suspicion",
+    "emergency": null,
+    "cause": null,
+    "ranked": [
+     "bedbugs"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Possible bedbug activity\nConfidence: Low (few answers)\nLikely cause: Bed bugs\nEvidence: What have you noticed: Bites; When did it start: Just now\nTrade: pest control (about 60–180 min)\nBring: inspection, heat or chemical treatment, mattress encasements\nAsk for / check: The mattress seams and any bugs (tape works)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "unknown-pests-8",
+    "message": "I think I have bed bugs, bites every morning",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "unknown",
+     "symptom": "pests",
+     "substance": "none",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "bedbug_suspicion",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "sink-leaking-2",
+    "first": "sink leaking",
+    "turns": [
+     {
+      "question": "location_in_unit",
+      "bot": "I'm sorry to hear that. It sounds like there's sink leaking in your unit.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere in your unit is the issue? (e.g., kitchen, bathroom, bedroom)",
+      "options": [
+       "Kitchen",
+       "Main bathroom (hallway)",
+       "Laundry closet",
+       "Bedroom",
+       "Living room"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "Kitchen"
+     },
+     {
+      "question": "intake:sink_part",
+      "bot": "Where on the sink is the water coming from? (around the faucet base or handle; from the spout (it drips when off); the supply hoses or shut-off valves under the sink; the drain pipe / P-trap under the sink; the garbage disposal; the dishwasher hose; or not sure)",
+      "options": [
+       "Around the faucet base or handle",
+       "From the spout (it drips when off)",
+       "The supply hoses or shut-off valves under the sink",
+       "The drain pipe / P-trap under the sink",
+       "The garbage disposal",
+       "The dishwasher hose",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Around the faucet base or handle"
+     },
+     {
+      "question": "intake:sink_timing",
+      "bot": "When does it leak? (only while the tap is running; only while water is draining; all the time, even with the tap off; or not sure)",
+      "options": [
+       "Only while the tap is running",
+       "Only while water is draining",
+       "All the time, even with the tap off",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Only while the tap is running"
+     },
+     {
+      "question": "intake:amount",
+      "bot": "How much water is there right now?",
+      "options": [
+       "A few drops",
+       "A small puddle",
+       "It's spreading"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "A few drops"
+     },
+     {
+      "question": "intake:electrical_near",
+      "bot": "Is the water near an outlet, a light, or anything plugged in?",
+      "options": [
+       "No",
+       "Yes",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "No"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "sink",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "under_sink_leak",
+    "emergency": null,
+    "cause": "Faucet seal or cartridge (base/handle)",
+    "ranked": [
+     "faucet_seal",
+     "drain_trap",
+     "faucet_cartridge"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Under-sink leak (P-trap / supply line)\nConfidence: High\nLikely cause: Faucet seal or cartridge (base/handle)\nEvidence: Where on the sink is the water coming from: Around the faucet base or handle; When does it leak: Only while the tap is running; How much water is there right now: A few drops; Is the water near an outlet, a light, or anything plugged in: No; When did it start: Just now\nTrade: plumber (about 30–60 min)\nBring: faucet cartridge, O-rings, faucet base gasket\nAsk for / check: Under the sink with the doors open: the pipes, valves and any disposal or dishwasher hose; The faucet (brand logo, one handle or two) and the valves under the sink"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "sink-leaking-2",
+    "message": "sink leaking",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "sink",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "under_sink_leak",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "heldout-water_heater-leaking-1",
+    "first": "there's a puddle around the hot water tank in the closet",
+    "turns": [
+     {
+      "question": "intake:water_heater_part",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhere is the water coming from? (dripping from a pipe or valve on top; from the side pipe (relief valve); pooling under the tank; or not sure)",
+      "options": [
+       "Dripping from a pipe or valve on top",
+       "From the side pipe (relief valve)",
+       "Pooling under the tank",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "water_heater",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "Dripping from a pipe or valve on top"
+     },
+     {
+      "question": "intake:amount",
+      "bot": "How much water is there right now?",
+      "options": [
+       "A few drops",
+       "A small puddle",
+       "It's spreading"
+      ],
+      "known": {
+       "equipment": "water_heater",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "A few drops"
+     },
+     {
+      "question": "intake:electrical_near",
+      "bot": "Is the water near an outlet, a light, or anything plugged in?",
+      "options": [
+       "No",
+       "Yes",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "water_heater",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "No"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "water_heater",
+       "substance": "water",
+       "room": "unknown"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "water_heater_leak",
+    "emergency": null,
+    "cause": "Water heater fittings on top (pipes or valve)",
+    "ranked": [
+     "water_heater_fittings",
+     "water_heater_relief",
+     "water_heater_tank"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Water heater leaking\nConfidence: High\nLikely cause: Water heater fittings on top (pipes or valve)\nEvidence: Where is the water coming from: Dripping from a pipe or valve on top; How much water is there right now: A few drops; Is the water near an outlet, a light, or anything plugged in: No; When did it start: Just now\nTrade: plumber (about 45–90 min)\nBring: dielectric unions, flex water connectors\nAsk for / check: The water heater's label (side of the tank: brand, capacity, gas or electric, year)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "heldout-water_heater-leaking-1",
+    "message": "there's a puddle around the hot water tank in the closet",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "water_heater",
+     "symptom": "leaking",
+     "substance": "water",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "water_heater_leak",
+    "source": "heldout"
+   }
+  },
+  {
+   "transcript": {
+    "id": "water_heater-no_hot_water-3",
+    "first": "showers are ice cold, no hot water at all",
+    "turns": [
+     {
+      "question": "intake:hot_scope",
+      "bot": "I'm sorry to hear that. It sounds like you have no hot water.\n\nLet me ask a couple quick questions so we can help faster.\n\nIs it every tap, or just one?",
+      "options": [
+       "Every tap",
+       "Just one"
+      ],
+      "known": {
+       "equipment": "water_heater",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Every tap"
+     },
+     {
+      "question": "intake:hot_pattern",
+      "bot": "No hot water at all, or does it run out quickly? (none at all; it runs out quickly; only lukewarm)",
+      "options": [
+       "None at all",
+       "It runs out quickly",
+       "Only lukewarm"
+      ],
+      "known": {
+       "equipment": "faucet",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "None at all"
+     },
+     {
+      "question": "intake:heater_location",
+      "bot": "Is the water heater in your unit?",
+      "options": [
+       "Yes, in my unit",
+       "No, it's the building's",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "faucet",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Yes, in my unit"
+     },
+     {
+      "question": "intake:heater_fuel",
+      "bot": "If the water heater is in your unit: does its label say gas or electric? (gas; electric; i can't see it)",
+      "options": [
+       "Gas",
+       "Electric",
+       "I can't see it"
+      ],
+      "known": {
+       "equipment": "faucet",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Gas"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "faucet",
+       "substance": "none",
+       "room": "unknown"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "no_hot_water",
+    "emergency": null,
+    "cause": "Water heater burner or pilot/igniter (gas)",
+    "ranked": [
+     "water_heater_pilot",
+     "water_heater_element",
+     "water_heater_undersized"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: No hot water\nConfidence: High\nLikely cause: Water heater burner or pilot/igniter (gas)\nEvidence: Is it every tap, or just one: Every tap; No hot water at all, or does it run out quickly: None at all; Is the water heater in your unit: Yes, in my unit; If the water heater is in your unit: does its label say gas or electric: Gas; When did it start: Just now\nTrade: plumber (about 60–90 min)\nBring: thermocouple / flame sensor, igniter\nAsk for / check: The water heater's label (side of the tank: brand, capacity, gas or electric, year)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "water_heater-no_hot_water-3",
+    "message": "showers are ice cold, no hot water at all",
+    "lang": "en",
+    "style": "slang",
+    "expected": {
+     "equipment": "water_heater",
+     "symptom": "no_hot_water",
+     "substance": "none",
+     "room": "unknown"
+    },
+    "emergency": false,
+    "sop": "no_hot_water",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "outlet-not_working-2",
+    "first": "outlit in bedroom doesnt work",
+    "turns": [
+     {
+      "question": "intake:outlet_scope",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nIs it one outlet, or several in the room?",
+      "options": [
+       "Just one",
+       "Several"
+      ],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "bedroom"
+      },
+      "tenant": "Just one"
+     },
+     {
+      "question": "intake:outlet_same_wall",
+      "bot": "Do the other outlets on the same wall work?",
+      "options": [
+       "Yes",
+       "No, those are dead too",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "bedroom"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:outlet_gfci_anywhere",
+      "bot": "Is there an outlet with TEST/RESET buttons anywhere in the unit (kitchen, bathroom, outside)?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "bedroom"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "bedroom"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "safety_check",
+      "bot": "One quick safety check -- do you notice any sparks, a burning smell, or warmth coming from the outlet or panel?",
+      "options": [],
+      "known": {
+       "equipment": "outlet",
+       "substance": "none",
+       "room": "bedroom"
+      },
+      "tenant": "not sure"
+     }
+    ],
+    "sop": "outlet_not_working",
+    "emergency": "unconfirmed_safety",
+    "cause": "Failed outlet or loose wire (one outlet)",
+    "ranked": [
+     "outlet_failed",
+     "breaker_or_gfci"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Outlet not working\nConfidence: High\nLikely cause: Failed outlet or loose wire (one outlet)\nEvidence: Is it one outlet, or several in the room: Just one; Do the other outlets on the same wall work: Yes; Is there an outlet with TEST/RESET buttons anywhere in the unit (kitchen, bathroom, outside): Yes; When did it start: Just now\nTrade: electrician (about 30–60 min)\nBring: receptacle (15A/20A, tamper-resistant), cover plate\nAsk for / check: The dead outlet and any outlet with TEST/RESET buttons; The breaker panel labels (door open, look only; never remove the cover)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "outlet-not_working-2",
+    "message": "outlit in bedroom doesnt work",
+    "lang": "en",
+    "style": "typo",
+    "expected": {
+     "equipment": "outlet",
+     "symptom": "not_working",
+     "substance": "none",
+     "room": "bedroom"
+    },
+    "emergency": false,
+    "sop": "outlet_not_working",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "tub_shower-broken-1",
+    "first": "shower door came off the track",
+    "turns": [
+     {
+      "question": "started_when",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhen did this start? (e.g., today, yesterday, a few days ago)",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago"
+      ],
+      "known": {
+       "equipment": "tub_shower",
+       "substance": "none",
+       "room": "bathroom"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "current_status",
+      "bot": "What is the current status of the issue? (e.g., still happening, comes and goes, getting worse)",
+      "options": [
+       "Still happening",
+       "Comes and goes",
+       "Getting worse",
+       "It stopped"
+      ],
+      "known": {
+       "equipment": "tub_shower",
+       "substance": "none",
+       "room": "bathroom"
+      },
+      "tenant": "Still happening"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": null,
+    "emergency": null,
+    "cause": null,
+    "ranked": [],
+    "diagnosis": null
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "tub_shower-broken-1",
+    "message": "shower door came off the track",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "tub_shower",
+     "symptom": "broken",
+     "substance": "none",
+     "room": "bathroom"
+    },
+    "emergency": false,
+    "sop": "shower_surround_leak",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "toilet-running-3",
+    "first": "toilet's been running nonstop all night",
+    "turns": [
+     {
+      "question": "intake:toilet_running_sound",
+      "bot": "Thanks for letting us know about this. Got it — nonstop. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nWhat do you notice? (water keeps trickling into the bowl; the tank keeps refilling or hissing; the handle sticks after flushing; or not sure)",
+      "options": [
+       "Water keeps trickling into the bowl",
+       "The tank keeps refilling or hissing",
+       "The handle sticks after flushing",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "toilet",
+       "substance": "water",
+       "room": "bathroom"
+      },
+      "tenant": "Water keeps trickling into the bowl"
+     },
+     {
+      "question": "intake:toilet_refills",
+      "bot": "Does it refill on its own every few minutes, even when nobody uses it?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "toilet",
+       "substance": "water",
+       "room": "bathroom"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:toilet_bowl_moving",
+      "bot": "Is water still moving in the bowl a minute after flushing?",
+      "options": [
+       "Yes, a trickle down the sides",
+       "No, it's still",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "toilet",
+       "substance": "water",
+       "room": "bathroom"
+      },
+      "tenant": "Yes, a trickle down the sides"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "toilet",
+       "substance": "water",
+       "room": "bathroom"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "toilet_running",
+    "emergency": null,
+    "cause": "Toilet flapper not sealing (water trickles into the bowl)",
+    "ranked": [
+     "flapper",
+     "fill_valve",
+     "toilet_handle"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Toilet keeps running\nConfidence: High\nLikely cause: Toilet flapper not sealing (water trickles into the bowl)\nEvidence: What do you notice: Water keeps trickling into the bowl; Does it refill on its own every few minutes, even when nobody uses it: Yes; Is water still moving in the bowl a minute after flushing: Yes, a trickle down the sides; When did it start: Just now\nTrade: plumber (about 20–40 min)\nBring: flapper (2\" or 3\", match the flush valve), flapper chain\nAsk for / check: Inside the tank with the lid off (look only): the flapper and fill valve, and the brand under the lid"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "toilet-running-3",
+    "message": "toilet's been running nonstop all night",
+    "lang": "en",
+    "style": "slang",
+    "expected": {
+     "equipment": "toilet",
+     "symptom": "running",
+     "substance": "water",
+     "room": "bathroom"
+    },
+    "emergency": false,
+    "sop": "toilet_running",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "dishwasher-not_working-2",
+    "first": "dishwasher dead",
+    "turns": [
+     {
+      "question": "intake:dw_lights",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nDo the lights or display come on?",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:dw_door",
+      "bot": "Is the door fully latched?",
+      "options": [
+       "Yes",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:dw_other_outlets",
+      "bot": "Do the other kitchen outlets and lights work?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "dishwasher_not_starting",
+    "emergency": null,
+    "cause": "Dishwasher door latch or control board",
+    "ranked": [
+     "dishwasher_control",
+     "dishwasher_spray_arm",
+     "appliance_power"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Dishwasher won't start or doesn't clean\nConfidence: Medium\nLikely cause: Dishwasher door latch or control board; or Spray arm or wash pump\nEvidence: Do the lights or display come on: Yes; Is the door fully latched: Yes; Do the other kitchen outlets and lights work: Yes; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 45–90 min)\nBring: door latch/switch, control board, spray arm, wash motor\nAsk for / check: The model/serial label (on the edge of the door or the tub opening)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "dishwasher-not_working-2",
+    "message": "dishwasher dead",
+    "lang": "en",
+    "style": "terse",
+    "expected": {
+     "equipment": "dishwasher",
+     "symptom": "not_working",
+     "substance": "none",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "dishwasher_not_starting",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "dishwasher-clogged-5",
+    "first": "洗碗机不排水",
+    "turns": [
+     {
+      "question": "intake:dw_filter",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nHave you cleaned the filter at the bottom of the dishwasher?",
+      "options": [
+       "Yes",
+       "No / not sure how"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:sink_backup",
+      "bot": "Does the kitchen sink drain normally?",
+      "options": [
+       "Yes",
+       "No, it's slow too"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:dw_new_disposal",
+      "bot": "Was a garbage disposal installed recently?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:dw_pump_noise",
+      "bot": "At the end of the cycle, do you hear the pump hum or buzz?",
+      "options": [
+       "It hums or buzzes",
+       "It's silent",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "It hums or buzzes"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "dishwasher",
+       "substance": "water",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "dishwasher_not_draining",
+    "emergency": null,
+    "cause": "Dishwasher drain pump",
+    "ranked": [
+     "dishwasher_drain_pump",
+     "dishwasher_filter",
+     "dishwasher_knockout"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Dishwasher not draining\nConfidence: Medium\nLikely cause: Dishwasher drain pump; or Blocked dishwasher filter or sump\nEvidence: Have you cleaned the filter at the bottom of the dishwasher: Yes; Does the kitchen sink drain normally: Yes; Was a garbage disposal installed recently: Yes; At the end of the cycle, do you hear the pump hum or buzz: It hums or buzzes; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 30–90 min)\nBring: drain pump (match model), filter assembly\nAsk for / check: The model/serial label (on the edge of the door or the tub opening); Under the sink with the doors open: the pipes, valves and any disposal or dishwasher hose"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "dishwasher-clogged-5",
+    "message": "洗碗机不排水",
+    "lang": "zh",
+    "style": "plain",
+    "expected": {
+     "equipment": "dishwasher",
+     "symptom": "clogged",
+     "substance": "water",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "dishwasher_not_draining",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "heldout-stove_oven-not_working-1",
+    "first": "the big burner on my cooktop won't heat up",
+    "turns": [
+     {
+      "question": "intake:stove_type",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nIs your stove electric or gas?",
+      "options": [
+       "Electric",
+       "Gas",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "stove_oven",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Electric"
+     },
+     {
+      "question": "intake:burner_scope",
+      "bot": "Is it one burner, or all of them?",
+      "options": [
+       "Just one",
+       "All of them"
+      ],
+      "known": {
+       "equipment": "stove_oven",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just one"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "stove_oven",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "stove_oven",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "stove_burner_not_working",
+    "emergency": null,
+    "cause": "Burner element or switch (electric)",
+    "ranked": [
+     "burner_element",
+     "burner_igniter"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Stove burner or element not working\nConfidence: High\nLikely cause: Burner element or switch (electric)\nEvidence: Is your stove electric or gas: Electric; Is it one burner, or all of them: Just one; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 30–60 min)\nBring: surface element (match size), infinite switch, element receptacle\nAsk for / check: The model/serial label (inside the oven door frame or the bottom drawer); The burner (size, coil or glass top)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "heldout-stove_oven-not_working-1",
+    "message": "the big burner on my cooktop won't heat up",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "stove_oven",
+     "symptom": "not_working",
+     "substance": "none",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "stove_burner_not_working",
+    "source": "heldout"
+   }
+  },
+  {
+   "transcript": {
+    "id": "range_hood-not_working-8",
+    "first": "hood light not working",
+    "turns": [
+     {
+      "question": "intake:hood_fan_ok",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nDoes the fan still work?",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:hood_bulb_tried",
+      "bot": "Have you tried a new bulb? (yes, still out; no; i can't reach it safely)",
+      "options": [
+       "Yes, still out",
+       "No",
+       "I can't reach it safely"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes, still out"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": "safety_check",
+      "bot": "One quick safety check -- do you notice any sparks, a burning smell, or warmth coming from the outlet or panel?",
+      "options": [],
+      "known": {
+       "equipment": "range_hood",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "not sure"
+     }
+    ],
+    "sop": "range_hood_light_out",
+    "emergency": "unconfirmed_safety",
+    "cause": "Hood switch, plug or power",
+    "ranked": [
+     "hood_switch",
+     "hood_bulb"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Range hood light out\nConfidence: Medium\nLikely cause: Hood switch, plug or power; or Range hood bulb or light socket\nEvidence: Does the fan still work: Yes; Have you tried a new bulb: Yes, still out; What's the brand and model, if you can see it: Unknown\nTrade: electrician (about 15–60 min)\nBring: switch / control board, power check, appliance bulb (match type on the old bulb), light socket / switch\nAsk for / check: The model/serial label (behind the grease filters); The old bulb (type printed on it)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "range_hood-not_working-8",
+    "message": "hood light not working",
+    "lang": "en",
+    "style": "terse",
+    "expected": {
+     "equipment": "range_hood",
+     "symptom": "not_working",
+     "substance": "none",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "range_hood_light_out",
+    "source": "authored"
+   }
+  },
+  {
+   "transcript": {
+    "id": "fridge-not_working-1",
+    "first": "the ice maker on the fridge stopped working",
+    "turns": [
+     {
+      "question": "intake:freezer_ok",
+      "bot": "Thanks for letting us know about this. I want to make sure we get this handled for you.\n\nLet me ask a couple quick questions so we can help faster.\n\nIs the freezer still cold?",
+      "options": [
+       "Yes, only the fridge is warm",
+       "No, both are warm"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes, only the fridge is warm"
+     },
+     {
+      "question": "intake:fridge_power",
+      "bot": "Is the light on inside when you open it?",
+      "options": [
+       "Yes",
+       "No"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:fridge_sound",
+      "bot": "Is it quiet, humming, or clicking every few minutes? (quiet; humming; clicking on and off)",
+      "options": [
+       "Quiet",
+       "Humming",
+       "Clicking on and off"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Quiet"
+     },
+     {
+      "question": "intake:fridge_back_ice",
+      "bot": "Is there frost or ice on the back wall inside the freezer?",
+      "options": [
+       "Yes",
+       "No",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Yes"
+     },
+     {
+      "question": "intake:onset",
+      "bot": "When did it start?",
+      "options": [
+       "Just now",
+       "Today",
+       "Yesterday",
+       "A few days ago",
+       "Over a week ago",
+       "Not sure"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Just now"
+     },
+     {
+      "question": "intake:brand_model",
+      "bot": "What's the brand and model, if you can see it? (often on a sticker on the side, the back or inside)",
+      "options": [
+       "Unknown"
+      ],
+      "known": {
+       "equipment": "fridge",
+       "substance": "none",
+       "room": "kitchen"
+      },
+      "tenant": "Unknown"
+     },
+     {
+      "question": null,
+      "bot": "(on to photos)",
+      "options": []
+     }
+    ],
+    "sop": "fridge_not_cooling",
+    "emergency": null,
+    "cause": "Defrost or cooling fault (ice building up)",
+    "ranked": [
+     "fridge_cooling_fault",
+     "fridge_evap_fan",
+     "fridge_condenser_fan"
+    ],
+    "diagnosis": "DIAGNOSIS\nProcedure: Refrigerator not cooling\nConfidence: High\nLikely cause: Defrost or cooling fault (ice building up)\nEvidence: Is the freezer still cold: Yes, only the fridge is warm; Is the light on inside when you open it: Yes; Is it quiet, humming, or clicking every few minutes: Quiet; Is there frost or ice on the back wall inside the freezer: Yes; When did it start: Just now; What's the brand and model, if you can see it: Unknown\nTrade: appliance technician (about 60–120 min)\nBring: defrost heater, defrost thermostat, defrost timer or control board\nAsk for / check: The model/serial label (inside the fridge on a side wall, or behind the crisper drawer)"
+   },
+   "verdict": {
+    "understood": 4,
+    "relevance": 4,
+    "irrelevant_questions": [],
+    "reasked_questions": [],
+    "safety_ok": true,
+    "efficiency": 4,
+    "tradesperson_ready": 4,
+    "overall": 4,
+    "notes": "dry run"
+   },
+   "case": {
+    "id": "fridge-not_working-1",
+    "message": "the ice maker on the fridge stopped working",
+    "lang": "en",
+    "style": "plain",
+    "expected": {
+     "equipment": "fridge",
+     "symptom": "not_working",
+     "substance": "none",
+     "room": "kitchen"
+    },
+    "emergency": false,
+    "sop": "fridge_not_cooling",
+    "source": "authored"
+   }
+  }
+ ]
+}
