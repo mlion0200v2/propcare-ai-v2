@@ -1,0 +1,46 @@
+name: Live eval
+
+# Real model calls (OpenAI only: no Supabase, no Pinecone, no email).
+# Opt-in: runs nightly only when the repository variable LIVE_EVAL is "1"
+# and the OPENAI_API_KEY secret is set; anyone with access can run it by hand.
+on:
+  schedule:
+    - cron: "0 9 * * *" # 02:00 Vancouver (PDT)
+  workflow_dispatch:
+    inputs:
+      sample:
+        description: "Simulated conversations (a number, or 'all')"
+        default: "40"
+      max_usd:
+        description: "Cost cap in USD"
+        default: "2"
+
+jobs:
+  live-eval:
+    if: github.event_name == 'workflow_dispatch' || vars.LIVE_EVAL == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run live eval
+        env:
+          LIVE_EVAL: "1"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          LIVE_EVAL_MAX_USD: ${{ inputs.max_usd || '2' }}
+          # The app modules read these at import; nothing connects to them.
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: placeholder
+          SUPABASE_SERVICE_ROLE_KEY: placeholder
+          PINECONE_API_KEY: placeholder
+          PINECONE_INDEX: propcare-kb
+        run: npx tsx tests/eval/live/run-live.ts --sample "${{ inputs.sample || '40' }}" --out eval-report
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: live-eval-report
+          path: eval-report/

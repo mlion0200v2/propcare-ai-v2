@@ -38,8 +38,17 @@ function cacheKey(message: string, context?: string): string {
   return createHash("sha256").update(`${context ?? ""}\u0000${message}`).digest("hex");
 }
 
+export interface UnderstanderOptions {
+  model?: string;
+  timeoutMs?: number;
+  /** Token usage per call (the live eval uses it for cost accounting). */
+  onUsage?: (usage: { model: string; prompt_tokens: number; completion_tokens: number }) => void;
+  /** Skip the cache (the live eval measures every call). */
+  noCache?: boolean;
+}
+
 /** Production understander (OpenAI). Null when no key is configured. */
-export function openAIUnderstander(options: { model?: string; timeoutMs?: number } = {}): ModelUnderstander | null {
+export function openAIUnderstander(options: UnderstanderOptions = {}): ModelUnderstander | null {
   const key = process.env.OPENAI_API_KEY;
   if (!key || key.startsWith("placeholder")) return null;
   const model = options.model ?? process.env.UNDERSTANDING_MODEL ?? "gpt-4o-mini";
@@ -47,7 +56,7 @@ export function openAIUnderstander(options: { model?: string; timeoutMs?: number
 
   return async (message, context) => {
     const k = cacheKey(message, context);
-    const hit = cache.get(k);
+    const hit = options.noCache ? undefined : cache.get(k);
     if (hit) return hit;
     const pending = (async () => {
       try {
@@ -65,6 +74,9 @@ export function openAIUnderstander(options: { model?: string; timeoutMs?: number
           },
           { timeout: timeoutMs, maxRetries: 0 }
         );
+        if (completion.usage) {
+          options.onUsage?.({ model, prompt_tokens: completion.usage.prompt_tokens, completion_tokens: completion.usage.completion_tokens });
+        }
         const parsed = completion.choices[0]?.message.parsed;
         return parsed ? withUnknowns(parsed) : null;
       } catch {
