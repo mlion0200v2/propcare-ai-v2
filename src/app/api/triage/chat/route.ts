@@ -248,7 +248,7 @@ async function followUp(
     const text = mediaAction ?? message;
     const skip = /\b(skip|no|none|no thanks|later)\b/i.test(text);
     action = skip ? "skip_photos" : "photos_added";
-    shown = skip ? "Skip" : text;
+    shown = skip ? "Skip" : mediaAction === "done" ? "Done" : text;
   } else if (ticket.triage_state === "CONFIRM_SUMMARY" && confirmSummary) {
     action = "confirm_summary";
     shown = "Looks good, submit";

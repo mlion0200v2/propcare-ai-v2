@@ -118,6 +118,8 @@ export function TriageChat({
   const [isLoading, setIsLoading] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  // Photos and videos on this report: "Skip" until there's one, then "Done".
+  const [mediaCount, setMediaCount] = useState(0);
   const [triageState, setTriageState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summaryEditMode, setSummaryEditMode] = useState(false);
@@ -178,6 +180,8 @@ export function TriageChat({
           is_bot_reply: m.is_bot_reply,
         })
       );
+
+      setMediaCount(data.media?.length ?? 0);
 
       // Inject media records as synthetic user messages positioned by timestamp
       if (data.media && data.media.length > 0) {
@@ -357,7 +361,7 @@ export function TriageChat({
     }
   }
 
-  async function handleMediaAction(action: "skip") {
+  async function handleMediaAction(action: "skip" | "done") {
     if (isLoading || isComplete || !ticketId) return;
 
     setError(null);
@@ -365,7 +369,7 @@ export function TriageChat({
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
-      body: "Skip",
+      body: action === "done" ? "Done" : "Skip",
       is_bot_reply: false,
     };
     setMessages((prev) => [...prev, userMsg]);
@@ -469,10 +473,12 @@ export function TriageChat({
         )
       );
 
+      setMediaCount((n) => n + 1);
+
       // Show success + give option to upload more or continue
       const successMsg: ChatMessage = {
         id: `bot-${Date.now()}`,
-        body: "Got it, thanks! You can upload another file or skip to continue.",
+        body: "Got it, thanks! You can add another photo or video, or tap Done to continue.",
         is_bot_reply: true,
       };
       setMessages((prev) => [...prev, successMsg]);
@@ -686,13 +692,15 @@ export function TriageChat({
             >
               Upload Video
             </Button>
-            <Button
-              onClick={() => handleMediaAction("skip")}
-              size="md"
-              variant="ghost"
-            >
-              Skip
-            </Button>
+            {mediaCount > 0 ? (
+              <Button onClick={() => handleMediaAction("done")} size="md">
+                Done
+              </Button>
+            ) : (
+              <Button onClick={() => handleMediaAction("skip")} size="md" variant="ghost">
+                Skip
+              </Button>
+            )}
           </div>
         </div>
       )}
