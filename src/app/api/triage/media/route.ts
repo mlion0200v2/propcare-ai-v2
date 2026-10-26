@@ -20,7 +20,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 import { triageMediaLimiter } from "@/lib/rate-limit";
 import type { Database } from "@/lib/supabase/database-generated";
 

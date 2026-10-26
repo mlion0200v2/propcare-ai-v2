@@ -15,10 +15,10 @@ import {
   printSection,
   type TestResult,
 } from "./helpers";
-import { validateGroundedResult } from "../../src/lib/triage/validate";
-import type { GatheredInfo } from "../../src/lib/triage/types";
-import type { GroundedResult } from "../../src/lib/triage/grounding";
-import type { RetrievalSnippet } from "../../src/lib/retrieval/types";
+import { validateGroundedResult } from "../../src/assistant/triage/validate";
+import type { GatheredInfo } from "../../src/assistant/triage/types";
+import type { GroundedResult } from "../../src/assistant/triage/grounding";
+import type { RetrievalSnippet } from "../../src/assistant/retrieval/types";
 
 // ── Test data factories ──
 

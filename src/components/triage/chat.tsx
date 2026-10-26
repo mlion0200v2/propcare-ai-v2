@@ -2,7 +2,9 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { MAX_UPLOAD_MB, MAX_VIDEO_SECONDS } from "@/lib/triage/guidance";
+import { MEDIA_LIMITS } from "@/assistant/api";
+
+const { maxUploadMb: MAX_UPLOAD_MB, maxVideoSeconds: MAX_VIDEO_SECONDS } = MEDIA_LIMITS;
 import { AccessDetailsCard } from "@/components/intake/access-details";
 
 const DRAFT_TICKET_KEY = "propcare_draft_ticket_id";

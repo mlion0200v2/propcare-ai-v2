@@ -23,7 +23,7 @@ import { inviteLimiter } from "@/lib/rate-limit";
 import { appUrl } from "@/lib/app-url";
 import { deliver } from "@/lib/delivery";
 import { buildInvitationEmail } from "@/lib/email/templates";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 import { profileFromForm } from "@/lib/units/profile";
 
 export type FormState = { error: string | null; ok?: string | null };

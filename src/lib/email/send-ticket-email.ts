@@ -1,4 +1,4 @@
-import { logTriageStep, logError, logWarn } from "@/lib/triage/logger";
+import { logTriageStep, logError, logWarn } from "@/lib/logger";
 import { createServiceClient } from "@/lib/supabase/server";
 import { deliver, workspaceOfTicket } from "@/lib/delivery";
 

@@ -15,39 +15,35 @@ import {
   classifyIssue,
   parseClarifyingResponse,
   buildClarifyingCategoryQuestion,
-} from "../../src/lib/triage/classify-issue";
+} from "../../src/assistant/triage/classify-issue";
 import {
   detectSafety,
   parseSafetyResponse,
-} from "../../src/lib/triage/detect-safety";
+} from "../../src/assistant/triage/detect-safety";
 import {
   buildAcknowledgement,
-} from "../../src/lib/triage/acknowledgement";
+} from "../../src/assistant/triage/acknowledgement";
 import {
-  step,
   buildInitialReply,
-  buildInitialReplyWithClarification,
   buildInitialGathered,
-  stepTenantInfo,
-  buildInitialTenantInfo,
   getNextMissingField,
   QUESTIONS,
-} from "../../src/lib/triage/state-machine";
-import { extractLocation, extractTiming, extractCurrentStatus, extractEquipment, detectEquipmentCorrection } from "../../src/lib/triage/extract-details";
-import { getFallbackSOP } from "../../src/lib/triage/sop-fallback";
-import { filterStepsByEquipment, convertToGuidedSteps, shouldUseGuidedTroubleshooting } from "../../src/lib/triage/grounding";
+} from "../../src/assistant/triage/base-questions";
+import { extractLocation, extractTiming, extractCurrentStatus, extractEquipment, detectEquipmentCorrection } from "../../src/assistant/triage/extract-details";
+import { getFallbackSOP } from "../../src/assistant/triage/sop-fallback";
+import { filterStepsByEquipment, convertToGuidedSteps, shouldUseGuidedTroubleshooting } from "../../src/assistant/triage/grounding";
 import {
   classifyStepFeedback,
   determineNextAction,
   buildHelpReply,
-} from "../../src/lib/triage/step-feedback";
-import type { GuidedStep, GuidedTroubleshootingState } from "../../src/lib/triage/types";
+} from "../../src/assistant/triage/step-feedback";
+import type { GuidedStep, GuidedTroubleshootingState } from "../../src/assistant/triage/types";
 import {
   isGatherComplete,
   getNextExtendedQuestion,
   getExtendedQuestionText,
-} from "../../src/lib/triage/gather-issue";
-import type { TriageContext, GatheredInfo } from "../../src/lib/triage/types";
+} from "../../src/assistant/triage/gather-issue";
+import type { GatheredInfo } from "../../src/assistant/triage/types";
 
 export function testConversationalTriage(): TestResult {
   // ══════════════════════════════════════════════════════
@@ -470,23 +466,7 @@ export function testConversationalTriage(): TestResult {
   }
 
   try {
-    const gathered = buildInitialGathered();
-    gathered.category = "plumbing";
-    gathered.location_in_unit = "Kitchen";
-    gathered.is_emergency = true;
-
-    const ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "Gas smell",
-      gathered,
-      current_question: "started_when",
-    };
-    const r = step(ctx, "Just now");
-    if (r.reply.includes("within 2 hours")) {
-      pass("emergency reply: includes 'within 2 hours' for property manager");
-    } else {
-      fail("emergency reply: should include 'within 2 hours'", r.reply.slice(0, 300));
-    }
+    const r = { reply: getFallbackSOP("plumbing", true).display };
     if (r.reply.includes("FortisBC")) {
       pass("emergency reply: includes FortisBC for gas");
     } else {
@@ -600,130 +580,13 @@ export function testConversationalTriage(): TestResult {
   }
 
   // ══════════════════════════════════════════════════════
-  // State machine — updated flow
-  // ══════════════════════════════════════════════════════
-  printSection("State Machine — Updated Flow (no category menu)");
-
-  // ── step: with category pre-set, asks location first ──
-
-  try {
-    const gathered = buildInitialGathered();
-    gathered.category = "plumbing"; // Pre-set by classifier
-
-    const ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "my faucet is leaking",
-      gathered,
-      current_question: "location_in_unit",
-    };
-
-    const r = step(ctx, "Kitchen");
-    if (r.gathered.location_in_unit === "Kitchen") {
-      pass("step: location collected when category pre-set");
-    } else {
-      fail("step: location not collected", r.gathered.location_in_unit);
-    }
-    if (r.current_question === "started_when") {
-      pass("step: asks started_when after location");
-    } else {
-      fail("step: expected started_when next", r.current_question);
-    }
-  } catch (e) {
-    fail("step: pre-set category flow threw", e);
-  }
-
-  // ── step: full flow with pre-set category (2 turns → DONE) ──
-
-  try {
-    const gathered = buildInitialGathered();
-    gathered.category = "plumbing";
-    gathered.is_emergency = false; // Pre-set by safety detection
-
-    let ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "leaking faucet",
-      gathered,
-      current_question: "location_in_unit",
-    };
-
-    // Turn 1: location
-    let r = step(ctx, "Kitchen");
-    ctx = {
-      triage_state: r.next_state,
-      description: ctx.description,
-      gathered: r.gathered,
-      current_question: r.current_question,
-    };
-
-    // Turn 2: started_when → DONE
-    r = step(ctx, "Yesterday");
-    if (r.next_state === "DONE") {
-      pass("step: full flow with pre-set fields ends in DONE after 2 turns");
-    } else {
-      fail("step: expected DONE after 2 turns", r.next_state);
-    }
-  } catch (e) {
-    fail("step: full flow with pre-set threw", e);
-  }
-
-  // ── stepTenantInfo: transition does NOT include category menu ──
-
-  try {
-    const info = buildInitialTenantInfo();
-    info.reported_address = "123 Main St";
-    info.reported_unit_number = "Unit 4B";
-    info.contact_phone = "555-123-4567";
-
-    const r = stepTenantInfo(info, "contact_email", "jane@example.com");
-    if (r.next_state === "GATHER_INFO") {
-      pass("stepTenantInfo: transitions to GATHER_INFO");
-    } else {
-      fail("stepTenantInfo: expected GATHER_INFO", r.next_state);
-    }
-    if (!r.reply.includes("Reply with a number")) {
-      pass("stepTenantInfo: transition reply does NOT include numbered category list");
-    } else {
-      fail("stepTenantInfo: transition reply has numbered list", r.reply.slice(0, 200));
-    }
-    if (r.reply.includes("Where in your unit") || r.reply.includes("location") || r.current_question === "location_in_unit") {
-      pass("stepTenantInfo: transition asks location instead of category");
-    } else {
-      fail("stepTenantInfo: transition doesn't ask location", { reply: r.reply.slice(0, 100), question: r.current_question });
-    }
-  } catch (e) {
-    fail("stepTenantInfo no-category-menu threw", e);
-  }
-
-  // ── emergency keyword auto-detection still works ──
-
-  try {
-    const gathered = buildInitialGathered();
-    gathered.category = "plumbing";
-
-    const ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "gas leak",
-      gathered,
-      current_question: "location_in_unit",
-    };
-    const r = step(ctx, "I smell gas in the kitchen");
-    if (r.gathered.is_emergency === true) {
-      pass("step: emergency keyword 'gas' still auto-detected");
-    } else {
-      fail("step: emergency keyword not detected", r.gathered.is_emergency);
-    }
-  } catch (e) {
-    fail("step: emergency keyword threw", e);
-  }
-
-  // ══════════════════════════════════════════════════════
   // Media upload/skip path
   // ══════════════════════════════════════════════════════
   printSection("Media Upload — Skip Path");
 
   // Test that AWAITING_MEDIA is a valid state (type check)
   try {
-    const state: import("../../src/lib/triage/types").TriageStateName = "AWAITING_MEDIA";
+    const state: import("../../src/assistant/triage/types").TriageStateName = "AWAITING_MEDIA";
     if (state === "AWAITING_MEDIA") {
       pass("AWAITING_MEDIA is a valid TriageStateName");
     } else {
@@ -735,7 +598,7 @@ export function testConversationalTriage(): TestResult {
 
   // Test classification shape includes new fields
   try {
-    const classification: import("../../src/lib/triage/types").TriageClassification = {
+    const classification: import("../../src/assistant/triage/types").TriageClassification = {
       gathered: buildInitialGathered(),
       current_question: null,
       issue_classification: {

@@ -2,7 +2,7 @@ import "server-only";
 
 import { createServiceClient } from "@/lib/supabase/server";
 import { sendEmail } from "@/lib/email/mailer";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 
 export type Channel = "email" | "whatsapp" | "wechat" | "sms";
 

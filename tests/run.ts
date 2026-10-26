@@ -15,7 +15,6 @@ import { testEnv } from "./integration/test-env";
 import { testValidation } from "./integration/test-validation";
 import { testTypes } from "./integration/test-types";
 import { testTriageChatBasic } from "./integration/test-triage-chat-basic";
-import { testTriageNoUnit } from "./integration/test-triage-no-unit";
 import { testConversationalTriage } from "./integration/test-conversational-triage";
 import { testRetrieval } from "./integration/test-retrieval";
 import { testPhase2B } from "./integration/test-phase2b";
@@ -30,6 +29,15 @@ import { testDemoPure } from "./integration/test-demo-pure";
 import { testDemoSandbox } from "./integration/test-demo-sandbox";
 import { testUnitProfile } from "./integration/test-unit-profile";
 import { testChatWorkflow } from "./integration/test-chat-workflow";
+import { testConversationEval } from "./eval/conversation-eval";
+import { testFrameEval } from "./eval/frame-eval";
+import { testUnderstanding } from "./integration/test-understanding";
+import { testSopCatalog } from "./integration/test-sop-catalog";
+import { testLiveEval } from "./integration/test-live-eval";
+import { testScope } from "./integration/test-scope";
+import { testCoverage } from "./eval/coverage";
+import { testDiagnosis } from "./integration/test-diagnosis";
+import { testAssistantBoundary } from "./integration/test-assistant-boundary";
 
 import { testSupabaseConnection, testTableSchema } from "./integration/test-supabase";
 
@@ -57,8 +65,7 @@ async function main() {
   merge(testEnv());
   merge(testValidation());
   merge(testTypes());
-  merge(testTriageChatBasic());
-  merge(await testTriageNoUnit());
+  merge(await testTriageChatBasic());
   merge(testConversationalTriage());
   merge(testRetrieval());
   merge(testPhase2B());
@@ -72,7 +79,16 @@ async function main() {
   merge(testDemoPure());
   merge(await testDemoSandbox()); // PGlite
   merge(await testUnitProfile()); // pure + PGlite
-  merge(testChatWorkflow());
+  merge(await testChatWorkflow());
+  merge(await testConversationEval()); // scripted multi-turn chats, no network
+  merge(await testUnderstanding()); // rules frame, model merge (stubbed), no network
+  merge(await testSopCatalog()); // SOP catalog schema, references, tenant safety
+  merge(await testScope()); // scope rule: questions fit what is known
+  merge(await testFrameEval()); // labelled first messages: understanding + questions, no network
+  merge(await testLiveEval()); // live-tier plumbing with stub models
+  merge(await testCoverage()); // coverage matrix and diagnosis cards
+  merge(await testDiagnosis()); // diagnosis view; tenant never sees parts or trades
+  merge(testAssistantBoundary()); // src/assistant imports nothing from the app; no tenant data crosses
 
   // ── Phase B: Integration tests (Supabase) ──
   console.log("\n\x1b[1m-- Phase B: Integration Tests (Supabase) --\x1b[0m");

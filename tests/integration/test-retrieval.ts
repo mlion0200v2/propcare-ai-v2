@@ -10,9 +10,9 @@ import {
   printSection,
   type TestResult,
 } from "./helpers";
-import { buildQueryText } from "../../src/lib/retrieval/pinecone";
-import type { GatheredInfo } from "../../src/lib/triage/types";
-import type { RetrievalSnippet } from "../../src/lib/retrieval/types";
+import { buildQueryText } from "../../src/assistant/retrieval/pinecone";
+import type { GatheredInfo } from "../../src/assistant/triage/types";
+import type { RetrievalSnippet } from "../../src/assistant/retrieval/types";
 
 export function testRetrieval(): TestResult {
   printSection("Retrieval Pipeline — Pure Tests");

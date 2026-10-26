@@ -1,12 +1,10 @@
 /**
  * GET /api/triage/hints?ticket_id=… — tap-answers and prevention notes for
- * the tenant chat (see src/lib/triage/hints.ts). Read through the caller's
+ * the tenant chat, stored by the assistant with the conversation. Read through the caller's
  * session: RLS returns only their own ticket and unit.
  */
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { buildChatHints } from "@/lib/triage/hints";
-import { readUnitProfile } from "@/lib/units/profile";
 
 export async function GET(request: NextRequest) {
   const ticketId = request.nextUrl.searchParams.get("ticket_id") ?? "";
@@ -20,24 +18,14 @@ export async function GET(request: NextRequest) {
 
   const { data: ticket } = await supabase
     .from("tickets")
-    .select("triage_state, description, classification, units(profile)")
+    .select("triage_state, classification")
     .eq("id", ticketId)
     .eq("tenant_id", user.id)
     .maybeSingle();
   if (!ticket) return NextResponse.json({ quickReplies: [], notes: [] });
 
-  const c = (ticket.classification ?? {}) as {
-    current_question?: string | null;
-    gathered?: { category?: string | null; location_candidates?: string[] | null };
-  };
-  return NextResponse.json(
-    buildChatHints({
-      currentQuestion: c.current_question ?? null,
-      triageState: ticket.triage_state,
-      category: c.gathered?.category ?? null,
-      description: ticket.description,
-      profile: readUnitProfile(ticket.units?.profile),
-      locationCandidates: c.gathered?.location_candidates ?? null,
-    })
-  );
+  // The assistant stores the options and notes for its current question with the conversation state.
+  const ui = (ticket.classification as { ui?: { options?: string[]; notes?: string[] } } | null)?.ui;
+  if (ticket.triage_state === "DONE" || !ui) return NextResponse.json({ quickReplies: [], notes: [] });
+  return NextResponse.json({ quickReplies: ui.options ?? [], notes: ui.notes ?? [] });
 }

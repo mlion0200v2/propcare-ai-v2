@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { ACTIVE_WORKSPACE_COOKIE } from "@/lib/workspace/server";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 import { DEMO_COOKIE, MAX_LIVE_SANDBOXES, type DemoRole } from "./config";
 import type { Database } from "@/lib/supabase/database-generated";
 

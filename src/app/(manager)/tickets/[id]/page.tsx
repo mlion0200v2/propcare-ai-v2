@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { DiagnosisBlock } from "@/components/tickets/diagnosis";
+import { buildDiagnosisView } from "@/assistant/sops/diagnosis-view";
 import Link from "next/link";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { isTeamRole, requireMembership } from "@/lib/workspace/server";
@@ -15,7 +17,7 @@ import {
   StageSelect,
   VendorForm,
 } from "@/components/tickets/ticket-forms";
-import type { GatheredInfo, TenantInfo } from "@/lib/triage/types";
+import type { GatheredInfo } from "@/assistant/triage/types";
 
 export const metadata = {
   title: "Request | PropCare",
@@ -163,14 +165,13 @@ export default async function TicketDetailPage({
 
   const classification = ticket.classification as {
     gathered?: GatheredInfo;
-    tenant_info?: TenantInfo;
     summary?: string;
     emergency?: { kind?: string; manager_notified?: boolean };
   } | null;
   const gathered = classification?.gathered;
-  const tenantInfo = classification?.tenant_info;
+  const diagnosis = buildDiagnosisView(gathered, media.length);
   const tz = appTimeZone();
-  const address = ticket.units?.properties?.address_line1 ?? tenantInfo?.reported_address ?? "No unit on file";
+  const address = ticket.units?.properties?.address_line1 ?? "No unit on file";
   const unitLabel = ticket.units?.unit_number ? `, Unit ${ticket.units.unit_number}` : "";
   const tenantName = ticket.tenancies?.name;
   const pendingApproval = (approvals ?? []).find((a) => a.decision === "pending");
@@ -269,12 +270,6 @@ export default async function TicketDetailPage({
               )}
               <dt className="text-muted">Safety</dt>
               <dd>{gathered?.is_emergency ? "Possible emergency reported" : "No hazards reported"}</dd>
-              {tenantInfo && team && (
-                <>
-                  <dt className="text-muted">Reported contact</dt>
-                  <dd>{[tenantInfo.contact_phone, tenantInfo.contact_email].filter(Boolean).join(" · ") || "—"}</dd>
-                </>
-              )}
               {team && ticket.tenancies && (
                 <>
                   <dt className="text-muted">Tenant</dt>
@@ -282,6 +277,7 @@ export default async function TicketDetailPage({
                 </>
               )}
             </dl>
+            {diagnosis && <DiagnosisBlock view={diagnosis} audience="manager" />}
             {classification?.summary && (
               <details className="mt-4 text-sm">
                 <summary className="cursor-pointer text-pine underline">Summary for the property manager</summary>

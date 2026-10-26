@@ -25,7 +25,7 @@ import { getCodeSender } from "@/lib/intake/senders";
 import { isDemoWorkspace } from "@/lib/delivery";
 import { buildIntakeCodeEmail } from "@/lib/email/templates";
 import { findUnitByToken, unitLabel } from "@/lib/intake/server";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 
 export type IntakeState = {
   step: "details" | "code";

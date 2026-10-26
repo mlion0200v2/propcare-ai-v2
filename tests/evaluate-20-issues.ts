@@ -12,13 +12,13 @@
  *   5. Guided step kinds (action vs. observation vs. terminal) are appropriate
  */
 
-import { classifyIssue, classifyPest, classifyPlumbing, classifyMold, classifyStructural, classifyApplianceSymptom, classifyHvacSymptom, classifyLandscaping } from "../src/lib/triage/classify-issue";
-import { extractLocation, extractTiming, extractCurrentStatus, extractEquipment, extractEntryPoint, inferLocationFromEquipment, detectEquipmentCorrection, getEquipmentCategory, detectEquipmentAmbiguity } from "../src/lib/triage/extract-details";
-import { detectSafety } from "../src/lib/triage/detect-safety";
-import { buildAcknowledgement } from "../src/lib/triage/acknowledgement";
-import { getFallbackSOP } from "../src/lib/triage/sop-fallback";
-import { convertToGuidedSteps, shouldUseGuidedTroubleshooting, filterMediaStepLines } from "../src/lib/triage/grounding";
-import type { GatheredInfo } from "../src/lib/triage/types";
+import { classifyIssue, classifyPest, classifyPlumbing, classifyMold, classifyStructural, classifyApplianceSymptom, classifyHvacSymptom, classifyLandscaping } from "../src/assistant/triage/classify-issue";
+import { extractLocation, extractTiming, extractCurrentStatus, extractEquipment, extractEntryPoint, inferLocationFromEquipment, detectEquipmentCorrection, getEquipmentCategory, detectEquipmentAmbiguity } from "../src/assistant/triage/extract-details";
+import { detectSafety } from "../src/assistant/triage/detect-safety";
+import { buildAcknowledgement } from "../src/assistant/triage/acknowledgement";
+import { getFallbackSOP } from "../src/assistant/triage/sop-fallback";
+import { convertToGuidedSteps, shouldUseGuidedTroubleshooting, filterMediaStepLines } from "../src/assistant/triage/grounding";
+import type { GatheredInfo } from "../src/assistant/triage/types";
 
 // ── Test case definition ──
 

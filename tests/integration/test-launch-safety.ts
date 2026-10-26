@@ -22,17 +22,17 @@ import {
   buildEmergencyFollowUpReply,
   FORTISBC_EMERGENCY_PHONE,
   type EmergencyKind,
-} from "../../src/lib/triage/emergency";
-import { hasEmergencyKeywords as stateMachineHasEmergency, buildInitialGathered } from "../../src/lib/triage/state-machine";
-import { detectSafety, parseSafetyResponse } from "../../src/lib/triage/detect-safety";
-import { classifyStepFeedback } from "../../src/lib/triage/step-feedback";
-import { isSummaryConfirmation } from "../../src/lib/triage/confirmation";
-import { findUnsafeInstruction, filterUnsafeSteps, sanitizeReplyText, toCelsius } from "../../src/lib/triage/step-safety";
-import { getFallbackSOP } from "../../src/lib/triage/sop-fallback";
+} from "../../src/assistant/triage/emergency";
+import { buildInitialGathered } from "../../src/assistant/triage/base-questions";
+import { detectSafety, parseSafetyResponse } from "../../src/assistant/triage/detect-safety";
+import { classifyStepFeedback } from "../../src/assistant/triage/step-feedback";
+import { isSummaryConfirmation } from "../../src/assistant/triage/confirmation";
+import { findUnsafeInstruction, filterUnsafeSteps, sanitizeReplyText, toCelsius } from "../../src/assistant/triage/step-safety";
+import { getFallbackSOP } from "../../src/assistant/triage/sop-fallback";
 import { triageChatRequestSchema, MAX_TRIAGE_MESSAGE_LENGTH } from "../../src/lib/utils/validation";
 import { escapeLikePattern } from "../../src/lib/utils/escape-like";
 import { createRateLimiter } from "../../src/lib/rate-limit";
-import type { GuidedStep } from "../../src/lib/triage/types";
+import type { GuidedStep } from "../../src/assistant/triage/types";
 import { createRunner, printSection, runStandalone, type TestResult } from "./helpers";
 
 const JANUARY = new Date("2027-01-15T12:00:00Z");
@@ -130,9 +130,8 @@ export function testLaunchSafety(): TestResult {
   check(detectEmergency("I think it might smell like gas?", JULY)?.kind === "gas", `"I think it might smell like gas?" fires`);
 
   printSection("One shared detector everywhere");
-  check(stateMachineHasEmergency === hasEmergencyKeywords, "state-machine re-exports the shared detector (no duplicate list)");
-  const sources = ["state-machine.ts", "detect-safety.ts"].map((f) =>
-    readFileSync(join(__dirname, "..", "..", "src", "lib", "triage", f), "utf8")
+  const sources = ["base-questions.ts", "detect-safety.ts"].map((f) =>
+    readFileSync(join(__dirname, "..", "..", "src", "assistant", "triage", f), "utf8")
   );
   check(sources.every((src) => !/const EMERGENCY_KEYWORDS\b/.test(src)), "no duplicate EMERGENCY_KEYWORDS lists remain");
   {
@@ -250,7 +249,8 @@ export function testLaunchSafety(): TestResult {
   check(isSummaryConfirmation("", "confirm"), "confirm button submits");
   {
     const routeSrc = readFileSync(join(__dirname, "..", "..", "src", "app", "api", "triage", "chat", "route.ts"), "utf8");
-    check(routeSrc.includes("isSummaryConfirmation(summaryAction, confirmSummary)"), "route uses the negation-aware confirmation parser");
+    const confirmSrc = readFileSync(join(__dirname, "..", "..", "src", "assistant", "confirm.ts"), "utf8");
+    check(confirmSrc.includes("isSummaryConfirmation(text, confirmButton)"), "the assistant uses the negation-aware confirmation parser");
     check(!routeSrc.includes("details: String(err)"), "chat route returns generic errors (no String(err))");
   }
 
@@ -340,7 +340,7 @@ export function testLaunchSafety(): TestResult {
     check(emergencySop.includes(FORTISBC_EMERGENCY_PHONE), "emergency SOP prefix includes the FortisBC number");
   }
   {
-    const helpSrc = readFileSync(join(__dirname, "..", "..", "src", "lib", "triage", "step-help.ts"), "utf8");
+    const helpSrc = readFileSync(join(__dirname, "..", "..", "src", "assistant", "triage", "step-help.ts"), "utf8");
     check(!/End with a YouTube/i.test(helpSrc) && /Do NOT suggest YouTube/.test(helpSrc), "step-help prompt no longer suggests YouTube");
     check(/isUnsafeInstruction/.test(helpSrc), "step-help output goes through the never-instruct filter");
   }

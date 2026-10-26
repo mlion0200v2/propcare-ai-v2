@@ -5,7 +5,8 @@ import { submitVendorQuote, type QuoteState } from "@/lib/actions/vendor";
 
 const initial: QuoteState = { error: null, ok: null };
 
-export function VendorQuoteForm({ token }: { token: string }) {
+/** `defaultNote`: pre-filled from the diagnosis (parts to bring); the vendor edits it. */
+export function VendorQuoteForm({ token, defaultNote = "" }: { token: string; defaultNote?: string }) {
   const [state, action, pending] = useActionState(submitVendorQuote, initial);
   if (state.ok) {
     return (
@@ -24,7 +25,7 @@ export function VendorQuoteForm({ token }: { token: string }) {
         </label>
         <label className="text-sm font-medium">
           What it covers
-          <input name="note" maxLength={2000} className="mt-1.5 block w-full border border-line bg-white px-3 py-2.5 text-sm" placeholder="Camera inspection; clear roots if present" />
+          <input name="note" maxLength={2000} defaultValue={defaultNote} className="mt-1.5 block w-full border border-line bg-white px-3 py-2.5 text-sm" placeholder="Camera inspection; clear roots if present" />
         </label>
       </div>
       {state.error && (

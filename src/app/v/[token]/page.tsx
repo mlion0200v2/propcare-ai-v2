@@ -4,6 +4,9 @@ import { formatCents } from "@/lib/workspace/tokens";
 import { formatDateTime } from "@/lib/utils/time";
 import { VendorQuoteForm } from "@/components/demo/vendor-quote-form";
 import { readUnitProfile } from "@/lib/units/profile";
+import { DiagnosisBlock } from "@/components/tickets/diagnosis";
+import { buildDiagnosisView, quoteNoteFromDiagnosis } from "@/assistant/sops/diagnosis-view";
+import type { GatheredInfo } from "@/assistant/triage/types";
 
 export const metadata = {
   title: "Work order | PropCare",
@@ -25,7 +28,7 @@ export default async function VendorWorkOrderPage({ params }: { params: Promise<
   const { data: order } = await service
     .from("work_orders")
     .select(
-      "id, vendor_name, scope, access_window, entry_permission, pets, include_tenant_phone, status, quote_cents, quote_note, quoted_at, created_at, ticket_id, workspaces(name), tickets(title, vendor_booked_for, units(unit_number, profile, properties(address_line1, city)), tenancies(name, phone))"
+      "id, vendor_name, scope, access_window, entry_permission, pets, include_tenant_phone, status, quote_cents, quote_note, quoted_at, created_at, ticket_id, workspaces(name), tickets(title, vendor_booked_for, classification, units(unit_number, profile, properties(address_line1, city)), tenancies(name, phone))"
     )
     .eq("token", token)
     .maybeSingle();
@@ -51,6 +54,9 @@ export default async function VendorWorkOrderPage({ params }: { params: Promise<
   }`;
   const firstName = ticket.tenancies?.name?.split(" ")[0];
   const accessNotes = readUnitProfile(ticket.units?.profile).access_notes;
+  // Only the diagnosis is read from the classification (never tenant details).
+  const gathered = (ticket.classification as { gathered?: GatheredInfo } | null)?.gathered ?? null;
+  const diagnosis = buildDiagnosisView(gathered, photos.length);
 
   return (
     <div className="min-h-screen bg-paper px-4 py-8 font-brand text-ink">
@@ -66,6 +72,8 @@ export default async function VendorWorkOrderPage({ params }: { params: Promise<
           <h2 className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Scope</h2>
           <p className="mt-2 whitespace-pre-wrap text-[15px] leading-relaxed">{order.scope}</p>
         </section>
+
+        {diagnosis && !diagnosis.managerOnly && <DiagnosisBlock view={diagnosis} audience="vendor" />}
 
         <section className="border border-line bg-white p-5">
           <h2 className="text-xs font-semibold uppercase tracking-[1.5px] text-muted">Access</h2>
@@ -127,7 +135,7 @@ export default async function VendorWorkOrderPage({ params }: { params: Promise<
             </p>
           ) : (
             <div className="mt-3">
-              <VendorQuoteForm token={token} />
+              <VendorQuoteForm token={token} defaultNote={quoteNoteFromDiagnosis(diagnosis)} />
             </div>
           )}
         </section>
