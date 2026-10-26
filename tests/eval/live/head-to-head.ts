@@ -17,6 +17,8 @@
  */
 import dotenv from "dotenv";
 dotenv.config({ path: ".env.local" });
+// First, so the assistant's OpenAI client picks up the metered fetch.
+import { EVAL_HEADER, assistantUsage } from "./meter";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
@@ -185,7 +187,7 @@ async function chatCall(budget: Budget, model: string, messages: { role: "user" 
   budget.check();
   const { default: OpenAI } = await import("openai");
   const { zodResponseFormat } = await import("openai/helpers/zod");
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY!, timeout: 30_000, maxRetries: 2 });
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY!, timeout: 30_000, maxRetries: 2, defaultHeaders: { [EVAL_HEADER]: "1" } });
   const res = await client.chat.completions.parse({
     model,
     messages: [{ role: "system", content: BASELINE_SYSTEM }, ...messages],
@@ -324,24 +326,6 @@ function report(rows: Row[], budget: Budget, meta: { date: string; dryRun: boole
   return L.join("\n");
 }
 
-/** Counts every call our assistant makes through the shared client (understanding, grounding, steps, embeddings). */
-async function meterAssistant(budget: Budget): Promise<void> {
-  const { openai } = await import("../../../src/assistant/openai");
-  const wrap = <T extends (...args: never[]) => Promise<unknown>>(fn: T, model: (args: unknown) => string): T =>
-    (async (...args: never[]) => {
-      budget.check();
-      const res = (await fn(...args)) as { usage?: { prompt_tokens?: number; completion_tokens?: number } };
-      if (res?.usage) budget.add("propcare", model(args[0]), res.usage.prompt_tokens ?? 0, res.usage.completion_tokens ?? 0);
-      return res;
-    }) as T;
-  const chat = openai.chat.completions as unknown as Record<string, (...a: never[]) => Promise<unknown>>;
-  const modelOf = (a: unknown) => (a as { model?: string })?.model ?? "gpt-4o-mini";
-  chat.create = wrap(chat.create.bind(chat), modelOf);
-  chat.parse = wrap(chat.parse.bind(chat), modelOf);
-  const emb = openai.embeddings as unknown as Record<string, (...a: never[]) => Promise<unknown>>;
-  emb.create = wrap(emb.create.bind(emb), () => "text-embedding-3-small");
-}
-
 function stubCall(budget: Budget, judgeModel: string): StructuredCall {
   return (async ({ purpose, system, user }: { purpose: string; system: string; user: string }) => {
     budget.add(purpose, purpose === "judge" ? judgeModel : "gpt-4o-mini", estimateTokens(system + user), purpose === "judge" ? 400 : 20);
@@ -362,16 +346,26 @@ async function main() {
   const budget = new Budget(Number(arg("--max-usd") ?? process.env.LIVE_EVAL_MAX_USD ?? 2));
   const baselineModel = arg("--baseline-model") ?? "gpt-4o-mini";
   const judgeModel = arg("--judge-model") ?? "gpt-4o";
-  if (!dryRun) await meterAssistant(budget);
   const tenant = dryRun ? stubCall(budget, judgeModel) : openAICall(budget, "gpt-4o-mini");
   const judgeCall = dryRun ? stubCall(budget, judgeModel) : openAICall(budget, judgeModel);
   const only = arg("--only");
   const cases = buildCases(Number(arg("--sample") ?? 26)).filter((c) => !only || c.group === only);
 
   const rows: Row[] = [];
+  const failed: string[] = [];
   let stopped: string | null = null;
-  try {
-    for (const [i, c] of cases.entries()) {
+  // The assistant's own spend comes from the fetch meter; it counts towards the cap too.
+  const syncAssistantSpend = () => {
+    const prev = budget.byPurpose.propcare?.usd ?? 0;
+    const delta = assistantUsage.usd - prev;
+    if (delta > 0) {
+      budget.spent += delta;
+      budget.byPurpose.propcare = { usd: assistantUsage.usd, calls: assistantUsage.calls, input: assistantUsage.input, output: assistantUsage.output };
+    }
+  };
+  for (const [i, c] of cases.entries()) {
+    try {
+      syncAssistantSpend();
       budget.check();
       const ours = dryRun ? { turns: [{ bot: "(dry run)" }], ticket: null, end: "DONE" } : await runOurs(c, tenant);
       if (dryRun) budget.add("propcare", "gpt-4o-mini", 6 * 1500, 6 * 200);
@@ -379,11 +373,18 @@ async function main() {
       const v = await judgePair(judgeCall, c, ours, base, i % 2 === 1);
       rows.push({ c, ours, base, v, unsafe: { ours: unsafeLines(ours), base: unsafeLines(base) } });
       process.stdout.write(v.preferred === "a" ? "P" : v.preferred === "b" ? "L" : "=");
+    } catch (e) {
+      if (e instanceof BudgetExceeded) {
+        stopped = e.message;
+        break;
+      }
+      // A timeout or a bad response loses this case, not the run.
+      failed.push(`${c.id}: ${e instanceof Error ? e.message : String(e)}`);
+      process.stdout.write("x");
     }
-  } catch (e) {
-    if (!(e instanceof BudgetExceeded)) throw e;
-    stopped = e.message;
   }
+  syncAssistantSpend();
+  if (failed.length) stopped = [stopped, `${failed.length} case(s) failed and were skipped: ${failed.join("; ")}`].filter(Boolean).join(". ");
 
   const date = new Date().toISOString().slice(0, 10);
   const outDir = arg("--out") ?? join(__dirname, "..", "reports");

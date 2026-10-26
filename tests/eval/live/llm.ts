@@ -58,7 +58,8 @@ export function openAICall(budget: Budget, model = process.env.LIVE_EVAL_MODEL ?
     budget.check();
     const { default: OpenAI } = await import("openai");
     const { zodResponseFormat } = await import("openai/helpers/zod");
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY!, timeout: 30_000, maxRetries: 2 });
+    // The header tells the assistant's cost meter (meter.ts) this call is the eval's own.
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY!, timeout: 30_000, maxRetries: 2, defaultHeaders: { "x-propcare-eval": "1" } });
     const res = await client.chat.completions.parse({
       model,
       temperature: 0,
