@@ -175,7 +175,7 @@ Each step is its own PR, with CI green and staging first. Each one leaves PropCa
 1. **Merge the redesign** and run `npx tsx scripts/ingest_sops.ts`. *Done in #20.*
 2. **Draw the line inside the app.** Add `src/assistant/` with a `turn(request) → response` function that implements the API above in-process. The chat route calls `turn()` instead of the triage modules, after removing contact details. No new service yet: this proves the boundary with no infrastructure risk. *Done in #20.* The old tenant-info flow was removed instead of moved: every ticket now starts from a tenancy, so the app already knows the unit.
 3. **Make the eval drive `turn()`.** Port the scripted, coverage, diagnosis and live tiers to call `turn()`, so the boundary is tested on every PR. *Done in #20* (`tests/eval/drive.ts`; `test-assistant-boundary.ts` fails CI if `src/assistant/` imports the app).
-4. **Stand up `propcare-assistant`.** Create the service from the same repo: a separate Dockerfile target that runs only `src/assistant/` behind `/v1`. Add the Terraform module, the service accounts, invoker permissions and secrets. Deploy to staging.
+4. **Stand up `propcare-assistant`.** Create the service from the same repo: a separate Dockerfile target that runs only `src/assistant/` behind `/v1`. Add the Terraform module, the service accounts, invoker permissions and secrets. Give each service its own deploy workflow with a path filter: the assistant redeploys only when `src/assistant/`, its catalog or its Dockerfile target changes; the app redeploys when anything else changes (including the shared API types in `src/assistant/api.ts`, which both use). Deploy to staging.
 5. **Switch the web chat to HTTP** behind a flag (`ASSISTANT_URL`). Turn it on in staging, compare the eval results with the in-process version, then roll out to production.
 6. **Remove the model keys from the app.** Once production runs on the service, the app no longer needs the OpenAI or Pinecone keys.
 7. **Email channel.**
@@ -189,10 +189,15 @@ Steps 4–6 together are about a week of work; email is a separate piece after t
 
 ## Decisions
 
-Answered by Simone on 2026-10-26, except where marked open.
+Answered by Simone on 2026-10-26.
 
 1. **Diagnosis: return only.** The assistant returns the diagnosis and a ticket update; the app writes tickets, alerts managers and sends email. It stays the only thing that touches tenant data.
-2. **One repo or two?** *Open.* The proposal: **one repo, two deploy targets**. That means one codebase, built into two container images that run as two Cloud Run services (the app and the assistant), so the eval, the catalog and the API types stay in one place. A second repo can come later if a separate team owns the assistant.
+2. **One repo, two deploy targets.** One codebase, built into two container images that run as two Cloud Run services (the app and the assistant), so the eval, the catalog and the API types stay in one place. To keep a later split cheap:
+   - **Boundary test.** `tests/integration/test-assistant-boundary.ts` (#20) fails CI if `src/assistant/` imports anything from the app, Supabase or Next, so the folder can move to its own repo almost unchanged.
+   - **Separate deploys.** Each service has its own deploy workflow with a path filter, so it only redeploys when its own files change (set up in step 4).
+   - No CODEOWNERS file for now: Simone is the only one changing the code.
+
+   Split into two repos only if a separate team or contractor owns the assistant, other products use it with their own release schedule, or one side's CI keeps blocking the other.
 3. **Photos: not in the first version, but keep room for it.** The request has a reserved `media.images` field (short-lived signed links, no other data). Photo diagnosis (reading a model/serial label, for example) can use it later without changing the API.
 4. **Languages: English replies in the first version.** The assistant already understands Chinese and French; replying in the tenant's language comes later.
 5. **Separate production Supabase project: at the real-product launch, not now.** It is needed before real tenants use PropCare.
