@@ -1,14 +1,19 @@
 /**
  * The SOP catalog, validated once at load. Plain JSON so Simone (or a
- * script) can edit SOPs without touching code.
+ * script) can edit SOPs without touching code. A general SOP for each kind
+ * of equipment is added at load (./general.ts), unless the JSON has one.
  */
 import raw from "./catalog.json";
 import { CatalogSchema, type Sop } from "./schema";
+import { generalSops } from "./general";
 
 let cached: Sop[] | null = null;
 
 export function loadCatalog(): Sop[] {
-  if (!cached) cached = CatalogSchema.parse(raw).sops;
+  if (!cached) {
+    const written = CatalogSchema.parse(raw).sops;
+    cached = [...written, ...generalSops(written)];
+  }
   return cached;
 }
 

@@ -9,6 +9,7 @@
  */
 import type { IssueFrame } from "@/assistant/understanding/frame";
 import { loadCatalog } from "./catalog";
+import { generalIssueKey, isGeneralSop } from "./general";
 import type { Sop } from "./schema";
 
 export interface SopChoice {
@@ -59,12 +60,18 @@ export function selectSop(
   // Too vague to pick a procedure: generic questions first.
   if (frame.symptom === "unknown" && frame.equipment === "unknown") return null;
   const text = message.normalize("NFKC").toLowerCase();
-  const ranked = (options.catalog ?? loadCatalog())
+  const catalog = options.catalog ?? loadCatalog();
+  const ranked = catalog
+    .filter((sop) => !isGeneralSop(sop))
     .map((sop) => ({ sop, score: scoreSop(sop, frame, text, options.vectorScores?.[sop.issue_key] ?? 0) }))
     .filter((r): r is { sop: Sop; score: number } => r.score !== null)
     .sort((x, y) => y.score - x.score);
   const best = ranked[0];
-  if (!best || best.score < 2) return null;
+  if (!best || best.score < 2) {
+    // No written SOP fits: the equipment's general one, when the equipment is known.
+    const general = frame.equipment !== "unknown" ? catalog.find((s) => s.issue_key === generalIssueKey(frame.equipment)) : undefined;
+    return general ? { sop: general, score: 0, confidence: "low", runnerUp: best?.sop.issue_key ?? null } : null;
+  }
   const second = ranked[1];
   const specific = frame.symptom !== "unknown" && (frame.equipment !== "unknown" || frame.symptom === "pests" || best.score >= 4);
   return {
