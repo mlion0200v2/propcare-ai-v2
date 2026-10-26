@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 
 export type AccessState = { error: string | null; ok?: string | null };
 

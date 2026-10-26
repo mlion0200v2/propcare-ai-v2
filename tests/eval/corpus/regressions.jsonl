@@ -1,0 +1,1 @@
+{"id":"regression-2026-10-21-pv9o","message":"my fridge is leaking","lang":"en","style":"real","expected":{"equipment":"fridge","symptom":"leaking","substance":"water","room":"kitchen"},"emergency":false,"sop":"fridge_leak","source":"regression"}

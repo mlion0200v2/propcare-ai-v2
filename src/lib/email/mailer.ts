@@ -1,7 +1,7 @@
 import "server-only";
 
 import { Resend } from "resend";
-import { logError, logWarn } from "@/lib/triage/logger";
+import { logError, logWarn } from "@/lib/logger";
 import { isReservedAddress } from "./reserved";
 
 let _resend: Resend | null = null;

@@ -5,7 +5,7 @@
  * to find gaps in classifyPlumbing().
  */
 import { createRunner, printSection, type TestResult } from "./helpers";
-import { classifyPlumbing } from "../../src/lib/triage/classify-issue";
+import { classifyPlumbing } from "../../src/assistant/triage/classify-issue";
 
 interface Case {
   input: string;

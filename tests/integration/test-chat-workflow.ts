@@ -6,104 +6,123 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createRunner, printSection, runStandalone, type TestResult } from "./helpers";
-import {
-  extractLeakWhere,
-  getNextExtendedQuestion,
-  isGatherComplete,
-  isWaterLeak,
-  normaliseYesNo,
-  processExtendedAnswer,
-} from "../../src/lib/triage/gather-issue";
-import { buildInitialGathered } from "../../src/lib/triage/state-machine";
-import { buildMediaPrompt, buildPreventionSteps, buildShotList } from "../../src/lib/triage/guidance";
-import { buildChatHints } from "../../src/lib/triage/hints";
+import { buildInitialGathered } from "../../src/assistant/triage/base-questions";
+import { buildMediaPrompt, buildPreventionSteps, buildShotList } from "../../src/assistant/triage/guidance";
+import { buildChatHints } from "../../src/assistant/triage/hints";
 import { buildOwnerUpdate } from "../../src/lib/messages";
 import { matchingRooms, readUnitProfile, whichRoomQuestion } from "../../src/lib/units/profile";
-import type { GatheredInfo } from "../../src/lib/triage/types";
+import type { GatheredInfo } from "../../src/assistant/triage/types";
+import { newChat, say } from "../eval/drive";
+import { generateTicketSummary } from "../../src/assistant/triage/summary";
+import { buildQueryText } from "../../src/assistant/retrieval/pinecone";
+import { sopByKey } from "../../src/assistant/sops/catalog";
+import { answerIntake, startIntake } from "../../src/assistant/sops/intake";
+import { rulesFrame } from "../../src/assistant/understanding/rules";
 
 const SRC = join(__dirname, "..", "..", "src");
 
-export function testChatWorkflow(): TestResult {
-  printSection("Chat workflow (leaks, prevention, shot list, dispatch)");
+/** Drive the chat: first message, then answers in order. Returns the state and every question asked. */
+async function chatThrough(first: string, answers: string[], rooms = ["Kitchen", "Main bathroom (hallway)"]) {
+  const chat = newChat({ rooms });
+  let response = await say(chat, first);
+  const firstReply = response.reply;
+  const asked: string[] = [];
+  const questionOf = () => (response.phase === "GATHER_INFO" && !response.emergency ? response.state.current_question : null);
+  let emergency: string | null = response.emergency?.kind ?? null;
+  for (const answer of answers) {
+    const question = questionOf();
+    if (!question) break;
+    asked.push(question);
+    response = await say(chat, answer);
+    if (response.emergency) {
+      emergency = response.emergency.kind;
+      break;
+    }
+  }
+  return { gathered: response.state.gathered, asked, next: questionOf(), emergency, firstReply, phase: response.phase, reply: response.reply };
+}
+
+/** The answer to an SOP's electrical question (safety-critical order). */
+function electricalAnswer(text: string): { value: string; emergency: string | null } {
+  const sop = sopByKey("water_leak_unknown")!;
+  const q = sop.intake_questions.find((x) => x.slot === "electrical_near")!;
+  const r = answerIntake(sop, startIntake(sop, rulesFrame("water leak"), "high"), q, text);
+  return { value: r.state.answers.electrical_near.value, emergency: r.emergency };
+}
+
+export async function testChatWorkflow(): Promise<TestResult> {
+  printSection("Chat workflow (SOP intake for leaks, prevention, shot list, dispatch)");
   const { pass, fail, result } = createRunner();
   const check = (cond: boolean, msg: string, detail?: unknown) => (cond ? pass(msg) : fail(msg, detail));
 
-  // Leak detection
-  check(isWaterLeak("Water is dripping from the bathroom ceiling") && isWaterLeak("my sink is leaking") && isWaterLeak("there's a puddle by the fridge"), "leaks are recognised");
-  check(!isWaterLeak("the oven won't heat") && !isWaterLeak("noisy fan"), "non-leaks don't get the leak questions");
-
-  // Use what the first message already says
-  check(extractLeakWhere("There's water dripping from the bathroom ceiling") === "Ceiling", "'dripping from the bathroom ceiling' → water at the ceiling (not asked again)");
-  check(
-    extractLeakWhere("my kitchen sink is leaking underneath") === "Under the sink" &&
-      extractLeakWhere("water around the base of the toilet") === "Around the toilet" &&
-      extractLeakWhere("the dishwasher is leaking") === "Around an appliance" &&
-      extractLeakWhere("there's a leak somewhere") === null,
-    "other sources recognised; unknown stays a question"
-  );
+  // Rooms
   const rooms = ["Main bathroom (upstairs hallway)", "Ensuite", "Kitchen", "Laundry (basement)", "Basement"];
   check(matchingRooms("bathroom", rooms).join("|") === "Main bathroom (upstairs hallway)|Ensuite", "'bathroom' matches both bathrooms in the profile");
   check(matchingRooms("kitchen", rooms).join("|") === "Kitchen" && matchingRooms("bathroom", ["Main bathroom (hallway)", "Kitchen"]).length === 1, "a single match is used directly");
   check(whichRoomQuestion("bathroom", ["Main bathroom (upstairs hallway)", "Ensuite"]) === "Which bathroom is it? (Main bathroom (upstairs hallway) or Ensuite)", "asks 'Which bathroom?' with the unit's own rooms");
   const candidateChips = buildChatHints({ currentQuestion: "location_in_unit", triageState: "GATHER_INFO", category: "plumbing", description: "leak", profile: readUnitProfile({ rooms }), locationCandidates: ["Main bathroom (upstairs hallway)", "Ensuite"] });
   check(candidateChips.quickReplies.join("|") === "Main bathroom (upstairs hallway)|Ensuite", "chips offer just the matching rooms");
-  {
-    const routeSrc = readFileSync(join(SRC, "app", "api", "triage", "chat", "route.ts"), "utf8");
-    check(/initialGathered\.leak_where = extractLeakWhere\(message\)/.test(routeSrc) && /whichRoomQuestion\(roomWord/.test(routeSrc), "first message fills in the water location and narrows the room");
-  }
 
   // Electrical answer: safety-critical
-  check(normaliseYesNo("No") === "no" && normaliseYesNo("nope") === "no" && normaliseYesNo("no outlets nearby") === "no", "clear 'no' → no");
-  check(normaliseYesNo("yes") === "yes" && normaliseYesNo("there's a light right above it") === "yes", "yes / mentions a light → yes");
-  check(normaliseYesNo("No, but the lamp is plugged in nearby") === "yes", "'no, but … plugged in' → yes (safer)");
-  check(normaliseYesNo("I don't know") === "not sure" && normaliseYesNo("maybe") === "not sure", "unclear → not sure (escalated)");
+  check(electricalAnswer("No").value === "no" && electricalAnswer("nope").value === "no" && electricalAnswer("no outlets nearby").value === "no", "clear 'no' → no");
+  check(electricalAnswer("yes").emergency === "water_electrical" && electricalAnswer("there's a light right above it").emergency === "water_electrical", "yes / mentions a light → escalate");
+  check(electricalAnswer("No, but the lamp is plugged in nearby").emergency === "water_electrical", "'no, but … plugged in' → yes (safer)");
+  check(electricalAnswer("I don't know").emergency === "unconfirmed_safety" && electricalAnswer("maybe").emergency === "unconfirmed_safety", "unclear → not sure (escalated)");
 
-  // Gather order and completion
-  const base: GatheredInfo = {
-    ...buildInitialGathered(),
-    category: "plumbing",
-    location_in_unit: "Main bathroom",
-    started_when: "today",
-    current_status: "still happening",
-    leak_details_needed: true,
-  };
-  check(!isGatherComplete(base) && getNextExtendedQuestion(base) === "leak_where", "leak deep-dive starts with 'where is the water?'");
-  let g = processExtendedAnswer(base, "leak_where", "Ceiling");
-  g = processExtendedAnswer(g, "leak_amount", "It's spreading");
-  check(getNextExtendedQuestion(g) === "leak_timing", "then how much, then when");
-  g = processExtendedAnswer(g, "leak_timing", "When the shower or bath is used");
-  check(getNextExtendedQuestion(g) === "leak_electrical", "electrical question last");
-  const safe = processExtendedAnswer(g, "leak_electrical", "No");
-  check(isGatherComplete(safe) && safe.is_emergency !== true, "'no' completes the gather without an emergency");
-  const danger = processExtendedAnswer(g, "leak_electrical", "Not sure");
-  check(danger.is_emergency === true && danger.leak_electrical === "not sure", "'not sure' near electrical is treated as an emergency");
-  const notLeak = { ...base, leak_details_needed: false };
-  check(isGatherComplete(notLeak), "non-leak reports skip the leak questions");
+  // Ceiling leak: the SOP's questions in order, nothing the message already said
+  const ceiling = await chatThrough("There's water dripping from the bathroom ceiling", ["A bathroom", "Only when that's used (shower, toilet or tap above)", "It's spreading", "No", "Today"]);
+  check(ceiling.gathered.sop?.issue_key === "ceiling_stain", "ceiling drip → ceiling SOP", ceiling.gathered.sop?.issue_key);
+  check(ceiling.asked.join(",") === "intake:ceiling_above,intake:ceiling_timing,intake:amount,intake:electrical_near,intake:onset", "asks what's above, when, how much, electrical, when it started", ceiling.asked);
+  check(ceiling.next === null && ceiling.gathered.sop?.complete === true && ceiling.gathered.sop?.cause?.id === "above_bathroom", "intake complete; likely source recorded", ceiling.gathered.sop?.cause);
+  const danger = await chatThrough("There's water dripping from the bathroom ceiling", ["A bathroom", "All the time", "A few drops", "Not sure"]);
+  check(danger.emergency === "unconfirmed_safety", "'not sure' near electrical is treated as an emergency", danger.emergency);
+  const unknownLeak = await chatThrough("something is leaking", ["Toilet", "Around the base, on the floor"]);
+  check(unknownLeak.asked[0] === "intake:leak_where" && unknownLeak.gathered.sop?.issue_key === "toilet_base_leak", "unknown source: 'where is the water?' first; the answer picks the toilet SOP", [unknownLeak.asked, unknownLeak.gathered.sop?.issue_key]);
+  const grease = await chatThrough("rangehood is leaking gease", ["The filter area underneath"]);
+  check(grease.gathered.sop?.issue_key === "range_hood_grease_drip" && !grease.asked.some((q) => /electrical_near|amount|leak_where/.test(q)), "grease drip: hood questions, no water questions", grease.asked);
+  check(!/where in your unit|where is the water/i.test(grease.firstReply), "Simone's transcript: no 'Where in your unit?' or 'Where is the water?'", grease.firstReply);
 
+  check(
+    ceiling.phase === "AWAITING_MEDIA" && ceiling.reply === buildMediaPrompt(ceiling.gathered, readUnitProfile({ rooms: ["Kitchen", "Main bathroom (hallway)"] })),
+    "intake done: on to photos with the guided media prompt",
+    ceiling.reply
+  );
   const route = readFileSync(join(SRC, "app", "api", "triage", "chat", "route.ts"), "utf8");
-  check(/currentQuestion === "leak_electrical" && gathered\.leak_electrical !== "no"[\s\S]{0,200}handleEmergency\(/.test(route), "the chat escalates immediately on water near electricity");
-  check(/isWaterLeak\(message\)/.test(route) && /buildMediaPrompt\(/.test(route), "leaks flagged from the first message; media step uses the guided prompt");
+  check(/if \(response\.emergency\)[\s\S]{0,300}escalateEmergency\(/.test(route), "the route alerts the manager as soon as the assistant reports an emergency");
 
   // Prevention first
+  const safe = ceiling.gathered;
   const profile = readUnitProfile({ water_shutoff: "Laundry closet, blue lever", breaker_panel: "Hallway" });
   const prevention = buildPreventionSteps(safe, profile);
   check(prevention[0] === "Turn off the main water: Laundry closet, blue lever.", "spreading water: shut-off location first", prevention);
   check(prevention.some((s) => /bucket/.test(s)) && prevention.some((s) => /electronics/.test(s)) && prevention.some((s) => /sagging/.test(s)), "towels/bucket, move valuables, ceiling warning");
-  const toilet = buildPreventionSteps({ ...safe, leak_amount: "A few drops", leak_where: "Around the toilet" }, readUnitProfile({}));
-  check(/toilet's shut-off valve/.test(toilet[0]), "toilet leak: the toilet's own valve");
-  check(buildPreventionSteps(notLeak, profile).length === 0, "no prevention block for non-leaks");
+  const toiletLeak = await chatThrough("my toilet is leaking", ["Not sure", "Not sure", "A few drops", "No", "Today"], ["Kitchen", "Bathroom"]);
+  check(/toilet's shut-off valve/.test(buildPreventionSteps(toiletLeak.gathered, readUnitProfile({}))[0]), "toilet leak (source unknown): the toilet's own valve", buildPreventionSteps(toiletLeak.gathered, readUnitProfile({})));
+  const toiletBase = await chatThrough("water on the floor around my toilet", ["Only when it's flushed", "A few drops", "No", "Today"], ["Kitchen", "Bathroom"]);
+  check(/Don't flush this toilet/.test(buildPreventionSteps(toiletBase.gathered, readUnitProfile({}))[0]), "toilet base leak: don't flush (likely source picks the step)");
+  const trap = await chatThrough("my kitchen sink is leaking", ["The drain pipe / P-trap under the sink", "Only while water is draining", "A few drops", "No", "Today"]);
+  check(/Don't run the tap or the dishwasher; put a bowl under the trap/.test(buildPreventionSteps(trap.gathered, readUnitProfile({}))[0]), "drain/trap leak: don't run the tap or dishwasher, bowl under the trap");
+  check(/Don't cook on the burner under the drip/.test(buildPreventionSteps(grease.gathered, profile)[0] ?? ""), "grease drip: the SOP's own prevention step (no water steps)", buildPreventionSteps(grease.gathered, profile));
+  const notLeak: GatheredInfo = { ...buildInitialGathered(), category: "electrical", location_in_unit: "Kitchen", started_when: "today", current_status: "still happening" };
+  check(buildPreventionSteps(notLeak, profile).length === 0, "no prevention block without an SOP or a leak");
 
   // Shot list
-  const shots = buildShotList({ ...safe, leak_where: "Under the sink" });
-  check(shots.some((s) => /Under the sink/.test(s)) && shots[0].startsWith("A wide shot"), "leak shot list: wide shot, source, under the sink");
+  const shots = buildShotList(trap.gathered);
+  check(shots[0].startsWith("A wide shot") && shots.some((s) => /under the sink/i.test(s)), "leak shot list: wide shot, then the SOP's photos (under the sink)", shots);
   const appliance = buildShotList({ ...notLeak, category: "appliance" });
   check(appliance.some((s) => /model\/serial label/.test(s)), "appliances: the model label");
   const prompt = buildMediaPrompt(safe, profile);
   check(prompt.indexOf("limit the damage") >= 0 && prompt.indexOf("limit the damage") < prompt.indexOf("Photos help") && /60 seconds/.test(prompt), "media prompt: prevention first, then shots, video ≤ 60 s");
 
-  // Chips for the new questions
-  const chips = (q: string) => buildChatHints({ currentQuestion: q, triageState: "GATHER_INFO", category: "plumbing", description: "leak", profile }).quickReplies;
-  check(chips("leak_where").includes("Under the sink") && chips("leak_amount").includes("It's spreading") && chips("leak_electrical").join() === "No,Yes,Not sure", "tap-answers for every leak question");
+  // Chips come from the SOP's options (only the ones that make sense)
+  const chipsAt = (gathered: GatheredInfo, q: string) =>
+    buildChatHints({ currentQuestion: q, triageState: "GATHER_INFO", category: "plumbing", description: "leak", profile, gathered }).quickReplies;
+  const ceilingStart = await chatThrough("There's water dripping from the bathroom ceiling", []);
+  check(chipsAt(ceilingStart.gathered, "intake:ceiling_above").includes("Another unit (a neighbour's)"), "ceiling: 'what's above?' chips");
+  check(chipsAt(ceilingStart.gathered, "intake:electrical_near").join() === "No,Yes,Not sure", "electrical chips: No, Yes, Not sure", chipsAt(ceilingStart.gathered, "intake:electrical_near"));
+  const bathSink = await chatThrough("the bathroom sink is leaking", [], ["Kitchen", "Bathroom"]);
+  const sinkChips = chipsAt(bathSink.gathered, "intake:sink_part");
+  check(sinkChips.includes("The drain stopper") && !sinkChips.includes("The garbage disposal"), "bathroom sink: a stopper option, no disposal", sinkChips);
 
   // Media limits in the browser
   const chat = readFileSync(join(SRC, "components", "triage", "chat.tsx"), "utf8");
@@ -112,6 +131,19 @@ export function testChatWorkflow(): TestResult {
   // Access details
   const access = readFileSync(join(SRC, "lib", "actions", "access.ts"), "utf8");
   check(/\.eq\("tenant_id", user\.id\)/.test(access) && /createServiceClient\(\)/.test(access), "access details: ownership checked with the tenant's session before writing");
+
+  // The likely source reaches the summary (and so the work order) and the SOP search
+  {
+    const summary = generateTicketSummary({
+      description: "my kitchen sink is leaking",
+      gathered: trap.gathered,
+      steps: [],
+      mediaCount: 0,
+      timestamp: "2026-10-21T10:00:00Z",
+    });
+    check(/Likely source: Drain pipe \/ P-trap slip nut/.test(summary) && /When does it leak: Only while water is draining/.test(summary) && /Procedure: /.test(summary), "summary lists the procedure, the answers and the likely source", summary);
+    check(/p-trap slip nut drain pipe/.test(buildQueryText(trap.gathered, "my kitchen sink is leaking")), "SOP search is steered to the likely source");
+  }
 
   // Owner update
   const update = buildOwnerUpdate({
@@ -132,4 +164,4 @@ export function testChatWorkflow(): TestResult {
 }
 
 const isMain = process.argv[1]?.replace(/\.ts$/, "").endsWith("test-chat-workflow");
-if (isMain) runStandalone(() => testChatWorkflow());
+if (isMain) runStandalone(testChatWorkflow);

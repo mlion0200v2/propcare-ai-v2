@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { clientIp } from "@/lib/request-ip";
 import { demoCreateLimiter } from "@/lib/rate-limit";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 import {
   DEMO_COOKIE,
   DEMO_ROLES,

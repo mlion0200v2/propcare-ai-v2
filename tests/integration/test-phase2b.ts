@@ -16,12 +16,12 @@ import {
   getNextExtendedQuestion,
   getExtendedQuestionText,
   processExtendedAnswer,
-} from "../../src/lib/triage/gather-issue";
-import { generateTicketSummary } from "../../src/lib/triage/summary";
-import { validateGroundedResult } from "../../src/lib/triage/validate";
-import { filterStepsByEquipment, type GroundedResult } from "../../src/lib/triage/grounding";
-import type { GatheredInfo, TroubleshootingStep } from "../../src/lib/triage/types";
-import { buildInitialGathered } from "../../src/lib/triage/state-machine";
+} from "../../src/assistant/triage/gather-issue";
+import { generateTicketSummary } from "../../src/assistant/triage/summary";
+import { validateGroundedResult } from "../../src/assistant/triage/validate";
+import { filterStepsByEquipment, type GroundedResult } from "../../src/assistant/triage/grounding";
+import type { GatheredInfo, TroubleshootingStep } from "../../src/assistant/triage/types";
+import { buildInitialGathered } from "../../src/assistant/triage/base-questions";
 
 export function testPhase2B(): TestResult {
   printSection("Phase 2B — Gather Issue + Summary");
@@ -466,8 +466,6 @@ export function testPhase2B(): TestResult {
     ];
 
     const summary = generateTicketSummary({
-      ticketId: "ticket-123",
-      traceId: "trace-456",
       description: "Kitchen faucet leaking",
       gathered: {
         category: "plumbing",
@@ -479,12 +477,6 @@ export function testPhase2B(): TestResult {
         subcategory: null,
         entry_point: null,
         equipment: null,
-      },
-      tenantInfo: {
-        reported_address: "123 Main St",
-        reported_unit_number: "Apt 4B",
-        contact_phone: "555-1234",
-        contact_email: "tenant@test.com",
       },
       steps,
       mediaCount: 0,
@@ -501,15 +493,10 @@ export function testPhase2B(): TestResult {
     } else {
       fail("Summary: missing category");
     }
-    if (summary.includes("123 Main St")) {
-      pass("Summary: includes address");
+    if (!/Address|Unit:|Phone|Email/.test(summary)) {
+      pass("Summary: no address or contact details (the app knows the unit, the assistant doesn't)");
     } else {
-      fail("Summary: missing address");
-    }
-    if (summary.includes("Apt 4B")) {
-      pass("Summary: includes unit");
-    } else {
-      fail("Summary: missing unit");
+      fail("Summary: has address or contact details", summary.slice(0, 300));
     }
     if (summary.includes("Kitchen faucet leaking")) {
       pass("Summary: includes description");
@@ -561,16 +548,6 @@ export function testPhase2B(): TestResult {
     } else {
       fail("Summary: missing media status");
     }
-    if (summary.includes("ticket-123")) {
-      pass("Summary: includes ticket_id");
-    } else {
-      fail("Summary: missing ticket_id");
-    }
-    if (summary.includes("trace-456")) {
-      pass("Summary: includes trace_id");
-    } else {
-      fail("Summary: missing trace_id");
-    }
   } catch (e) {
     fail("Summary generation threw", e);
   }
@@ -578,8 +555,6 @@ export function testPhase2B(): TestResult {
   // ── Summary with emergency ──
   try {
     const summary = generateTicketSummary({
-      ticketId: "ticket-789",
-      traceId: "trace-012",
       description: "Gas smell in kitchen",
       gathered: {
         category: "plumbing",
@@ -592,7 +567,6 @@ export function testPhase2B(): TestResult {
         entry_point: null,
         equipment: null,
       },
-      tenantInfo: null,
       steps: [],
       mediaCount: 2,
       timestamp: "2024-01-15T12:00:00.000Z",
@@ -750,8 +724,6 @@ export function testPhase2B(): TestResult {
     };
 
     const summary = generateTicketSummary({
-      ticketId: "ticket-ant",
-      traceId: "trace-ant",
       description: "Ants in living room",
       gathered: {
         category: "pest_control",
@@ -763,12 +735,6 @@ export function testPhase2B(): TestResult {
         subcategory: "ants",
         entry_point: "hole under the railing",
         equipment: null,
-      },
-      tenantInfo: {
-        reported_address: "456 Oak Ave",
-        reported_unit_number: "Unit 2A",
-        contact_phone: null,
-        contact_email: null,
       },
       steps: [],
       mediaCount: 1,

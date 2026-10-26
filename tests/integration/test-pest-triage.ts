@@ -1,15 +1,15 @@
 /**
  * Pest triage tests — classifyPest, extractEntryPoint, checkPestEscalation,
- * validateTenantInfo, pest SOP split, recurring status extraction.
+ * pest SOP split, recurring status extraction.
  */
 import { createRunner, printSection, type TestResult } from "./helpers";
-import { classifyPest, classifyMold, classifyPlumbing, classifyStructural, classifyIssue } from "../../src/lib/triage/classify-issue";
-import { extractEntryPoint, extractCurrentStatus, extractLocation, getCanonicalEquipment, inferLocationFromEquipment } from "../../src/lib/triage/extract-details";
-import { checkPestEscalation, detectSafety } from "../../src/lib/triage/detect-safety";
-import { validateTenantInfo, buildInitialGathered } from "../../src/lib/triage/state-machine";
-import { getFallbackSOP } from "../../src/lib/triage/sop-fallback";
-import { convertToGuidedSteps, shouldUseGuidedTroubleshooting } from "../../src/lib/triage/grounding";
-import type { GatheredInfo, TenantInfo, TroubleshootingStep } from "../../src/lib/triage/types";
+import { classifyPest, classifyMold, classifyPlumbing, classifyStructural, classifyIssue } from "../../src/assistant/triage/classify-issue";
+import { extractEntryPoint, extractCurrentStatus, extractLocation, getCanonicalEquipment, inferLocationFromEquipment } from "../../src/assistant/triage/extract-details";
+import { checkPestEscalation, detectSafety } from "../../src/assistant/triage/detect-safety";
+import { buildInitialGathered } from "../../src/assistant/triage/base-questions";
+import { getFallbackSOP } from "../../src/assistant/triage/sop-fallback";
+import { convertToGuidedSteps, shouldUseGuidedTroubleshooting } from "../../src/assistant/triage/grounding";
+import type { GatheredInfo, TroubleshootingStep } from "../../src/assistant/triage/types";
 
 export function testPestTriage(): TestResult {
   printSection("Pest Triage");
@@ -233,73 +233,6 @@ export function testPestTriage(): TestResult {
     pass("checkPestEscalation: ants + 'infestation' → escalate (severe indicator)");
   } else {
     fail("checkPestEscalation: ants + 'infestation' should escalate via severe", escAntsInfest);
-  }
-
-  // ── validateTenantInfo ──
-
-  const ti1: TenantInfo = {
-    reported_address: "123 Main St",
-    reported_unit_number: "non",
-    contact_phone: "555-1234",
-    contact_email: "a@b.com",
-  };
-  const invalid1 = validateTenantInfo(ti1);
-  if (invalid1.includes("reported_unit_number")) {
-    pass("validateTenantInfo: unit='non' → invalid");
-  } else {
-    fail("validateTenantInfo: unit='non' should be invalid", invalid1);
-  }
-
-  const ti2: TenantInfo = {
-    reported_address: "123 Main St",
-    reported_unit_number: "4B",
-    contact_phone: "555-1234",
-    contact_email: "a@b.com",
-  };
-  const invalid2 = validateTenantInfo(ti2);
-  if (invalid2.length === 0) {
-    pass("validateTenantInfo: unit='4B' → valid");
-  } else {
-    fail("validateTenantInfo: unit='4B' should be valid", invalid2);
-  }
-
-  const ti3: TenantInfo = {
-    reported_address: "123 Main St",
-    reported_unit_number: "none",
-    contact_phone: "555-1234",
-    contact_email: "a@b.com",
-  };
-  const invalid3 = validateTenantInfo(ti3);
-  if (!invalid3.includes("reported_unit_number")) {
-    pass("validateTenantInfo: unit='none' → valid (intentional no-unit)");
-  } else {
-    fail("validateTenantInfo: unit='none' should be valid", invalid3);
-  }
-
-  const ti4: TenantInfo = {
-    reported_address: "123 Main St",
-    reported_unit_number: "",
-    contact_phone: "555-1234",
-    contact_email: "a@b.com",
-  };
-  const invalid4 = validateTenantInfo(ti4);
-  if (invalid4.includes("reported_unit_number")) {
-    pass("validateTenantInfo: unit='' → invalid");
-  } else {
-    fail("validateTenantInfo: unit='' should be invalid", invalid4);
-  }
-
-  const ti5: TenantInfo = {
-    reported_address: "ab",
-    reported_unit_number: "4B",
-    contact_phone: "555-1234",
-    contact_email: "a@b.com",
-  };
-  const invalid5 = validateTenantInfo(ti5);
-  if (invalid5.includes("reported_address")) {
-    pass("validateTenantInfo: address='ab' (too short) → invalid");
-  } else {
-    fail("validateTenantInfo: short address should be invalid", invalid5);
   }
 
   // ── Pest SOP split ──

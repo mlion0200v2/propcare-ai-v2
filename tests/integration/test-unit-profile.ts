@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PGlite } from "@electric-sql/pglite";
 import { createRunner, printSection, runStandalone, type TestResult } from "./helpers";
-import { buildChatHints } from "../../src/lib/triage/hints";
+import { buildChatHints } from "../../src/assistant/triage/hints";
 import { fixtureLines, parseFixtureLines, profileFromForm, readUnitProfile } from "../../src/lib/units/profile";
 import { createTestDatabase, queryAs, tryAs, type Actor } from "../db/pglite-supabase";
 

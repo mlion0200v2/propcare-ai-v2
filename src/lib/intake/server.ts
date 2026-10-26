@@ -2,7 +2,7 @@ import "server-only";
 
 import type { User } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/server";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 
 export interface IntakeUnit {
   unit_id: string;

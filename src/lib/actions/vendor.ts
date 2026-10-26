@@ -6,7 +6,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { clientIp } from "@/lib/request-ip";
 import { vendorQuoteLimiter } from "@/lib/rate-limit";
 import { dollarsToCents, formatCents } from "@/lib/workspace/tokens";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 
 export type QuoteState = { error: string | null; ok?: string | null };
 

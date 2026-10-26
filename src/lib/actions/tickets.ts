@@ -17,7 +17,7 @@ import { appUrl } from "@/lib/app-url";
 import { deliver, isDemoWorkspace } from "@/lib/delivery";
 import { buildVendorWorkOrderMessage } from "@/lib/messages";
 import { buildTenantReplyEmail } from "@/lib/email/templates";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 
 export type TicketFormState = { error: string | null; ok?: string | null };
 

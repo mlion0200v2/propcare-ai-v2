@@ -13,15 +13,15 @@ import {
   buildStepMessage,
   buildFeedbackReply,
   buildClarifyReply,
-} from "../../src/lib/triage/step-feedback";
+} from "../../src/assistant/triage/step-feedback";
 
 import {
   mapToStepResult,
   parseInterpretation,
   classifyStepHybrid,
-} from "../../src/lib/triage/interpret-step-response";
+} from "../../src/assistant/triage/interpret-step-response";
 
-import { convertToGuidedSteps, stripCitations, filterMediaStepLines } from "../../src/lib/triage/grounding";
+import { convertToGuidedSteps, stripCitations, filterMediaStepLines } from "../../src/assistant/triage/grounding";
 
 import type {
   GuidedStep,
@@ -29,7 +29,7 @@ import type {
   GuidedTroubleshootingState,
   TroubleshootingStep,
   InterpretedStepResponse,
-} from "../../src/lib/triage/types";
+} from "../../src/assistant/triage/types";
 
 // ── Helpers ──
 

@@ -14,15 +14,15 @@ import {
   classifyIssue, classifyPest, classifyPlumbing, classifyMold,
   classifyStructural, classifyApplianceSymptom, classifyHvacSymptom,
   classifyLandscaping,
-} from "../src/lib/triage/classify-issue";
+} from "../src/assistant/triage/classify-issue";
 import {
   extractEquipment, extractLocation, inferLocationFromEquipment,
-} from "../src/lib/triage/extract-details";
-import { detectSafety } from "../src/lib/triage/detect-safety";
-import { querySnippets } from "../src/lib/retrieval/pinecone";
-import { generateGroundedSteps } from "../src/lib/triage/grounding";
-import { validateGroundedResult } from "../src/lib/triage/validate";
-import type { GatheredInfo } from "../src/lib/triage/types";
+} from "../src/assistant/triage/extract-details";
+import { detectSafety } from "../src/assistant/triage/detect-safety";
+import { querySnippets } from "../src/assistant/retrieval/pinecone";
+import { generateGroundedSteps } from "../src/assistant/triage/grounding";
+import { validateGroundedResult } from "../src/assistant/triage/validate";
+import type { GatheredInfo } from "../src/assistant/triage/types";
 
 interface CaseMetrics {
   id: number;

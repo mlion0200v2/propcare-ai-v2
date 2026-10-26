@@ -9,7 +9,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { timingSafeEqual } from "node:crypto";
 import { cleanupExpiredSandboxes } from "@/lib/demo/server";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
 

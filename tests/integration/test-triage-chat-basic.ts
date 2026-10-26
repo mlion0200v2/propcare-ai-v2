@@ -1,13 +1,6 @@
 /**
- * Phase 2A — Triage state machine unit tests.
- *
- * Pure tests — no Supabase, no network calls.
- * Tests the deterministic state machine step() function.
- *
- * Updated for conversational triage refactor:
- * - Category is now pre-set by classifier (not via numbered list in step())
- * - Safety is detected separately (not via generic YES/NO in step())
- * - step() now handles: location_in_unit, started_when
+ * Basic triage chat: the first reply, the base questions, and `turn()`
+ * itself (gather, emergency, confirm, done). Pure: no Supabase, no network.
  */
 
 import {
@@ -15,23 +8,18 @@ import {
   printSection,
   type TestResult,
 } from "./helpers";
-import {
-  step,
-  buildInitialReply,
-  buildInitialGathered,
-  buildInitialTenantInfo,
-  buildTenantInfoInitialReply,
-  buildConfirmProfileReply,
-  stepTenantInfo,
-  QUESTIONS,
-} from "../../src/lib/triage/state-machine";
-import { getFallbackSOP } from "../../src/lib/triage/sop-fallback";
-import { buildAcknowledgement } from "../../src/lib/triage/acknowledgement";
-import type { TriageContext } from "../../src/lib/triage/types";
+import { buildInitialReply, buildInitialGathered, QUESTIONS } from "../../src/assistant/triage/base-questions";
+import { getFallbackSOP } from "../../src/assistant/triage/sop-fallback";
+import { buildAcknowledgement } from "../../src/assistant/triage/acknowledgement";
+import { buildEmergencyFollowUpReply } from "../../src/assistant/triage/emergency";
+import { SUBMITTED_REPLY } from "../../src/assistant/confirm";
+import { turn } from "../../src/assistant";
+import { newChat, say } from "../eval/drive";
 
-export function testTriageChatBasic(): TestResult {
-  printSection("Triage State Machine — Basic");
+export async function testTriageChatBasic(): Promise<TestResult> {
+  printSection("Triage chat — basic");
   const { pass, fail, result } = createRunner();
+  const check = (ok: boolean, label: string, detail?: unknown) => (ok ? pass(label) : fail(label, detail));
 
   // ── buildInitialReply ──
 
@@ -72,169 +60,58 @@ export function testTriageChatBasic(): TestResult {
     fail("buildInitialGathered threw", e);
   }
 
-  // ── step: location then started_when (with category pre-set) ──
 
+  // ── turn(): one message in, the next step out; the state comes back ──
+
+  const rooms = ["Kitchen", "Main bathroom (hallway)"];
   try {
-    const gathered = buildInitialGathered();
-    gathered.category = "plumbing"; // Pre-set by classifier
-
-    const ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "My sink is leaking",
-      gathered,
-      current_question: "location_in_unit",
-    };
-    const r = step(ctx, "Kitchen");
-    if (r.gathered.location_in_unit === "Kitchen") {
-      pass("step: location_in_unit = Kitchen collected");
-    } else {
-      fail("step: location not collected", r.gathered.location_in_unit);
-    }
-    if (r.current_question === "started_when") {
-      pass("step: after location, asks started_when");
-    } else {
-      fail("step: expected started_when next", r.current_question);
-    }
+    const chat = newChat({ rooms });
+    const open = await say(chat, "my sink is leaking");
+    check(open.phase === "GATHER_INFO" && open.state.current_question === "location_in_unit", "turn: a sink in a unit with two sink rooms asks which room", open.state.current_question);
+    check(open.options.includes("Kitchen") && open.options.includes("Main bathroom (hallway)"), "turn: the options are the unit's own rooms", open.options);
+    const before = JSON.stringify(chat.state);
+    const next = await say(chat, "Kitchen");
+    check(next.state.gathered.location_in_unit === "Kitchen", "turn: the answer is recorded", next.state.gathered.location_in_unit);
+    check(next.state.current_question?.startsWith("intake:") === true, "turn: then the sink's own questions", next.state.current_question);
+    check(next.state.v === 1 && next.state.phase === "GATHER_INFO", "turn: the state carries its version and phase");
+    const again = await turn({ conversation: "t", message: "Kitchen", state: JSON.parse(before), property: chat.property, media: { count: 0 }, channel: "web" }, { understander: null });
+    check(JSON.stringify(again.state.gathered) === JSON.stringify(next.state.gathered), "turn: stateless (same state + message → same result)");
   } catch (e) {
-    fail("step: location collection threw", e);
+    fail("turn: gather flow threw", e);
   }
 
-  // ── step: category still works if passed as current_question (legacy support) ──
-
   try {
-    const ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "AC not working",
-      gathered: buildInitialGathered(),
-      current_question: "category",
-    };
-    const r = step(ctx, "hvac");
-    if (r.gathered.category === "hvac") {
-      pass("step: category by name 'hvac' still works (legacy)");
-    } else {
-      fail("step: category by name expected hvac", r.gathered.category);
-    }
+    const chat = newChat({ rooms });
+    await say(chat, "my sink is leaking");
+    const r = await say(chat, "Kitchen — I think there's a gas leak");
+    check(r.phase === "EMERGENCY" && r.emergency?.kind === "gas", "turn: danger in any answer → EMERGENCY at once", r.emergency);
+    check(r.ticket.priority === "emergency" && r.ticket.escalate === true && r.ticket.flag_emergency === true, "turn: the ticket update asks the app to escalate", r.ticket);
+    check(r.state.gathered.is_emergency === true && r.state.emergency?.manager_notified === false, "turn: the state records the emergency; the app says whether the manager was reached");
+    check(!/property manager has been|we've alerted|notified/i.test(r.reply), "turn: the reply is safety advice only (the app adds the notice)", r.reply.slice(0, 200));
+    const follow = await say(chat, "ok what now");
+    check(follow.phase === "EMERGENCY" && follow.reply === buildEmergencyFollowUpReply() && !follow.emergency, "turn: after an emergency, replies are added to the report");
   } catch (e) {
-    fail("step: category by name threw", e);
+    fail("turn: emergency flow threw", e);
   }
 
-  // ── step: full flow with pre-set category + is_emergency (2 turns → DONE) ──
-
   try {
-    const gathered = buildInitialGathered();
-    gathered.category = "plumbing";
-    gathered.is_emergency = false;
-
-    let ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "Leaking faucet",
-      gathered,
-      current_question: "location_in_unit",
-    };
-
-    // Turn 1: location
-    let r = step(ctx, "Kitchen");
-    ctx = {
-      triage_state: r.next_state,
-      description: ctx.description,
-      gathered: r.gathered,
-      current_question: r.current_question,
-    };
-
-    // Turn 2: started_when → DONE
-    r = step(ctx, "Yesterday");
-
-    if (r.next_state === "DONE") {
-      pass("step: full flow ends in DONE after 2 turns (with pre-set fields)");
-    } else {
-      fail("step: full flow expected DONE", r.next_state);
-    }
-
-    if (r.gathered.category === "plumbing") {
-      pass("step: full flow gathered category=plumbing");
-    } else {
-      fail("step: full flow category", r.gathered.category);
-    }
-
-    if (r.gathered.location_in_unit === "Kitchen") {
-      pass("step: full flow gathered location=Kitchen");
-    } else {
-      fail("step: full flow location", r.gathered.location_in_unit);
-    }
-
-    if (r.gathered.is_emergency === false) {
-      pass("step: full flow gathered is_emergency=false");
-    } else {
-      fail("step: full flow is_emergency", r.gathered.is_emergency);
-    }
-
-    if (r.troubleshooting_steps && r.troubleshooting_steps.length > 0) {
-      pass(`step: full flow includes ${r.troubleshooting_steps.length} troubleshooting steps`);
-    } else {
-      fail("step: full flow missing troubleshooting_steps");
-    }
-
-    if (r.reply.includes("Troubleshooting Steps")) {
-      pass("step: full flow reply includes troubleshooting display");
-    } else {
-      fail("step: full flow reply missing troubleshooting content", r.reply.slice(0, 100));
-    }
+    const r = await say(newChat({ rooms }), "I smell gas in the kitchen");
+    check(r.phase === "EMERGENCY" && r.emergency?.kind === "gas", "turn: an emergency first message", r.emergency);
   } catch (e) {
-    fail("step: full flow threw", e);
+    fail("turn: emergency first message threw", e);
   }
 
-  // ── step: emergency keyword auto-detection ──
-
   try {
-    const gathered = buildInitialGathered();
-    gathered.category = "plumbing";
-
-    const ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "I smell gas in my kitchen",
-      gathered,
-      current_question: "location_in_unit",
-    };
-    // User mentions gas leak while answering location
-    const r = step(ctx, "Kitchen — I think there's a gas leak");
-    if (r.gathered.is_emergency === true) {
-      pass("step: emergency keyword 'gas leak' auto-detected");
-    } else {
-      fail("step: emergency keyword not detected", r.gathered.is_emergency);
-    }
+    const chat = newChat({ rooms });
+    const open = await say(chat, "my kitchen faucet is dripping");
+    const confirming = { ...open.state, phase: "CONFIRM_SUMMARY" as const, current_question: null };
+    const done = await turn({ conversation: "t", message: "", action: "confirm_summary", state: confirming, property: chat.property, media: { count: 1 }, channel: "web" }, { understander: null });
+    check(done.phase === "DONE" && done.done && done.reply === SUBMITTED_REPLY, "turn: confirm → DONE, submitted", done.reply);
+    check(done.ticket.notify_manager === "summary" && !!done.ticket.manager_summary && done.ticket.priority === "medium", "turn: the app gets the summary to send and the priority", done.ticket);
+    const after = await turn({ conversation: "t", message: "hello?", state: done.state, property: chat.property, media: { count: 1 }, channel: "web" }, { understander: null });
+    check(after.phase === "DONE" && after.done && Object.keys(after.ticket).length === 0, "turn: after DONE, nothing changes");
   } catch (e) {
-    fail("step: emergency keyword threw", e);
-  }
-
-  // ── step: emergency flow reaches DONE with escalation ──
-
-  try {
-    const gathered = buildInitialGathered();
-    gathered.category = "plumbing";
-    gathered.location_in_unit = "Kitchen";
-    gathered.is_emergency = true; // Pre-detected
-
-    const ctx: TriageContext = {
-      triage_state: "GATHER_INFO",
-      description: "Gas smell",
-      gathered,
-      current_question: "started_when",
-    };
-    const r = step(ctx, "Just now");
-
-    if (r.next_state === "DONE") {
-      pass("step: emergency flow ends in DONE");
-    } else {
-      fail("step: emergency flow expected DONE", r.next_state);
-    }
-
-    if (r.reply.includes("SAFETY ALERT")) {
-      pass("step: emergency reply includes SAFETY ALERT");
-    } else {
-      fail("step: emergency reply missing SAFETY ALERT", r.reply.slice(0, 100));
-    }
-  } catch (e) {
-    fail("step: emergency flow threw", e);
+    fail("turn: confirm flow threw", e);
   }
 
   // ── getFallbackSOP: non-emergency ──
@@ -281,239 +158,5 @@ export function testTriageChatBasic(): TestResult {
     fail("getFallbackSOP unknown category threw", e);
   }
 
-  // ══════════════════════════════════════════════════════
-  // Tenant Info (no-unit flow) tests
-  // ══════════════════════════════════════════════════════
-
-  printSection("Triage State Machine — Tenant Info (no-unit flow)");
-
-  // ── buildInitialTenantInfo ──
-
-  try {
-    const ti = buildInitialTenantInfo();
-    if (
-      ti.reported_address === null &&
-      ti.reported_unit_number === null &&
-      ti.contact_phone === null &&
-      ti.contact_email === null
-    ) {
-      pass("buildInitialTenantInfo returns all nulls (4 fields)");
-    } else {
-      fail("buildInitialTenantInfo has non-null fields", ti);
-    }
-  } catch (e) {
-    fail("buildInitialTenantInfo threw", e);
-  }
-
-  // ── buildTenantInfoInitialReply ──
-
-  try {
-    const reply = buildTenantInfoInitialReply();
-    if (reply.includes("address")) {
-      pass("buildTenantInfoInitialReply asks for address");
-    } else {
-      fail("buildTenantInfoInitialReply missing address question", reply.slice(0, 200));
-    }
-    if (reply.includes("don't have your address on file")) {
-      pass("buildTenantInfoInitialReply explains no address on file");
-    } else {
-      fail("buildTenantInfoInitialReply missing explanation", reply.slice(0, 200));
-    }
-  } catch (e) {
-    fail("buildTenantInfoInitialReply threw", e);
-  }
-
-  // ── stepTenantInfo: full flow (4 turns → transitions to GATHER_INFO) ──
-
-  try {
-    let info = buildInitialTenantInfo();
-    let currentQ: string | null = "reported_address";
-
-    // Turn 1: address
-    let r = stepTenantInfo(info, currentQ, "123 Main St, Anytown");
-    info = r.tenant_info;
-    currentQ = r.current_question;
-    if (info.reported_address === "123 Main St, Anytown") {
-      pass("stepTenantInfo: collected address");
-    } else {
-      fail("stepTenantInfo: address", info.reported_address);
-    }
-    if (currentQ === "reported_unit_number") {
-      pass("stepTenantInfo: asks unit number next");
-    } else {
-      fail("stepTenantInfo: expected unit number next", currentQ);
-    }
-
-    // Turn 2: unit number
-    r = stepTenantInfo(info, currentQ, "Unit 4B");
-    info = r.tenant_info;
-    currentQ = r.current_question;
-    if (info.reported_unit_number === "Unit 4B") {
-      pass("stepTenantInfo: collected unit number");
-    } else {
-      fail("stepTenantInfo: unit number", info.reported_unit_number);
-    }
-    if (currentQ === "contact_phone") {
-      pass("stepTenantInfo: asks phone next");
-    } else {
-      fail("stepTenantInfo: expected phone next", currentQ);
-    }
-
-    // Turn 3: phone
-    r = stepTenantInfo(info, currentQ, "555-123-4567");
-    info = r.tenant_info;
-    currentQ = r.current_question;
-    if (info.contact_phone === "555-123-4567") {
-      pass("stepTenantInfo: collected phone");
-    } else {
-      fail("stepTenantInfo: phone", info.contact_phone);
-    }
-
-    // Turn 4: email → transitions to GATHER_INFO
-    r = stepTenantInfo(info, currentQ, "jane@example.com");
-    info = r.tenant_info;
-    currentQ = r.current_question;
-
-    if (r.next_state === "GATHER_INFO") {
-      pass("stepTenantInfo: transitions to GATHER_INFO after all 4 fields");
-    } else {
-      fail("stepTenantInfo: expected GATHER_INFO", r.next_state);
-    }
-
-    // Updated: transition reply now asks location, not category menu
-    if (r.reply.includes("Where in your unit") || r.current_question === "location_in_unit") {
-      pass("stepTenantInfo: transition asks location (not category menu)");
-    } else {
-      fail("stepTenantInfo: transition reply unexpected", r.reply.slice(0, 100));
-    }
-
-    if (r.gathered) {
-      pass("stepTenantInfo: transition returns initial gathered info");
-    } else {
-      fail("stepTenantInfo: transition missing gathered info");
-    }
-  } catch (e) {
-    fail("stepTenantInfo full flow threw", e);
-  }
-
-  // ── stepTenantInfo: phone validation rejects bad input ──
-
-  try {
-    const info = buildInitialTenantInfo();
-    info.reported_address = "123 Main St";
-    info.reported_unit_number = "Unit 4B";
-
-    const r = stepTenantInfo(info, "contact_phone", "not-a-phone");
-    if (r.next_state === "COLLECT_TENANT_INFO" && r.current_question === "contact_phone") {
-      pass("stepTenantInfo: invalid phone re-asks same question");
-    } else {
-      fail("stepTenantInfo: invalid phone should re-ask", { state: r.next_state, question: r.current_question });
-    }
-    if (r.reply.includes("valid phone")) {
-      pass("stepTenantInfo: invalid phone shows validation error");
-    } else {
-      fail("stepTenantInfo: invalid phone missing error message", r.reply.slice(0, 100));
-    }
-    // Phone should remain null
-    if (r.tenant_info.contact_phone === null) {
-      pass("stepTenantInfo: invalid phone doesn't save value");
-    } else {
-      fail("stepTenantInfo: invalid phone saved value", r.tenant_info.contact_phone);
-    }
-  } catch (e) {
-    fail("stepTenantInfo phone validation threw", e);
-  }
-
-  // ── stepTenantInfo: email validation rejects bad input ──
-
-  try {
-    const info = buildInitialTenantInfo();
-    info.reported_address = "123 Main St";
-    info.reported_unit_number = "Unit 4B";
-    info.contact_phone = "555-123-4567";
-
-    const r = stepTenantInfo(info, "contact_email", "not-an-email");
-    if (r.next_state === "COLLECT_TENANT_INFO" && r.current_question === "contact_email") {
-      pass("stepTenantInfo: invalid email re-asks same question");
-    } else {
-      fail("stepTenantInfo: invalid email should re-ask", { state: r.next_state, question: r.current_question });
-    }
-    if (r.reply.includes("valid email")) {
-      pass("stepTenantInfo: invalid email shows validation error");
-    } else {
-      fail("stepTenantInfo: invalid email missing error message", r.reply.slice(0, 100));
-    }
-  } catch (e) {
-    fail("stepTenantInfo email validation threw", e);
-  }
-
-  // ── stepTenantInfo: accepts international phone formats ──
-
-  try {
-    const info = buildInitialTenantInfo();
-    info.reported_address = "123 Main St";
-    info.reported_unit_number = "Unit 4B";
-
-    const r = stepTenantInfo(info, "contact_phone", "+1 (555) 123-4567");
-    if (r.tenant_info.contact_phone === "+1 (555) 123-4567") {
-      pass("stepTenantInfo: accepts international phone format");
-    } else {
-      fail("stepTenantInfo: rejected valid phone", r.tenant_info.contact_phone);
-    }
-  } catch (e) {
-    fail("stepTenantInfo international phone threw", e);
-  }
-
-  // ══════════════════════════════════════════════════════
-  // buildConfirmProfileReply tests
-  // ══════════════════════════════════════════════════════
-
-  printSection("Triage State Machine — buildConfirmProfileReply");
-
-  // ── buildConfirmProfileReply includes phone and email ──
-
-  try {
-    const tenantInfo = {
-      reported_address: "456 Oak Ave",
-      reported_unit_number: "Apt 7",
-      contact_phone: "555-987-6543",
-      contact_email: "returning@example.com",
-    };
-    const reply = buildConfirmProfileReply(tenantInfo);
-    if (reply.includes("456 Oak Ave")) {
-      pass("buildConfirmProfileReply includes reported_address value");
-    } else {
-      fail("buildConfirmProfileReply missing address", reply);
-    }
-    if (reply.includes("Apt 7")) {
-      pass("buildConfirmProfileReply includes reported_unit_number value");
-    } else {
-      fail("buildConfirmProfileReply missing unit", reply);
-    }
-    if (reply.includes("555-987-6543")) {
-      pass("buildConfirmProfileReply includes contact_phone value");
-    } else {
-      fail("buildConfirmProfileReply missing phone", reply);
-    }
-    if (reply.includes("returning@example.com")) {
-      pass("buildConfirmProfileReply includes contact_email value");
-    } else {
-      fail("buildConfirmProfileReply missing email", reply);
-    }
-    if (reply.includes("Is this still correct?")) {
-      pass("buildConfirmProfileReply asks for confirmation");
-    } else {
-      fail("buildConfirmProfileReply missing confirmation question", reply);
-    }
-  } catch (e) {
-    fail("buildConfirmProfileReply threw", e);
-  }
-
   return result;
-}
-
-// Allow standalone execution
-if (require.main === module) {
-  const { runStandalone } = require("./helpers");
-  runStandalone(testTriageChatBasic);
 }

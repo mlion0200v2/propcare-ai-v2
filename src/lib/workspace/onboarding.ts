@@ -2,7 +2,7 @@ import "server-only";
 
 import type { User } from "@supabase/supabase-js";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 
 /** Profiles have no insert policy: create the row with the service role. */
 export async function ensureProfile(user: User): Promise<void> {

@@ -13,7 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { safeNextPath } from "@/lib/app-url";
 import { createPendingWorkspace, ensureProfile } from "@/lib/workspace/onboarding";
 import { claimTenancies } from "@/lib/intake/server";
-import { logError } from "@/lib/triage/logger";
+import { logError } from "@/lib/logger";
 
 const OTP_TYPES: EmailOtpType[] = ["signup", "invite", "magiclink", "recovery", "email_change", "email"];
 

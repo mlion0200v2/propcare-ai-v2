@@ -198,7 +198,14 @@ index (shared by local and hosted; it is not part of `supabase db reset`):
    `.env.local`:
    ```bash
    npx tsx scripts/ingest_sop_to_pinecone.ts scripts/propcare_sop_seed_50.jsonl
+   npx tsx scripts/ingest_sop_to_pinecone.ts scripts/propcare_sop_seed_fixtures.jsonl
    ```
+   The second file (added 2026-10-21) has 11 SOPs for the likely leak
+   sources and appliances the chat now pinpoints: faucet cartridge drip,
+   P-trap slip nut, supply hose/valve, garbage disposal (jam and leak),
+   dishwasher drain hose, toilet fill valve, range hood (fan, light, grease
+   filter), water heater relief valve, shower surround, tub spout drip.
+   **An index seeded before then needs this second command once.**
    This embeds and upserts 50 SOP snippets into the `sop` namespace
    (`PINECONE_NAMESPACE`). Re-running overwrites the same IDs.
 3. Check retrieval: `npx tsx scripts/test_retrieval.ts "kitchen faucet leak"`.
@@ -207,4 +214,4 @@ index (shared by local and hosted; it is not part of `supabase db reset`):
    then ingest that file the same way.
 
 If Pinecone is unreachable the chat falls back to built-in SOPs
-(`src/lib/triage/sop-fallback.ts`).
+(`src/assistant/triage/sop-fallback.ts`).
