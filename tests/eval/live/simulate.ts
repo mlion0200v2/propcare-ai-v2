@@ -44,7 +44,7 @@ export const TENANT_SYSTEM = [
   "Never mention the card. Keep the language of your first message (English, Chinese or French).",
 ].join("\n");
 
-function tenantCard(c: CorpusCase): string {
+export function tenantCard(c: CorpusCase): string {
   const e = c.expected;
   return [
     `First message you sent: "${c.message}"`,
