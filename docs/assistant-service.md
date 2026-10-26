@@ -1,7 +1,7 @@
 # PropCare assistant service: design
 
-**Status:** proposal for review. Nothing in this document is built yet.
-**Builds on:** the chat-understanding redesign, PRs #11–#18. The file paths below exist once those are merged.
+**Status:** proposal for review. Steps 1–3 of the migration plan are built in #20 (not merged yet); steps 4 onward are not built.
+**Builds on:** #20, which consolidates the chat-understanding redesign (#11–#18, now closed) and adds `src/assistant/` with an in-process `turn()`.
 
 ## Goal
 
@@ -13,6 +13,8 @@ Run the PropCare assistant as its own service, separate from the web app.
 - It holds **no tenant data**: no names, phone numbers, emails, addresses, leases or ticket history. It only sees the message being handled and non-sensitive facts about the property, such as rooms, fixtures and where the water shut-off is.
 
 ## Where things are today
+
+This section describes `main` before #20. After #20 the assistant code is in `src/assistant/` and the chat route is about 350 lines.
 
 | Piece | Where it runs | Notes |
 |---|---|---|
@@ -141,14 +143,14 @@ The API types live in a small shared package, or in one file both services impor
 
 | Moves to `propcare-assistant` | Stays in `propcare` (app) |
 |---|---|
-| `src/lib/understanding/*` | Supabase clients, logins, row-level security, migrations |
-| `src/lib/sops/*` (catalog, select, scope, intake, diagnosis view) | The chat route, slimmed to: load ticket → strip contact details → call `/v1/turn` → save the result |
-| `src/lib/triage/` logic: conversation, emergency rules, guidance, hints, summary, grounding, step help, step safety, interpretation, retrieval | `escalate-emergency.ts` (alerts the manager), email sending, photo upload and storage |
-| `src/lib/retrieval/*` (Pinecone) | Tenant info collection (`COLLECT_TENANT_INFO`: phone, email, address). This is tenant data, so the app asks for it itself. |
+| `src/assistant/understanding/*` | Supabase clients, logins, row-level security, migrations |
+| `src/assistant/sops/*` (catalog, select, scope, intake, diagnosis view) | The chat route: load ticket → build the request (`src/lib/assistant-request.ts`: strip contact details, no access notes) → call the assistant → save the result |
+| `src/assistant/triage/*` and `gather.ts`, `troubleshoot.ts`, `confirm.ts`, `turn.ts`: emergency rules, guidance, hints, summary, grounding, step help, step safety, interpretation | `src/lib/tickets/escalate-emergency.ts` (alerts the manager), email sending, photo upload and storage |
+| `src/assistant/retrieval/*` (Pinecone) | Knowing who the tenant is and which unit: every ticket starts from a tenancy, so no tenant info is collected in the chat. |
 | `scripts/ingest_sops.ts` | Manager portal, vendor work orders, quote form, the Diagnosis block (it renders what the assistant returned) |
 | `tests/eval/*` | Workspace and access tests |
 
-The **"confirm your profile"** and **"collect tenant info"** steps move out of the conversation and into the app, because they handle personal data. The assistant starts at the problem itself.
+The old **"confirm your profile"** and **"collect tenant info"** steps are gone (#20): they handled personal data, and every ticket now starts from a tenancy the app already knows. The assistant starts at the problem itself.
 
 ## Security
 
@@ -170,9 +172,9 @@ The **"confirm your profile"** and **"collect tenant info"** steps move out of t
 
 Each step is its own PR, with CI green and staging first. Each one leaves PropCare working.
 
-1. **Merge the redesign** (#11–#18) and run `npx tsx scripts/ingest_sops.ts`.
-2. **Draw the line inside the app.** Add `src/assistant/` with a `turn(request) → response` function that implements the API above in-process. The chat route calls `turn()` instead of the triage modules, after removing contact details. Tenant-info collection moves into the app. No new service yet: this proves the boundary with no infrastructure risk.
-3. **Make the eval drive `turn()`.** Port the scripted, coverage, diagnosis and live tiers to call `turn()`, so the boundary is tested on every PR.
+1. **Merge the redesign** and run `npx tsx scripts/ingest_sops.ts`. *Done in #20.*
+2. **Draw the line inside the app.** Add `src/assistant/` with a `turn(request) → response` function that implements the API above in-process. The chat route calls `turn()` instead of the triage modules, after removing contact details. No new service yet: this proves the boundary with no infrastructure risk. *Done in #20.* The old tenant-info flow was removed instead of moved: every ticket now starts from a tenancy, so the app already knows the unit.
+3. **Make the eval drive `turn()`.** Port the scripted, coverage, diagnosis and live tiers to call `turn()`, so the boundary is tested on every PR. *Done in #20* (`tests/eval/drive.ts`; `test-assistant-boundary.ts` fails CI if `src/assistant/` imports the app).
 4. **Stand up `propcare-assistant`.** Create the service from the same repo: a separate Dockerfile target that runs only `src/assistant/` behind `/v1`. Add the Terraform module, the service accounts, invoker permissions and secrets. Deploy to staging.
 5. **Switch the web chat to HTTP** behind a flag (`ASSISTANT_URL`). Turn it on in staging, compare the eval results with the in-process version, then roll out to production.
 6. **Remove the model keys from the app.** Once production runs on the service, the app no longer needs the OpenAI or Pinecone keys.
@@ -183,15 +185,17 @@ Each step is its own PR, with CI green and staging first. Each one leaves PropCa
    - Tests use the test inbox only.
 8. **Voice** (later): a phone provider's webhook → speech-to-text → `/v1/turn` with `channel: "voice"` → text-to-speech. The API needs no change. Short replies and spoken options are a formatting rule per channel.
 
-Steps 2–3 can start straight after the redesign merges. Steps 4–6 together are about a week of work; email is a separate piece after that.
+Steps 4–6 together are about a week of work; email is a separate piece after that.
 
-## Decisions for Simone
+## Decisions
 
-1. **Does the assistant write the manager diagnosis, or only return it?** The proposal: **return only**, so the app stays the only thing that touches tenant data and tickets.
-2. **One repo or two?** The proposal: **one repo, two deploy targets**, so the eval, the catalog and the API types stay in one place. A second repo can come later if a separate team owns the assistant.
-3. **Photos.** Should the assistant ever *look at* photos (vision models can read a model/serial label, for example)? If yes, the channel would send a short-lived signed photo link with no other data. The proposal: not in the first version.
-4. **Languages.** The assistant already understands Chinese and French. Should it also *reply* in the tenant's language, especially for email and voice? Today replies are in English.
-5. **Separate production Supabase project.** Needed before real tenants whatever happens with this split, and best done before or with step 4.
+Answered by Simone on 2026-10-26, except where marked open.
+
+1. **Diagnosis: return only.** The assistant returns the diagnosis and a ticket update; the app writes tickets, alerts managers and sends email. It stays the only thing that touches tenant data.
+2. **One repo or two?** *Open.* The proposal: **one repo, two deploy targets**. That means one codebase, built into two container images that run as two Cloud Run services (the app and the assistant), so the eval, the catalog and the API types stay in one place. A second repo can come later if a separate team owns the assistant.
+3. **Photos: not in the first version, but keep room for it.** The request has a reserved `media.images` field (short-lived signed links, no other data). Photo diagnosis (reading a model/serial label, for example) can use it later without changing the API.
+4. **Languages: English replies in the first version.** The assistant already understands Chinese and French; replying in the tenant's language comes later.
+5. **Separate production Supabase project: at the real-product launch, not now.** It is needed before real tenants use PropCare.
 
 ## Risks
 
