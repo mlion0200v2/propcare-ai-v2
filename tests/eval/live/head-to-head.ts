@@ -28,7 +28,7 @@ import { diagnosisText } from "../../../src/assistant/sops/diagnosis-view";
 import type { TurnResponse } from "../../../src/assistant";
 import { HELDOUT_FILES, TUNED_FILES, loadCorpus, type CorpusCase } from "../frame-eval";
 import { newChat, say } from "../drive";
-import { Budget, BudgetExceeded, estimateTokens, openAICall, priceOf, type StructuredCall } from "./llm";
+import { Budget, BudgetExceeded, estimateTokens, openAICall, type StructuredCall } from "./llm";
 import { TENANT_SYSTEM, tenantCard } from "./simulate";
 
 const ROOMS = ["Kitchen", "Main bathroom (hallway)", "Ensuite", "Master bedroom", "Bedroom", "Living room", "Laundry closet"];
@@ -363,7 +363,26 @@ async function main() {
       budget.byPurpose.propcare = { usd: assistantUsage.usd, calls: assistantUsage.calls, input: assistantUsage.input, output: assistantUsage.output };
     }
   };
+  const date = new Date().toISOString().slice(0, 10);
+  const outDir = arg("--out") ?? join(__dirname, "..", "reports");
+  mkdirSync(outDir, { recursive: true });
+  const name = `head-to-head-${date}${only ? `-${only}` : ""}${dryRun ? "-dry-run" : ""}`;
+  // Saved after every case, so stopping early (Ctrl+C, the cap) keeps what's done.
+  const save = () => {
+    const status = [stopped, failed.length ? `${failed.length} case(s) failed and were skipped: ${failed.join("; ")}` : null].filter(Boolean).join(". ") || null;
+    writeFileSync(join(outDir, `${name}.md`), report(rows, budget, { date, dryRun, baselineModel, judgeModel, stopped: status }));
+    writeFileSync(join(outDir, `${name}.json`), JSON.stringify({ date, baselineModel, judgeModel, spent: budget.spent, rows }, null, 1));
+  };
+
+  // The assistant's own logging (retrieval, grounding) would bury the progress; --verbose shows it.
+  const restore = { log: console.log, warn: console.warn, error: console.error, info: console.info };
+  if (!process.argv.includes("--verbose")) console.log = console.warn = console.error = console.info = () => {};
+  const progress = (line: string) => process.stdout.write(`${line}\n`);
+  progress(`${cases.length} cases. Each takes 30-60 seconds; the report is saved after every case: ${join(outDir, name)}.md`);
+
   for (const [i, c] of cases.entries()) {
+    const started = Date.now();
+    let outcome = "";
     try {
       syncAssistantSpend();
       budget.check();
@@ -372,29 +391,24 @@ async function main() {
       const base = await runBaseline(c, tenant, budget, baselineModel, dryRun);
       const v = await judgePair(judgeCall, c, ours, base, i % 2 === 1);
       rows.push({ c, ours, base, v, unsafe: { ours: unsafeLines(ours), base: unsafeLines(base) } });
-      process.stdout.write(v.preferred === "a" ? "P" : v.preferred === "b" ? "L" : "=");
+      outcome = v.preferred === "a" ? "PropCare" : v.preferred === "b" ? "plain LLM" : "tie";
     } catch (e) {
       if (e instanceof BudgetExceeded) {
         stopped = e.message;
+        progress(`Stopped: ${e.message}`);
         break;
       }
       // A timeout or a bad response loses this case, not the run.
       failed.push(`${c.id}: ${e instanceof Error ? e.message : String(e)}`);
-      process.stdout.write("x");
+      outcome = `failed (${e instanceof Error ? e.message.slice(0, 80) : "error"})`;
     }
+    syncAssistantSpend();
+    save();
+    progress(`[${i + 1}/${cases.length}] ${c.id} (${c.group}): ${outcome}  ${Math.round((Date.now() - started) / 1000)}s  $${budget.spent.toFixed(3)} so far`);
   }
-  syncAssistantSpend();
-  if (failed.length) stopped = [stopped, `${failed.length} case(s) failed and were skipped: ${failed.join("; ")}`].filter(Boolean).join(". ");
-
-  const date = new Date().toISOString().slice(0, 10);
-  const outDir = arg("--out") ?? join(__dirname, "..", "reports");
-  mkdirSync(outDir, { recursive: true });
-  const name = `head-to-head-${date}${dryRun ? "-dry-run" : ""}`;
-  const md = report(rows, budget, { date, dryRun, baselineModel, judgeModel, stopped });
-  writeFileSync(join(outDir, `${name}.md`), md);
-  writeFileSync(join(outDir, `${name}.json`), JSON.stringify({ date, baselineModel, judgeModel, spent: budget.spent, rows }, null, 1));
-  const judgePrice = priceOf(judgeModel);
-  console.log(`\nWrote ${join(outDir, name)}.md  (${rows.length} cases, $${budget.spent.toFixed(3)}; judge price $${judgePrice.input}/$${judgePrice.output} per 1M)`);
+  Object.assign(console, restore);
+  save();
+  console.log(`Wrote ${join(outDir, name)}.md  (${rows.length} cases, $${budget.spent.toFixed(3)})`);
 }
 
 if (process.argv[1]?.replace(/\.ts$/, "").endsWith("head-to-head")) {
