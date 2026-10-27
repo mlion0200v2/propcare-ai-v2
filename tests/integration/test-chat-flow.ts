@@ -40,7 +40,7 @@ function step(over: Partial<ChatStep> = {}): ChatStep {
     confidence: "medium",
     urgency: "medium",
     steps_suggested: [],
-    ask_photos: false,
+    photo_request: "",
     ready: false,
     confirmed: null,
     escalate: false,
@@ -86,6 +86,8 @@ export async function testChatFlow(): Promise<TestResult> {
   const check = (ok: boolean, label: string, detail?: unknown) => (ok ? pass(label) : fail(label, detail));
 
   printSection("Chat flow — modes");
+  const savedMode = process.env.ASSISTANT_MODE;
+  delete process.env.ASSISTANT_MODE; // a local .env.local may turn chat on
   try {
     const model = stubModel([]);
     const scripted = await turn(
@@ -100,13 +102,15 @@ export async function testChatFlow(): Promise<TestResult> {
     check(!later.state.chat && model.inputs.length === 0, "a scripted conversation stays scripted when the mode changes");
   } catch (e) {
     fail("modes threw", e);
+  } finally {
+    if (savedMode !== undefined) process.env.ASSISTANT_MODE = savedMode;
   }
 
   printSection("Chat flow — a whole report");
   try {
     const model = stubModel([
       step(),
-      step({ reply: "Thanks. Could you add a photo under the sink?", ask_photos: true, steps_suggested: ["Put a bowl under the drip"] }),
+      step({ reply: "Does it smell?", photo_request: "Thanks. Could you add a photo under the sink?", steps_suggested: ["Put a bowl under the drip"] }),
       step({ reply: "Here's your report: kitchen sink drain leak, since today. Is that right?", ready: true, cause: "drain_trap", confidence: "high" }),
     ]);
     const run = newRun(model);
@@ -118,6 +122,7 @@ export async function testChatFlow(): Promise<TestResult> {
 
     const second = await say(run, "only when it drains");
     check(second.phase === "AWAITING_MEDIA" && second.options.length === 0, "the model asks for photos → AWAITING_MEDIA, no tap options", second.phase);
+    check(second.reply === "Thanks. Could you add a photo under the sink?", "only the photo request is shown with the upload buttons, not the model's other question", second.reply);
     check(run.state?.chat?.steps.includes("Put a bowl under the drip") === true, "safe steps are recorded");
 
     const third = await say(run, "", "skip_photos");

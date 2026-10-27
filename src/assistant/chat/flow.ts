@@ -173,7 +173,9 @@ export async function chatTurn(
   chat.failures = 0;
 
   apply(chat, step);
-  const { text, removed } = filterAdvice(step.reply);
+  // A photo request is shown alone with the upload buttons, never beside a question.
+  const photos = !confirming && !step.ready && !step.escalate && Boolean(step.photo_request.trim()) && !chat.asked_photos && input.mediaCount === 0;
+  const { text, removed } = filterAdvice(photos ? step.photo_request : step.reply);
   chat.removed.push(...removed);
   const reply = text || RETRY_REPLY;
   chat.messages.push({ role: "assistant", text: reply });
@@ -184,7 +186,7 @@ export async function chatTurn(
   }
   if (confirming && step.confirmed === true) return finish(conv, chat, "submitted", reply, input.mediaCount);
   if (confirming || step.ready || tenantMessages >= HARD_CAP) return { kind: "confirm", reply };
-  if (step.ask_photos && !chat.asked_photos && input.mediaCount === 0) {
+  if (photos) {
     chat.asked_photos = true;
     return { kind: "photos", reply };
   }
