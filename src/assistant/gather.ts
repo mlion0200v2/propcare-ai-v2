@@ -38,7 +38,7 @@ import {
   type ClassificationResult,
   type IssueCategory,
 } from "./triage/classify-issue";
-import { detectEmergency, classifySafetyAnswer, type EmergencyKind, type EmergencyMatch } from "./triage/emergency";
+import { detectEmergency, classifySafetyAnswer, type EmergencyKind, type EmergencyMatch, type SafetyAnswer } from "./triage/emergency";
 import { detectSafety } from "./triage/detect-safety";
 import { buildMediaPrompt } from "./triage/guidance";
 import type { GatheredInfo, TriageClassification } from "./triage/types";
@@ -46,6 +46,8 @@ import type { GatheredInfo, TriageClassification } from "./triage/types";
 export interface GatherContext {
   property: PropertyContext;
   understander: ModelUnderstander | null;
+  /** The safety gate asked and the tenant said there's no danger: don't escalate on the same words again. */
+  safetyCleared?: boolean;
 }
 
 /** The conversation fields this phase reads and writes. */
@@ -175,7 +177,7 @@ export async function openGather(
   const { frame } = await understand(message, ctx.understander);
   const classification = categorise(message, frame);
   // Deterministic rules first; the understanding may only raise urgency.
-  const emergency = detectEmergency(message) ?? emergencyFromFrame(frame, message);
+  const emergency = ctx.safetyCleared ? null : (detectEmergency(message) ?? emergencyFromFrame(frame, message));
 
   const frameRoom = frame.confidence.room >= 0.7 ? ROOM_LABEL[frame.room] : null;
   const timing = extractTiming(message);
@@ -186,6 +188,7 @@ export async function openGather(
   const gathered = buildInitialGathered();
   if (classification.confidence !== "low") gathered.category = classification.category;
   if (emergency) gathered.is_emergency = true;
+  else if (ctx.safetyCleared) gathered.is_emergency = false;
   gathered.location_in_unit = extractLocation(message) ?? inferLocationFromEquipment(message) ?? frameRoom;
   gathered.started_when = timing;
   gathered.current_status = status;
@@ -328,10 +331,13 @@ function afterGather(state: GatherState, ctx: GatherContext): GatherOutcome {
   return { kind: "photos", reply: buildMediaPrompt(gathered, ctx.property) };
 }
 
-/** A non-"no" answer to the safety question is treated as an emergency. Mutates `state`. */
-export function safetyAnswerEmergency(state: TriageClassification, message: string): EmergencyMatch | null {
+/**
+ * A non-"no" answer to the safety question is treated as an emergency. Mutates `state`.
+ *
+ * @param answer how the answer was read (the safety gate reads it in any language)
+ */
+export function safetyAnswerEmergency(state: TriageClassification, message: string, answer: SafetyAnswer = classifySafetyAnswer(message)): EmergencyMatch | null {
   if (state.current_question !== "safety_check") return null;
-  const answer = classifySafetyAnswer(message);
   if (answer === "no_concern") return null;
   state.safety_detection = {
     detected: true,

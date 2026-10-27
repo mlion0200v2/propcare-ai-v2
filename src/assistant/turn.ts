@@ -1,6 +1,7 @@
 /**
- * One tenant message in, the next step out. Dispatches on the
- * conversation's phase; keeps nothing between calls.
+ * One tenant message in, the next step out. The safety gate reads every
+ * message first; then it dispatches on the conversation's phase. Keeps
+ * nothing between calls.
  *
  *   GATHER_INFO → (safety check) → AWAITING_MEDIA → GUIDED_TROUBLESHOOTING
  *     → CONFIRM_SUMMARY → DONE, and EMERGENCY from anywhere.
@@ -14,7 +15,8 @@ import { confirmOrCorrect } from "./confirm";
 import { buildDiagnosisView } from "./sops/diagnosis-view";
 import { buildChatHints } from "./triage/hints";
 import { buildInitialGathered } from "./triage/base-questions";
-import { buildEmergencyFollowUpReply, detectEmergency, emergencyAdvice, type EmergencyKind, type EmergencyMatch } from "./triage/emergency";
+import { buildEmergencyFollowUpReply, emergencyAdvice, type EmergencyKind, type EmergencyMatch } from "./triage/emergency";
+import { checkSafety, openAISafetyModel, readSafetyAnswer, type SafetyModel } from "./safety/gate";
 
 export interface TurnOptions {
   /**
@@ -22,7 +24,12 @@ export interface TurnOptions {
    * rules only); tests and the eval pass their own, or null.
    */
   understander?: ModelUnderstander | null;
+  /** The safety gate's model. Defaults to OpenAI when a key is configured; null = keyword rules only. */
+  safety?: SafetyModel | null;
 }
+
+/** What the old flow's own safety question asks about, for reading the answer. */
+const SAFETY_QUESTION_TOPIC = "Do you notice any sparks, smoke, a burning or gas smell, or warmth from an outlet, panel or appliance?";
 
 const DONE_REPLY = "This report has already been submitted. Your property manager will follow up with you.";
 
@@ -48,7 +55,7 @@ function respond(
 ): TurnResponse {
   state.phase = phase;
   const hints =
-    phase === "DONE" || phase === "EMERGENCY"
+    phase === "DONE" || phase === "EMERGENCY" || state.safety_check
       ? { quickReplies: [], notes: [] }
       : buildChatHints({
           currentQuestion: state.current_question,
@@ -85,7 +92,9 @@ function emergencyResponse(req: TurnRequest, state: AssistantState, emergency: E
     detected_at: new Date().toISOString(),
     previous_state: state.phase,
     manager_notified: false,
+    answered: 0,
   };
+  state.safety_check = null;
   return respond(req, state, "EMERGENCY", emergencyAdvice(emergency.kind as EmergencyKind), {
     emergency,
     ticket: { priority: "emergency", escalate: true, flag_emergency: true },
@@ -117,31 +126,95 @@ function fromTroubleshooting(req: TurnRequest, state: AssistantState, outcome: T
   }
 }
 
+/** The first message: understand it and ask the first question (or escalate). */
+async function open(
+  req: TurnRequest,
+  message: string,
+  ctx: GatherContext,
+  emergency: EmergencyMatch | null,
+  carry: Partial<AssistantState> = {}
+): Promise<TurnResponse> {
+  const opened = await openGather(message, ctx);
+  const state: AssistantState = { v: 1, phase: "GATHER_INFO", ui: { options: [], notes: [] }, ...opened.state, ...carry };
+  const danger = emergency ?? opened.emergency;
+  if (danger) return emergencyResponse(req, state, danger);
+  return respond(req, state, "GATHER_INFO", opened.reply);
+}
+
 export async function turn(req: TurnRequest, options: TurnOptions = {}): Promise<TurnResponse> {
   const ctx: GatherContext = {
     property: req.property,
     understander: options.understander === undefined ? openAIUnderstander() : options.understander,
   };
+  const safety = options.safety === undefined ? openAISafetyModel() : options.safety;
   const message = req.message.trim();
 
   // The first message.
   if (!req.state) {
-    const opened = await openGather(message, ctx);
-    const state: AssistantState = { v: 1, phase: "GATHER_INFO", ui: { options: [], notes: [] }, ...opened.state };
-    if (opened.emergency) return emergencyResponse(req, state, opened.emergency);
-    return respond(req, state, "GATHER_INFO", opened.reply);
+    const gate = await checkSafety(message, "", safety);
+    if (gate.kind === "check") {
+      // Ask before anything else; the conversation starts once the answer clears it.
+      const state: AssistantState = {
+        v: 1,
+        phase: "GATHER_INFO",
+        ui: { options: [], notes: [] },
+        description: message,
+        gathered: buildInitialGathered(),
+        current_question: null,
+        safety_check: { ...gate.check, opening: true },
+      };
+      return respond(req, state, "GATHER_INFO", gate.check.question);
+    }
+    return open(req, message, ctx, gate.kind === "emergency" ? gate.emergency : null);
   }
 
   const state: AssistantState = structuredClone(req.state);
   if (state.phase === "DONE") return respond(req, state, "DONE", DONE_REPLY, { done: true });
-  if (state.phase === "EMERGENCY") return respond(req, state, "EMERGENCY", buildEmergencyFollowUpReply());
+  if (state.phase === "EMERGENCY") {
+    // The safety advice is given; collect what the manager needs, one question at a time.
+    const answered = (state.emergency?.answered ?? 0) + (message ? 1 : 0);
+    if (state.emergency) state.emergency.answered = answered;
+    return respond(req, state, "EMERGENCY", buildEmergencyFollowUpReply(answered));
+  }
+
+  // The answer to the gate's confirming question.
+  const pending = state.safety_check;
+  if (pending) {
+    state.safety_check = null;
+    const answer = await readSafetyAnswer(pending.question, message, safety);
+    const rationale = `${pending.kind} check: "${pending.phrase}"; answer: "${message.slice(0, 50)}"`;
+    if (answer !== "no_concern") {
+      state.safety_detection = { detected: true, method: answer === "concern" ? "user_confirmed" : "user_unclear", rationale };
+      return emergencyResponse(req, state, { kind: pending.kind, phrase: pending.phrase });
+    }
+    const carry: Partial<AssistantState> = {
+      safety_cleared: [...new Set([...(state.safety_cleared ?? []), pending.kind])],
+      safety_detection: { detected: false, method: "user_denied", rationale },
+    };
+    if (pending.opening) return open(req, pending.held_message, { ...ctx, safetyCleared: true }, null, carry);
+    Object.assign(state, carry);
+    return advance(req, state, pending.held_message, ctx, safety);
+  }
 
   // Danger in any reply, in any phase, stops everything else.
-  const emergency = (message ? detectEmergency(message) : null) ?? (state.phase === "GATHER_INFO" ? safetyAnswerEmergency(state, message) : null);
-  if (emergency) return emergencyResponse(req, state, emergency);
+  const gate = await checkSafety(message, `The tenant first reported: ${state.description}`, safety, state.safety_cleared ?? []);
+  if (gate.kind === "emergency") return emergencyResponse(req, state, gate.emergency);
+  if (gate.kind === "check") {
+    state.safety_check = gate.check;
+    return respond(req, state, state.phase, gate.check.question);
+  }
+  return advance(req, state, message, ctx, safety);
+}
 
+/** A message that passed the safety gate: the next step in the current phase. */
+async function advance(req: TurnRequest, state: AssistantState, message: string, ctx: GatherContext, safety: SafetyModel | null): Promise<TurnResponse> {
   switch (state.phase) {
     case "GATHER_INFO": {
+      // The old flow's own safety question ("sparks, burning smell…?"), read in any language.
+      if (state.current_question === "safety_check") {
+        const emergency = safetyAnswerEmergency(state, message, await readSafetyAnswer(SAFETY_QUESTION_TOPIC, message, safety));
+        if (emergency) return emergencyResponse(req, state, emergency);
+      }
       const outcome = await continueGather(state, message, ctx);
       if (outcome.kind === "emergency") return emergencyResponse(req, state, outcome.emergency);
       return respond(req, state, outcome.kind === "photos" ? "AWAITING_MEDIA" : "GATHER_INFO", outcome.reply);
@@ -169,5 +242,8 @@ export async function turn(req: TurnRequest, options: TurnOptions = {}): Promise
         },
       });
     }
+    default:
+      // DONE and EMERGENCY are answered before the gate.
+      return respond(req, state, state.phase, DONE_REPLY, { done: state.phase === "DONE" });
   }
 }

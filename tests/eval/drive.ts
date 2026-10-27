@@ -5,6 +5,7 @@
  */
 import { turn, type AssistantState, type TurnRequest, type TurnResponse } from "../../src/assistant";
 import type { ModelUnderstander } from "../../src/assistant/understanding";
+import type { SafetyModel } from "../../src/assistant/safety/gate";
 import { emptyFrame, withUnknowns, type IssueFrame } from "../../src/assistant/understanding/frame";
 import { EMPTY_PROPERTY, type PropertyContext } from "../../src/assistant/property";
 
@@ -13,14 +14,17 @@ export interface Chat {
   property: PropertyContext;
   media: number;
   understander: ModelUnderstander | null;
+  /** The safety gate's model; null (keyword rules only) unless a test or the live eval passes one. */
+  safety: SafetyModel | null;
 }
 
-export function newChat(options: { rooms?: string[]; property?: Partial<PropertyContext>; understander?: ModelUnderstander | null } = {}): Chat {
+export function newChat(options: { rooms?: string[]; property?: Partial<PropertyContext>; understander?: ModelUnderstander | null; safety?: SafetyModel | null } = {}): Chat {
   return {
     state: null,
     property: { ...EMPTY_PROPERTY, ...options.property, rooms: options.rooms ?? options.property?.rooms ?? [] },
     media: 0,
     understander: options.understander ?? null,
+    safety: options.safety ?? null,
   };
 }
 
@@ -28,7 +32,7 @@ export function newChat(options: { rooms?: string[]; property?: Partial<Property
 export async function say(chat: Chat, message: string, action?: TurnRequest["action"]): Promise<TurnResponse> {
   const response = await turn(
     { conversation: "eval", message, action, state: chat.state, property: chat.property, media: { count: chat.media }, channel: "web" },
-    { understander: chat.understander }
+    { understander: chat.understander, safety: chat.safety }
   );
   chat.state = response.state;
   return response;

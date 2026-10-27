@@ -89,7 +89,10 @@ export async function testTriageChatBasic(): Promise<TestResult> {
     check(r.state.gathered.is_emergency === true && r.state.emergency?.manager_notified === false, "turn: the state records the emergency; the app says whether the manager was reached");
     check(!/property manager has been|we've alerted|notified/i.test(r.reply), "turn: the reply is safety advice only (the app adds the notice)", r.reply.slice(0, 200));
     const follow = await say(chat, "ok what now");
-    check(follow.phase === "EMERGENCY" && follow.reply === buildEmergencyFollowUpReply() && !follow.emergency, "turn: after an emergency, replies are added to the report");
+    check(follow.phase === "EMERGENCY" && follow.reply === buildEmergencyFollowUpReply(1) && !follow.emergency, "turn: after an emergency, replies are added to the report");
+    check(/anyone hurt/i.test(follow.reply), "turn: the first reply after an emergency asks the manager's second question", follow.reply);
+    const last = await say(chat, "everyone is out, nobody hurt");
+    check(last.reply === buildEmergencyFollowUpReply(2) && !/One more/.test(last.reply), "turn: after both questions, replies are just added to the report", last.reply);
   } catch (e) {
     fail("turn: emergency flow threw", e);
   }

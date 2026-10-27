@@ -13,6 +13,8 @@
  */
 import type { DiagnosisView } from "./sops/diagnosis-view";
 import type { PropertyContext } from "./property";
+import type { PendingSafetyCheck } from "./safety/gate";
+import type { EmergencyKind } from "./triage/emergency";
 import type { TriageClassification, TriageStateName, TroubleshootingStep } from "./triage/types";
 
 /** Where the conversation is (also the ticket's triage_state). */
@@ -31,6 +33,10 @@ export interface AssistantState extends TriageClassification {
   description: string;
   /** Tap options and notes for the current question. */
   ui: { options: string[]; notes: string[] };
+  /** The safety gate asked a confirming question and is waiting for the answer. */
+  safety_check?: PendingSafetyCheck | null;
+  /** Dangers the tenant has said aren't there (a smell from the hot water only): not asked again. */
+  safety_cleared?: EmergencyKind[];
 }
 
 export interface TurnRequest {

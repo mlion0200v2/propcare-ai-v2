@@ -150,6 +150,8 @@ export interface EmergencyRecord {
   /** Triage state the conversation was in when the emergency was detected. */
   previous_state: string;
   manager_notified: boolean;
+  /** How many of the follow-up questions for the manager the tenant has answered. */
+  answered?: number;
 }
 
 export interface ValidationResult {

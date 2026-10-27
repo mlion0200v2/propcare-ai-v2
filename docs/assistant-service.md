@@ -277,19 +277,20 @@ The scripted and coverage tiers change from "this exact question comes next" to 
 
 Each is a PR to staging; the old path stays the default until the last step.
 
-1. **Safety gate**: the classifier, model-read safety answers, emergency follow-up questions. Useful on the old path too.
+1. **Safety gate**: the classifier, model-read safety answers, emergency follow-up questions. Useful on the old path too. *Built in `src/assistant/safety/gate.ts`:*
+   - `checkSafety()` runs on every message in `turn()`. The model may only turn a smell-only keyword match into a question; every other keyword match escalates as before.
+   - `readSafetyAnswer()` reads answers in any language; a hedged answer is never cleared.
+   - A cleared danger is remembered (`safety_cleared`) and not asked about again.
+   - After an emergency, two questions for the manager (`EMERGENCY_QUESTIONS`).
+   - Without a model key, the keyword rules decide alone, exactly as before.
 2. **Reference cards and retrieval** that returns several cards.
 3. **Conversation model and the ticket fields**, behind a flag (`ASSISTANT_MODE=chat`), with the advice filter on every reply.
 4. **Eval**: run the head-to-head on the flag; tune until it passes the gate.
 5. **Switch the default**, remove the scripted path (`gather.ts`, `troubleshoot.ts`, the intake engine, the general SOPs) and re-ingest Pinecone once, with the card format.
 
-### Open question
-
-- **Reply language.** Decision 4 says English replies in the first version. The model can reply in the tenant's language at no extra cost, and the eval counts English replies against us. Proposed: reply in the tenant's language; fixed texts (emergency advice, the summary headings) stay in English until they are translated and checked.
-
 ## Decisions
 
-Answered by Simone on 2026-10-26.
+Answered by Simone on 2026-10-26; decision 4 changed on 2026-10-27.
 
 1. **Diagnosis: return only.** The assistant returns the diagnosis and a ticket update; the app writes tickets, alerts managers and sends email. It stays the only thing that touches tenant data.
 2. **One repo, two deploy targets.** One codebase, built into two container images that run as two Cloud Run services (the app and the assistant), so the eval, the catalog and the API types stay in one place. To keep a later split cheap:
@@ -299,7 +300,7 @@ Answered by Simone on 2026-10-26.
 
    Split into two repos only if a separate team or contractor owns the assistant, other products use it with their own release schedule, or one side's CI keeps blocking the other.
 3. **Photos: not in the first version, but keep room for it.** The request has a reserved `media.images` field (short-lived signed links, no other data). Photo diagnosis (reading a model/serial label, for example) can use it later without changing the API.
-4. **Languages: English replies in the first version.** The assistant already understands Chinese and French; replying in the tenant's language comes later.
+4. **Languages: reply in the tenant's language** (changed 2026-10-27 with the conversation redesign; it was "English first"). The conversation model replies in the language the tenant writes in. Fixed texts (emergency advice, the summary headings) stay in English until they are translated and checked.
 5. **Separate production Supabase project: at the real-product launch, not now.** It is needed before real tenants use PropCare.
 
 ## Risks

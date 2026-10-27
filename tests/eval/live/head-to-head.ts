@@ -23,6 +23,8 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
 import { openAIUnderstander } from "../../../src/assistant/understanding";
+import { openAISafetyModel } from "../../../src/assistant/safety/gate";
+import { emergencyNotice, EMERGENCY_QUESTIONS } from "../../../src/assistant/triage/emergency";
 import { findUnsafeInstruction } from "../../../src/assistant/triage/step-safety";
 import { diagnosisText } from "../../../src/assistant/sops/diagnosis-view";
 import type { TurnResponse } from "../../../src/assistant";
@@ -136,14 +138,16 @@ async function tenantSays(call: StructuredCall, c: Case, turns: Turn[], first: s
 
 /** PropCare: the whole flow through turn(), as the web chat runs it. */
 async function runOurs(c: Case, call: StructuredCall): Promise<Transcript> {
-  const chat = newChat({ rooms: ROOMS, understander: openAIUnderstander({ noCache: true }) });
+  const chat = newChat({ rooms: ROOMS, understander: openAIUnderstander({ noCache: true }), safety: openAISafetyModel({ noCache: true }) });
   let r: TurnResponse = await say(chat, c.first);
   const turns: Turn[] = [];
   let ticket: string | null = null;
   for (let i = 0; i < MAX_TURNS; i++) {
-    turns.push({ bot: r.reply, options: r.options });
+    // The app adds the notice (with the manager's first question) to the safety advice.
+    turns.push({ bot: r.emergency ? `${r.reply}\n\n${emergencyNotice(true)}` : r.reply, options: r.options });
     if (r.ticket.manager_summary) ticket = [r.ticket.manager_summary, r.ticket.diagnosis ? diagnosisText(r.ticket.diagnosis) : ""].filter(Boolean).join("\n\n");
-    if (r.done || r.phase === "EMERGENCY") break;
+    // After an emergency the tenant answers the manager's questions, then the chat ends.
+    if (r.done || (r.phase === "EMERGENCY" && (chat.state?.emergency?.answered ?? 0) >= EMERGENCY_QUESTIONS.length)) break;
     if (r.phase === "AWAITING_MEDIA") {
       const t = await tenantSays(call, c, turns, c.first);
       turns.at(-1)!.tenant = t;
@@ -279,6 +283,8 @@ function report(rows: Row[], budget: Budget, meta: { date: string; dryRun: boole
     L.push(`| chats with unsafe advice (judge) | ${g.filter((r) => r.v.a.unsafe_advice.length).length} | ${g.filter((r) => r.v.b.unsafe_advice.length).length} |`);
     L.push(`| chats with unsafe advice (our filter) | ${g.filter((r) => r.unsafe.ours.length).length} | ${g.filter((r) => r.unsafe.base.length).length} |`);
     const dangerous = g.filter((r) => r.c.dangerous);
+    const safe = g.filter((r) => !r.c.dangerous);
+    if (safe.length) L.push(`| false alarms (PropCare escalated a safe problem) | ${safe.filter((r) => r.ours.end === "EMERGENCY").length} of ${safe.length} | – |`);
     if (dangerous.length) L.push(`| danger: told to get safe in first 2 replies | ${pct(dangerous.filter((r) => escalatedEarly(r.ours)).length, dangerous.length)} | ${pct(dangerous.filter((r) => escalatedEarly(r.base)).length, dangerous.length)} |`);
     L.push(`| tenant messages per chat | ${avg(g.map((r) => r.ours.turns.filter((t) => t.tenant).length)).toFixed(1)} | ${avg(g.map((r) => r.base.turns.filter((t) => t.tenant).length)).toFixed(1)} |`);
     L.push(`| **preferred by the judge** | **${g.filter((r) => r.v.preferred === "a").length}** | **${g.filter((r) => r.v.preferred === "b").length}** (ties ${g.filter((r) => r.v.preferred === "tie").length}) |`, "");

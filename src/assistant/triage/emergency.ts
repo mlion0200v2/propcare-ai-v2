@@ -188,6 +188,11 @@ const NO_ANSWER =
   /^(no|nope|nah|n|none|nothing|not really|not at all|negative|all good|it'?s fine|its fine|it is fine|everything'?s fine|no concerns?)\b/;
 const CONCERN_WORDS =
   /\b(sparks?|smoke|smoking|burning|smell\w*|odou?r|hot|warm|melt\w*|spreading|getting worse|worse|unstable|exposed|flood\w*|leak\w*|crack\w*|sag\w*|shock\w*)\b/g;
+// French and Chinese words for the same checks (no \b around Chinese characters).
+const UNSURE_OTHER = /\b(je ne sais pas|je sais pas|pas s[uû]r|peut-[eê]tre|un peu)\b|不知道|不确定|不清楚|说不清|可能|好像|也许|有点/;
+const NO_OTHER = /^(non|nan|pas du tout|rien|aucun\w*|tout va bien)\b|^(没有|没|不是|不|无|都没有|完全没有|一切正常)/;
+const YES_OTHER = /^(oui|ouais)\b|^(是|有|对)/;
+const BUT_OTHER = /\b(mais|sauf|en fait)\b|但是|但|不过|可是|其实/;
 const NEGATIVE_STATEMENT = /\b(isn'?t|is not|aren'?t|doesn'?t|does not|don'?t|do not|didn'?t|haven'?t|hasn'?t|not|no|none|nothing|nope)\b/;
 
 /**
@@ -200,20 +205,26 @@ export function classifySafetyAnswer(response: string, now?: Date): SafetyAnswer
   if (!lower) return "unclear";
 
   if (detectEmergency(lower, now)) return "concern";
-  if (UNSURE_ANSWER.test(lower)) return "unclear";
+  if (UNSURE_ANSWER.test(lower) || UNSURE_OTHER.test(lower)) return "unclear";
 
-  if (NO_ANSWER.test(lower)) {
+  if (NO_ANSWER.test(lower) || NO_OTHER.test(lower)) {
     // "No, but it smells a bit" / "no... actually yes" → not a clean no.
-    if (/\b(but|although|except|actually|though)\b/.test(lower)) return "unclear";
+    if (/\b(but|although|except|actually|though)\b/.test(lower) || BUT_OTHER.test(lower)) return "unclear";
     return "no_concern";
   }
-  if (YES_ANSWER.test(lower)) return "concern";
+  if (YES_ANSWER.test(lower) || YES_OTHER.test(lower)) return "concern";
 
   // Concern words count unless every one of them is negated ("it's not spreading").
   const concernMatches = [...lower.matchAll(CONCERN_WORDS)];
   if (concernMatches.some((m) => !isNegated(lower, m.index ?? 0))) return "concern";
   if (NEGATIVE_STATEMENT.test(lower)) return "no_concern";
   return "unclear";
+}
+
+/** The answer hedges ("not sure", "no, but…", a question back): unclear, whoever reads it. */
+export function isHedgedAnswer(response: string): boolean {
+  const lower = normalise(response);
+  return UNSURE_ANSWER.test(lower) || UNSURE_OTHER.test(lower) || /\b(but|although|except|actually|though)\b/.test(lower) || BUT_OTHER.test(lower);
 }
 
 // ── Emergency reply (sent immediately, in any state) ──
@@ -289,14 +300,29 @@ export function emergencyNotice(managerNotified: boolean): string {
       ? "I've alerted your property manager right now and marked this as an emergency. You don't need to do anything else in this chat."
       : "I've marked this as an emergency for your property manager. If you can't reach them and it's urgent, use the emergency numbers above.",
     "",
-    "If it's safe, you can reply here with anything else they should know (for example, the best number to reach you).",
+    `Only once you're safe (outside, if you were told to leave): ${EMERGENCY_QUESTIONS[0]}`,
   ].join("\n");
 }
 
-/** Reply to any further message once a ticket is already in the emergency state. */
-export function buildEmergencyFollowUpReply(): string {
+/**
+ * What the manager needs to act on an emergency, asked one at a time after
+ * the safety advice. The first is in the notice; the rest follow each reply.
+ */
+export const EMERGENCY_QUESTIONS = [
+  "where exactly is it, and what can you see, hear or smell right now?",
+  "is anyone hurt or feeling unwell, and is anyone still inside?",
+] as const;
+
+/**
+ * Reply to a further message once a ticket is in the emergency state.
+ *
+ * @param answered how many emergency questions the tenant has answered, this message included
+ */
+export function buildEmergencyFollowUpReply(answered: number = EMERGENCY_QUESTIONS.length): string {
+  const next = (EMERGENCY_QUESTIONS as readonly string[])[answered];
   return [
     "Thanks — I've added that to your emergency report for your property manager.",
+    ...(next ? ["", `One more, only if it's safe: ${next}`] : []),
     "",
     EMERGENCY_FOOTER,
   ].join("\n");
