@@ -11,6 +11,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadCatalog } from "../../src/assistant/sops/catalog";
+import { isGeneralSop } from "../../src/assistant/sops/general";
 import { HELDOUT_FILES, TUNED_FILES, loadCorpus, runFrameEval, type FrameEvalReport } from "./frame-eval";
 import { runDiagnosisEval, type DiagnosisReport } from "./diagnosis-eval";
 
@@ -100,7 +101,7 @@ if (isMain) {
     const missing = rows.flatMap((r) => r.uncovered);
     if (missing.length) console.log(`\nSOPs without eval cases: ${missing.join(", ")}`);
     const all = new Set(Object.values(AREAS).flat());
-    const unassigned = loadCatalog().filter((s) => s.selectable && !all.has(s.issue_key)).map((s) => s.issue_key);
+    const unassigned = loadCatalog().filter((s) => s.selectable && !isGeneralSop(s) && !all.has(s.issue_key)).map((s) => s.issue_key);
     if (unassigned.length) console.log(`SOPs in no area: ${unassigned.join(", ")}`);
     if (process.argv.includes("--write")) {
       writeFileSync(
@@ -123,7 +124,7 @@ export async function testCoverage(): Promise<import("../integration/helpers").T
   const diagnosis = await runDiagnosisEval();
   const rows = coverageMatrix(reports, diagnosis);
   const all = new Set(Object.values(AREAS).flat());
-  const unassigned = loadCatalog().filter((s) => s.selectable && !all.has(s.issue_key)).map((s) => s.issue_key);
+  const unassigned = loadCatalog().filter((s) => s.selectable && !isGeneralSop(s) && !all.has(s.issue_key)).map((s) => s.issue_key);
   check(unassigned.length === 0, "every selectable SOP belongs to an area", unassigned);
   check(rows.every((r) => r.uncovered.length === 0), "every SOP has labelled eval cases", rows.flatMap((r) => r.uncovered));
   const cases = rows.reduce((n, r) => n + r.cases, 0);

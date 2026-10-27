@@ -70,7 +70,7 @@ const RULES: Rule[] = [
     // …unless it's the low-battery chirp ("battery chirp won't stop").
     pattern: /\bsmoke\s*(detector|alarm)s?\b(?![^.!?]*\b(chirp\w*|batter(y|ies))\b)[^.!?]{0,25}\b(going off|went off|sounding|blaring|won'?t stop|keeps going off|alarming)\b/,
   },
-  { kind: "fire", negatable: true, pattern: /\bburning\s+(smell|odou?r|plastic)\b|\bsmell(s|ing)?\s+(of\s+|like\s+)?(something\s+)?burning\b/ },
+  { kind: "fire", negatable: true, pattern: /\b(burning|burnt|burned)\s+(smell|odou?r|plastic|rubber|wires?|wiring)\b|\bsmell(s|ing)?\s+(of\s+|like\s+)?(something\s+)?(burning|burnt|burned)\b/ },
 
   // ── Electrical ──
   { kind: "electrical", negatable: true, pattern: /\bspark(s|ing|ed|y)?\b/ },

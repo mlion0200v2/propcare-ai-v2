@@ -58,6 +58,8 @@ export function testLaunchSafety(): TestResult {
   printSection("Emergency detector — must fire");
   const mustFire: Array<[string, EmergencyKind]> = [
     ["It smells like gas in the kitchen", "gas"],
+    ["the microwave smells like burnt plastic", "fire"],
+    ["burned rubber smell from the dryer", "fire"],
     ["there's a smell of gas near the stove", "gas"],
     ["I can smell gas", "gas"],
     ["strong gas smell in the hallway", "gas"],

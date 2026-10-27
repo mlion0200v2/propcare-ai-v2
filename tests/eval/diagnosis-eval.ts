@@ -9,6 +9,7 @@
  *   npx tsx tests/eval/diagnosis-eval.ts [--failures]
  */
 import { loadCatalog } from "../../src/assistant/sops/catalog";
+import { isGeneralSop } from "../../src/assistant/sops/general";
 import type { Sop } from "../../src/assistant/sops/schema";
 import type { AssistantState } from "../../src/assistant";
 import { EQUIPMENT_LABEL, EQUIPMENT_ROOM } from "../../src/assistant/understanding/taxonomy";
@@ -79,7 +80,7 @@ function neutralFirst(c: CorpusCase | undefined, sop: Sop): string {
 
 export function buildCards(corpus: CorpusCase[] = [...loadCorpus(TUNED_FILES), ...loadCorpus(HELDOUT_FILES)]): DiagnosisCard[] {
   const cards: DiagnosisCard[] = [];
-  for (const sop of loadCatalog().filter((s) => s.selectable && !s.route_to_manager && s.severity !== "emergency")) {
+  for (const sop of loadCatalog().filter((s) => s.selectable && !isGeneralSop(s) && !s.route_to_manager && s.severity !== "emergency")) {
     const fromCorpus = corpus.find((c) => c.sop === sop.issue_key && c.lang === "en" && !c.emergency);
     for (const cause of sop.causes) {
       const answers = Object.fromEntries(sop.intake_questions.map((q) => [q.id, answerFor(sop, cause.id, q.id)]));

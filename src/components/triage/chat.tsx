@@ -6,6 +6,7 @@ import { MEDIA_LIMITS } from "@/assistant/api";
 
 const { maxUploadMb: MAX_UPLOAD_MB, maxVideoSeconds: MAX_VIDEO_SECONDS } = MEDIA_LIMITS;
 import { AccessDetailsCard } from "@/components/intake/access-details";
+import { AnswerOptions } from "@/components/triage/answer-options";
 
 const DRAFT_TICKET_KEY = "propcare_draft_ticket_id";
 
@@ -118,6 +119,8 @@ export function TriageChat({
   const [isLoading, setIsLoading] = useState(false);
   const [isResuming, setIsResuming] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  // Photos and videos on this report: "Skip" until there's one, then "Done".
+  const [mediaCount, setMediaCount] = useState(0);
   const [triageState, setTriageState] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [summaryEditMode, setSummaryEditMode] = useState(false);
@@ -178,6 +181,8 @@ export function TriageChat({
           is_bot_reply: m.is_bot_reply,
         })
       );
+
+      setMediaCount(data.media?.length ?? 0);
 
       // Inject media records as synthetic user messages positioned by timestamp
       if (data.media && data.media.length > 0) {
@@ -357,7 +362,7 @@ export function TriageChat({
     }
   }
 
-  async function handleMediaAction(action: "skip") {
+  async function handleMediaAction(action: "skip" | "done") {
     if (isLoading || isComplete || !ticketId) return;
 
     setError(null);
@@ -365,7 +370,7 @@ export function TriageChat({
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
-      body: "Skip",
+      body: action === "done" ? "Done" : "Skip",
       is_bot_reply: false,
     };
     setMessages((prev) => [...prev, userMsg]);
@@ -469,10 +474,12 @@ export function TriageChat({
         )
       );
 
+      setMediaCount((n) => n + 1);
+
       // Show success + give option to upload more or continue
       const successMsg: ChatMessage = {
         id: `bot-${Date.now()}`,
-        body: "Got it, thanks! You can upload another file or skip to continue.",
+        body: "Got it, thanks! You can add another photo or video, or tap Done to continue.",
         is_bot_reply: true,
       };
       setMessages((prev) => [...prev, successMsg]);
@@ -557,6 +564,9 @@ export function TriageChat({
       </div>
     );
   }
+
+  // Answers one per line, ending with an empty line for the tenant's own words (it replaces the text box).
+  const showAnswerOptions = !isComplete && !isLoading && !summaryEditMode && hints.quickReplies.length > 0;
 
   const showMediaControls =
     triageState === "AWAITING_MEDIA" && !isComplete && !isLoading && !isUploading;
@@ -686,13 +696,15 @@ export function TriageChat({
             >
               Upload Video
             </Button>
-            <Button
-              onClick={() => handleMediaAction("skip")}
-              size="md"
-              variant="ghost"
-            >
-              Skip
-            </Button>
+            {mediaCount > 0 ? (
+              <Button onClick={() => handleMediaAction("done")} size="md">
+                Done
+              </Button>
+            ) : (
+              <Button onClick={() => handleMediaAction("skip")} size="md" variant="ghost">
+                Skip
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -709,49 +721,43 @@ export function TriageChat({
       {/* Input */}
       {triageState !== "CONFIRM_PROFILE" && triageState !== "AWAITING_MEDIA" && (triageState !== "CONFIRM_SUMMARY" || summaryEditMode) && (
         <div className="border-t border-gray-200 p-4">
-          {!isComplete && !isLoading && !summaryEditMode && hints.quickReplies.length > 0 && (
-            <div role="group" aria-label="Quick answers" className="mb-2 flex flex-wrap gap-2">
-              {hints.quickReplies.map((reply) => (
-                <button
-                  key={reply}
-                  type="button"
-                  onClick={() => {
-                    setHints((h) => ({ ...h, quickReplies: [] }));
-                    handleSend(reply);
-                  }}
-                  className="min-h-9 rounded-full border border-pine bg-white px-3 py-1.5 text-sm text-pine hover:bg-sage"
-                >
-                  {reply}
-                </button>
-              ))}
+          {showAnswerOptions ? (
+            <AnswerOptions
+              key={hints.quickReplies.join("|")}
+              options={hints.quickReplies}
+              onAnswer={(text) => {
+                setHints((h) => ({ ...h, quickReplies: [] }));
+                handleSend(text);
+              }}
+            />
+          ) : (
+            <div className="flex gap-2">
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  isComplete
+                    ? "Triage complete"
+                    : summaryEditMode
+                    ? "Type your correction (e.g., 'it's in the back yard, not front yard')..."
+                    : messages.length === 0
+                    ? "Describe your maintenance issue..."
+                    : "Type your reply..."
+                }
+                disabled={isComplete || isLoading}
+                rows={1}
+                className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
+              />
+              <Button
+                onClick={() => handleSend()}
+                disabled={!input.trim() || isLoading || isComplete}
+                size="md"
+              >
+                Send
+              </Button>
             </div>
           )}
-          <div className="flex gap-2">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                isComplete
-                  ? "Triage complete"
-                  : summaryEditMode
-                  ? "Type your correction (e.g., 'it's in the back yard, not front yard')..."
-                  : messages.length === 0
-                  ? "Describe your maintenance issue..."
-                  : "Type your reply..."
-              }
-              disabled={isComplete || isLoading}
-              rows={1}
-              className="flex-1 resize-none rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-500"
-            />
-            <Button
-              onClick={() => handleSend()}
-              disabled={!input.trim() || isLoading || isComplete}
-              size="md"
-            >
-              Send
-            </Button>
-          </div>
         </div>
       )}
     </div>

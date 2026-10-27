@@ -2,10 +2,12 @@
  * Upload the SOP catalog (src/assistant/sops/catalog.json) to Pinecone.
  *
  *   npx tsx scripts/ingest_sops.ts --dry-run   # print what would be sent, no network
- *   npx tsx scripts/ingest_sops.ts             # embed + upsert (uses .env.local keys)
+ *   npx tsx scripts/ingest_sops.ts             # embed + upsert, then remove stale records (uses .env.local keys)
  *
- * Same ids as the v1 seed files, so existing vectors are replaced, not
- * duplicated. Metadata is flat (Pinecone filters on strings and string
+ * The namespace ends up holding exactly the catalog: every SOP is upserted
+ * by id (written ones and the general one per equipment), then any record
+ * the catalog no longer has (old seed files, renamed SOPs) is deleted and
+ * listed. Metadata is flat (Pinecone filters on strings and string
  * lists): category, issue_key, severity, applies_to_* lists, intake slots,
  * plus the full SOP as JSON in `sop_json`. Retrieval keeps filtering on
  * `category`; the selector can also filter on applies_to_equipment etc.
@@ -61,6 +63,18 @@ async function main() {
     count += chunk.length;
     console.log(`Upserted ${count}/${sops.length}`);
   }
+
+  // Remove what the catalog no longer has, so retrieval never returns an old SOP.
+  const keep = new Set(sops.map((s) => s.id));
+  const stale: string[] = [];
+  let token: string | undefined;
+  do {
+    const page = await ns.listPaginated({ limit: 100, paginationToken: token });
+    for (const v of page.vectors ?? []) if (v.id && !keep.has(v.id)) stale.push(v.id);
+    token = page.pagination?.next;
+  } while (token);
+  for (let i = 0; i < stale.length; i += 1000) await ns.deleteMany({ ids: stale.slice(i, i + 1000) });
+  console.log(stale.length ? `Removed ${stale.length} stale record(s): ${stale.join(", ")}` : "No stale records.");
 }
 
 if (process.argv[1]?.replace(/\.ts$/, "").endsWith("ingest_sops")) main();

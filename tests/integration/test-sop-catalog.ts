@@ -7,6 +7,9 @@ import { join } from "node:path";
 import { createRunner, printSection, type TestResult } from "./helpers";
 import { loadCatalog, sopByKey } from "../../src/assistant/sops/catalog";
 import { selectSop } from "../../src/assistant/sops/select";
+import { isGeneralSop } from "../../src/assistant/sops/general";
+import { EQUIPMENT, SYMPTOMS } from "../../src/assistant/understanding/taxonomy";
+import { emptyFrame, withUnknowns } from "../../src/assistant/understanding/frame";
 import { rulesFrame } from "../../src/assistant/understanding/rules";
 import { sopRecordMetadata } from "../../scripts/ingest_sops";
 
@@ -99,6 +102,25 @@ export async function testSopCatalog(): Promise<TestResult> {
   check(pick("my sink is leaking") === "under_sink_leak", "Simone: sink leaking → under-sink leak SOP");
   check(pick("help") === null, "too vague → no SOP (generic questions)");
   check(pick("the water heater pipe on the side is dripping") === "water_heater_relief_valve", "strong keywords pick the sibling (relief valve)");
+
+  // General SOPs: every kind of equipment, whatever is wrong with it, gets a procedure.
+  const general = loadCatalog().filter(isGeneralSop);
+  check(general.length === EQUIPMENT.length - 1, `a general SOP for each kind of equipment (${general.length})`);
+  const uncovered: string[] = [];
+  for (const equipment of EQUIPMENT) {
+    for (const symptom of SYMPTOMS) {
+      if (equipment === "unknown" || symptom === "unknown") continue;
+      const frame = withUnknowns({ ...emptyFrame(), equipment, symptom });
+      if (!selectSop(frame, "")) uncovered.push(`${equipment}/${symptom}`);
+    }
+  }
+  check(uncovered.length === 0, "every equipment × symptom gets an SOP (written, else the general one)", uncovered.slice(0, 10));
+  check(pick("my microwave smells weird") === "microwave_general", "no written SOP fits: the equipment's general SOP", pick("my microwave smells weird"));
+  check(pick("my fridge is leaking") === "fridge_leak", "a written SOP still wins over the general one");
+  const fridge = sopByKey("fridge_general")!;
+  const symptomQ = fridge.intake_questions.find((q) => q.slot === "symptom")!;
+  check(symptomQ.options.some((o) => o.value === "leaking") && symptomQ.options.at(-1)?.value === "other", "general SOP asks what it's doing, with the symptoms its written SOPs cover", symptomQ.options.map((o) => o.value));
+  check(fridge.causes[0].trade === "appliance technician", "general SOP borrows the trade from its written SOPs", fridge.causes[0].trade);
 
   return result;
 }

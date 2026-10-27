@@ -197,21 +197,21 @@ index (shared by local and hosted; it is not part of `supabase db reset`):
 2. With `OPENAI_API_KEY`, `PINECONE_API_KEY` and `PINECONE_INDEX` in
    `.env.local`:
    ```bash
-   npx tsx scripts/ingest_sop_to_pinecone.ts scripts/propcare_sop_seed_50.jsonl
-   npx tsx scripts/ingest_sop_to_pinecone.ts scripts/propcare_sop_seed_fixtures.jsonl
+   npx tsx scripts/ingest_sops.ts --dry-run   # check, no network
+   npx tsx scripts/ingest_sops.ts
    ```
-   The second file (added 2026-10-21) has 11 SOPs for the likely leak
-   sources and appliances the chat now pinpoints: faucet cartridge drip,
-   P-trap slip nut, supply hose/valve, garbage disposal (jam and leak),
-   dishwasher drain hose, toilet fill valve, range hood (fan, light, grease
-   filter), water heater relief valve, shower surround, tub spout drip.
-   **An index seeded before then needs this second command once.**
-   This embeds and upserts 50 SOP snippets into the `sop` namespace
-   (`PINECONE_NAMESPACE`). Re-running overwrites the same IDs.
+   This embeds every SOP in the catalog (`src/assistant/sops/catalog.json`,
+   plus a general SOP per kind of equipment built at load) and upserts it
+   into the `sop` namespace (`PINECONE_NAMESPACE`). It then deletes any
+   record the catalog no longer has (old seed files, renamed SOPs) and lists
+   them, so the namespace always matches the catalog. Re-run it after every
+   catalog change. The namespace is shared by staging and production.
 3. Check retrieval: `npx tsx scripts/test_retrieval.ts "kitchen faucet leak"`.
-4. To change the SOPs, edit `scripts/sop_seed_source.yaml`, run
-   `npx tsx scripts/generate_sop_jsonl.ts` (writes `scripts/sop_seed.jsonl`),
-   then ingest that file the same way.
+4. To change the SOPs, edit `src/assistant/sops/catalog.json` (CI checks
+   it: `tests/integration/test-sop-catalog.ts`), then run step 2 again.
+   Equipment without a written SOP for a problem is handled by its general
+   SOP (`src/assistant/sops/general.ts`); write a specific SOP when a
+   problem is common enough to deserve its own questions and causes.
 
 If Pinecone is unreachable the chat falls back to built-in SOPs
 (`src/assistant/triage/sop-fallback.ts`).

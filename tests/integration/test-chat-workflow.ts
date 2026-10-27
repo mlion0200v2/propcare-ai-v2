@@ -78,6 +78,10 @@ export async function testChatWorkflow(): Promise<TestResult> {
   check(danger.emergency === "unconfirmed_safety", "'not sure' near electrical is treated as an emergency", danger.emergency);
   const unknownLeak = await chatThrough("something is leaking", ["Toilet", "Around the base, on the floor"]);
   check(unknownLeak.asked[0] === "intake:leak_where" && unknownLeak.gathered.sop?.issue_key === "toilet_base_leak", "unknown source: 'where is the water?' first; the answer picks the toilet SOP", [unknownLeak.asked, unknownLeak.gathered.sop?.issue_key]);
+  const vague = await chatThrough("something is wrong with my fridge", ["It's leaking or dripping"]);
+  check(vague.asked[0] === "intake:general_symptom" && vague.gathered.sop?.issue_key === "fridge_leak", "no symptom yet: the fridge's general SOP asks what it's doing; 'leaking' switches to the fridge-leak SOP", [vague.asked, vague.gathered.sop?.issue_key]);
+  const smell = await chatThrough("my microwave smells weird", ["it shows E4", "Today"]);
+  check(smell.gathered.sop?.issue_key === "microwave_general" && smell.asked[0] === "intake:general_details", "no written SOP fits: the microwave's general SOP asks for details", [smell.asked, smell.gathered.sop?.issue_key]);
   const grease = await chatThrough("rangehood is leaking gease", ["The filter area underneath"]);
   check(grease.gathered.sop?.issue_key === "range_hood_grease_drip" && !grease.asked.some((q) => /electrical_near|amount|leak_where/.test(q)), "grease drip: hood questions, no water questions", grease.asked);
   check(!/where in your unit|where is the water/i.test(grease.firstReply), "Simone's transcript: no 'Where in your unit?' or 'Where is the water?'", grease.firstReply);

@@ -7,7 +7,8 @@
  */
 import type { AssistantState, Phase, TicketUpdate, TurnRequest, TurnResponse } from "./api";
 import { openAIUnderstander, type ModelUnderstander } from "./understanding";
-import { openGather, continueGather, safetyAnswerEmergency, type GatherContext } from "./gather";
+import { openGather, continueGather, safetyAnswerEmergency, intakeQuestionText, type GatherContext } from "./gather";
+import { sopByKey } from "./sops/catalog";
 import { startTroubleshooting, continueTroubleshooting, type TroubleshootOutcome } from "./troubleshoot";
 import { confirmOrCorrect } from "./confirm";
 import { buildDiagnosisView } from "./sops/diagnosis-view";
@@ -24,6 +25,19 @@ export interface TurnOptions {
 }
 
 const DONE_REPLY = "This report has already been submitted. Your property manager will follow up with you.";
+
+/**
+ * Text channels (email, voice) hear the options in the question; the web
+ * shows them one per line under it, so there the question stands alone.
+ */
+function forChannel(req: TurnRequest, state: AssistantState, reply: string): string {
+  const sopState = state.gathered?.sop;
+  if (req.channel !== "web" || !sopState || !state.current_question?.startsWith("intake:")) return reply;
+  const q = sopByKey(sopState.issue_key)?.intake_questions.find((x) => `intake:${x.id}` === state.current_question);
+  if (!q) return reply;
+  const inline = intakeQuestionText(q, sopState);
+  return inline === q.question ? reply : reply.replace(inline, q.question);
+}
 
 function respond(
   req: TurnRequest,
@@ -47,7 +61,7 @@ function respond(
         });
   state.ui = { options: hints.quickReplies, notes: hints.notes };
   return {
-    reply,
+    reply: forChannel(req, state, reply),
     options: state.ui.options,
     notes: state.ui.notes,
     phase,
