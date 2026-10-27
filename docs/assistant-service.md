@@ -283,7 +283,13 @@ Each is a PR to staging; the old path stays the default until the last step.
    - A cleared danger is remembered (`safety_cleared`) and not asked about again.
    - After an emergency, two questions for the manager (`EMERGENCY_QUESTIONS`).
    - Without a model key, the keyword rules decide alone, exactly as before.
-2. **Reference cards and retrieval** that returns several cards.
+2. **Reference cards and retrieval** that returns several cards. *Built in `src/assistant/cards/`:*
+   - `loadCards()` builds one card per written SOP.
+   - `findCards()` returns up to three, best first, and all of a tie up to five (five pest cards for "cockroches in the kitchen"), or none.
+   - `pineconeCardSearch()` adds knowledge-base similarity, time-boxed.
+   - `cardText()` is what the model reads.
+   - `GLOBAL_NEVER` is the never-do list.
+   - The never-instruct filter now also rejects tools inside equipment, which removed the disposal hex-key step.
 3. **Conversation model and the ticket fields**, behind a flag (`ASSISTANT_MODE=chat`), with the advice filter on every reply.
 4. **Eval**: run the head-to-head on the flag; tune until it passes the gate.
 5. **Switch the default**, remove the scripted path (`gather.ts`, `troubleshoot.ts`, the intake engine, the general SOPs) and re-ingest Pinecone once, with the card format.

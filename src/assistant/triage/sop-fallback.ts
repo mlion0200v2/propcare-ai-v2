@@ -137,8 +137,7 @@ const SOP_STEPS: Record<string, string[]> = {
   ],
   "appliance:garbage disposal": [
     "Make sure the disposal is plugged in or the switch is on.",
-    "If it hums but doesn't spin, it's likely jammed — turn it off and unplug before checking.",
-    "Use the hex key (Allen wrench) in the bottom of the unit to manually rotate the blades.",
+    "If it hums but doesn't spin, it's likely jammed — switch it off and leave it off until it's looked at.",
     "Press the reset button on the bottom of the disposal unit.",
     "Do NOT put your hand inside the disposal.",
   ],

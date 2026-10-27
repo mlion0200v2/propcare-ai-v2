@@ -93,6 +93,8 @@ export const SopSchema = z.object({
   strong_keywords: z.array(z.string()),
   prevention: z.array(z.string()),
   tenant_steps: z.array(z.string()),
+  /** Never tell the tenant to do these, for this problem (on top of the global list in ../cards). */
+  never: z.array(z.string()).optional(),
   escalate_if: z.array(z.string()),
   photos: z.array(z.string()),
   /** Ask the generic "sparks, burning smell, warmth?" check after intake (not for alarms, or when electrics were asked). */

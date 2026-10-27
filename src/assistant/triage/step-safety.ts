@@ -53,6 +53,12 @@ const NEVER_INSTRUCT: NeverInstructRule[] = [
   // Heights.
   { id: "heights", pattern: /\b(climb|go up|get up|get on)\b[^.]{0,20}\b(roof|ladder|attic)\b/i },
 
+  // Tools inside equipment ("turn the blades with the hex key").
+  {
+    id: "tools_inside",
+    pattern: /\b(use|insert|put|grab|take|turn|rotate|crank|work)\b[^.]{0,40}\b(hex key|hex wrench|allen (key|wrench)|wrench|screwdriver|pliers)\b|\b(hex key|hex wrench|allen (key|wrench))\b[^.]{0,40}\b(turn|rotate|crank|work|free)\b/i,
+  },
+
   // Outside tutorials — the assistant must not send tenants to videos.
   { id: "external_video", pattern: /\byoutube\b|\b(watch|search for|look up)\b[^.]{0,25}\b(video|tutorial)s?\b/i },
 ];
