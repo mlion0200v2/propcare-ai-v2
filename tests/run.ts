@@ -25,6 +25,7 @@ import { testPlumbingEdgeCases } from "./integration/test-plumbing-edge-cases";
 import { testLaunchSafety } from "./integration/test-launch-safety";
 import { testSafetyGate } from "./integration/test-safety-gate";
 import { testCards } from "./integration/test-cards";
+import { testChatFlow } from "./integration/test-chat-flow";
 import { testWorkspaceRLS } from "./integration/test-workspace-rls";
 import { testWorkspacePure } from "./integration/test-workspace-pure";
 import { testDemoPure } from "./integration/test-demo-pure";
@@ -78,6 +79,7 @@ async function main() {
   merge(testLaunchSafety());
   merge(await testSafetyGate()); // safety gate: keywords + a stubbed model, any language
   merge(await testCards()); // reference cards: built from the catalog, found several at a time
+  merge(await testChatFlow()); // model-led conversation with a stub model
   merge(testWorkspacePure());
   merge(await testWorkspaceRLS()); // in-process Postgres (PGlite), no network
   merge(testDemoPure());

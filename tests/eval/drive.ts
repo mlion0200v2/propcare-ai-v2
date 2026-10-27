@@ -6,6 +6,8 @@
 import { turn, type AssistantState, type TurnRequest, type TurnResponse } from "../../src/assistant";
 import type { ModelUnderstander } from "../../src/assistant/understanding";
 import type { SafetyModel } from "../../src/assistant/safety/gate";
+import type { ConversationModel } from "../../src/assistant/chat/model";
+import type { CardSearch } from "../../src/assistant/cards/search";
 import { emptyFrame, withUnknowns, type IssueFrame } from "../../src/assistant/understanding/frame";
 import { EMPTY_PROPERTY, type PropertyContext } from "../../src/assistant/property";
 
@@ -16,15 +18,32 @@ export interface Chat {
   understander: ModelUnderstander | null;
   /** The safety gate's model; null (keyword rules only) unless a test or the live eval passes one. */
   safety: SafetyModel | null;
+  /** "chat": the model leads (with `conversation`); otherwise the scripted flow. */
+  mode: "chat" | "scripted";
+  conversation: ConversationModel | null;
+  search: CardSearch | null;
 }
 
-export function newChat(options: { rooms?: string[]; property?: Partial<PropertyContext>; understander?: ModelUnderstander | null; safety?: SafetyModel | null } = {}): Chat {
+export function newChat(
+  options: {
+    rooms?: string[];
+    property?: Partial<PropertyContext>;
+    understander?: ModelUnderstander | null;
+    safety?: SafetyModel | null;
+    mode?: "chat" | "scripted";
+    conversation?: ConversationModel | null;
+    search?: CardSearch | null;
+  } = {}
+): Chat {
   return {
     state: null,
     property: { ...EMPTY_PROPERTY, ...options.property, rooms: options.rooms ?? options.property?.rooms ?? [] },
     media: 0,
     understander: options.understander ?? null,
     safety: options.safety ?? null,
+    mode: options.mode ?? "scripted",
+    conversation: options.conversation ?? null,
+    search: options.search ?? null,
   };
 }
 
@@ -32,7 +51,7 @@ export function newChat(options: { rooms?: string[]; property?: Partial<Property
 export async function say(chat: Chat, message: string, action?: TurnRequest["action"]): Promise<TurnResponse> {
   const response = await turn(
     { conversation: "eval", message, action, state: chat.state, property: chat.property, media: { count: chat.media }, channel: "web" },
-    { understander: chat.understander, safety: chat.safety }
+    { understander: chat.understander, safety: chat.safety, mode: chat.mode, conversation: chat.conversation, search: chat.search }
   );
   chat.state = response.state;
   return response;

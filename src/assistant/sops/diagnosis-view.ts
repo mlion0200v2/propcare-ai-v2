@@ -31,6 +31,8 @@ export interface DiagnosisView {
 const CONFIDENCE_TEXT = { high: "High", medium: "Medium", low: "Low (few answers)" } as const;
 
 export function buildDiagnosisView(gathered: GatheredInfo | null | undefined, mediaCount = 0): DiagnosisView | null {
+  // A model-led conversation stores the diagnosis it submitted.
+  if (gathered?.diagnosis) return gathered.diagnosis;
   const state = gathered?.sop;
   const sop = state ? sopByKey(state.issue_key) : null;
   if (!state || !sop) return null;

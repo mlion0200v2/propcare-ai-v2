@@ -13,6 +13,7 @@
  */
 import type { DiagnosisView } from "./sops/diagnosis-view";
 import type { PropertyContext } from "./property";
+import type { ChatState } from "./chat/types";
 import type { PendingSafetyCheck } from "./safety/gate";
 import type { EmergencyKind } from "./triage/emergency";
 import type { TriageClassification, TriageStateName, TroubleshootingStep } from "./triage/types";
@@ -37,6 +38,8 @@ export interface AssistantState extends TriageClassification {
   safety_check?: PendingSafetyCheck | null;
   /** Dangers the tenant has said aren't there (a smell from the hot water only): not asked again. */
   safety_cleared?: EmergencyKind[];
+  /** Set when the model leads the conversation (./chat); absent on the scripted path. */
+  chat?: ChatState | null;
 }
 
 export interface TurnRequest {

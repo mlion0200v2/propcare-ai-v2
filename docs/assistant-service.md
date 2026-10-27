@@ -259,7 +259,7 @@ Retrieval returns cards, not a single selected SOP. The general SOPs from #21 ar
 
 ### What changes in the API
 
-- `TurnRequest` and `TurnResponse` stay. `AssistantState` becomes `v: 2`: the messages so far, the ticket fields, the cards in use, and the safety state. A `v: 1` state finishes on the old code path, so open chats don't break during rollout.
+- `TurnRequest` and `TurnResponse` stay. `AssistantState` stays `v: 1` and gains a `chat` field: the messages so far, the ticket fields, the cards in use. The state keeps `gathered` filled from the ticket fields, because the app and the manager's page read it. A conversation without `chat` finishes on the old code path, so open chats don't break during rollout.
 - `phase` keeps its names for the app (`GATHER_INFO`, `AWAITING_MEDIA`, `CONFIRM_SUMMARY`, `DONE`, `EMERGENCY`). `GUIDED_TROUBLESHOOTING` is no longer a separate phase: the model gives steps inside the conversation.
 - `options` comes from the model, so tap answers fit the actual question.
 
@@ -290,8 +290,13 @@ Each is a PR to staging; the old path stays the default until the last step.
    - `cardText()` is what the model reads.
    - `GLOBAL_NEVER` is the never-do list.
    - The never-instruct filter now also rejects tools inside equipment, which removed the disposal hex-key step.
-3. **Conversation model and the ticket fields**, behind a flag (`ASSISTANT_MODE=chat`), with the advice filter on every reply.
-4. **Eval**: run the head-to-head on the flag; tune until it passes the gate.
+3. **Conversation model and the ticket fields**, behind a flag (`ASSISTANT_MODE=chat`), with the advice filter on every reply. *Built in `src/assistant/chat/`:*
+   - `model.ts`: the prompt and one structured call per message, which returns the reply, options, the whole ticket, card, cause, steps, and photos/ready/confirmed/escalate.
+   - `flow.ts`: cards are re-found every turn. Code decides the phase. The advice filter runs per sentence; a step the filter rejects makes the model rewrite once, since a reply in another language can't be filtered by English rules. The chat wraps up after 7 tenant messages (hard cap 10). After 2 model failures in a row, the report is submitted with what we have.
+   - `report.ts`: the manager's summary and diagnosis, built by code from the ticket fields and the card's cause.
+   - The confirm button submits without a model call.
+   - `turn()` options `mode`, `conversation` and `search` let tests and the eval choose.
+4. **Eval**: run the head-to-head on the flag (`--mode chat`, the default; `--mode scripted` for the old flow); tune until it passes the gate.
 5. **Switch the default**, remove the scripted path (`gather.ts`, `troubleshoot.ts`, the intake engine, the general SOPs) and re-ingest Pinecone once, with the card format.
 
 ## Decisions

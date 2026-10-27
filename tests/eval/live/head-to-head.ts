@@ -8,6 +8,7 @@
  *
  * Options: --sample N (covered cases, default 26)  --max-usd 2  --baseline-model gpt-4o-mini
  *          --judge-model gpt-4o  --only longtail|covered|emergency  --out tests/eval/reports
+ *          --mode chat|scripted  (PropCare's conversation: model-led, the default, or the scripted SOP intake)
  *
  * Ours runs the whole flow through turn() (questions, photo step, steps,
  * summary) with the real understanding, retrieval and grounding calls.
@@ -24,6 +25,8 @@ import { join } from "node:path";
 import { z } from "zod";
 import { openAIUnderstander } from "../../../src/assistant/understanding";
 import { openAISafetyModel } from "../../../src/assistant/safety/gate";
+import { openAIConversationModel } from "../../../src/assistant/chat/model";
+import { pineconeCardSearch } from "../../../src/assistant/cards/search";
 import { emergencyNotice, EMERGENCY_QUESTIONS } from "../../../src/assistant/triage/emergency";
 import { findUnsafeInstruction } from "../../../src/assistant/triage/step-safety";
 import { diagnosisText } from "../../../src/assistant/sops/diagnosis-view";
@@ -137,8 +140,15 @@ async function tenantSays(call: StructuredCall, c: Case, turns: Turn[], first: s
 }
 
 /** PropCare: the whole flow through turn(), as the web chat runs it. */
-async function runOurs(c: Case, call: StructuredCall): Promise<Transcript> {
-  const chat = newChat({ rooms: ROOMS, understander: openAIUnderstander({ noCache: true }), safety: openAISafetyModel({ noCache: true }) });
+async function runOurs(c: Case, call: StructuredCall, mode: "chat" | "scripted"): Promise<Transcript> {
+  const chat = newChat({
+    rooms: ROOMS,
+    understander: openAIUnderstander({ noCache: true }),
+    safety: openAISafetyModel({ noCache: true }),
+    mode,
+    conversation: mode === "chat" ? openAIConversationModel() : null,
+    search: mode === "chat" ? pineconeCardSearch() : null,
+  });
   let r: TurnResponse = await say(chat, c.first);
   const turns: Turn[] = [];
   let ticket: string | null = null;
@@ -265,14 +275,14 @@ interface Row {
   unsafe: { ours: string[]; base: string[] };
 }
 
-function report(rows: Row[], budget: Budget, meta: { date: string; dryRun: boolean; baselineModel: string; judgeModel: string; stopped: string | null }): string {
+function report(rows: Row[], budget: Budget, meta: { date: string; dryRun: boolean; baselineModel: string; judgeModel: string; stopped: string | null; mode: string }): string {
   const L: string[] = [];
   const keys = ["understood", "helpful", "relevance", "efficiency", "manager_ready"] as const;
   const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
   const pct = (n: number, d: number) => (d ? `${Math.round((n / d) * 100)}%` : "–");
   L.push(`# Head to head ${meta.date}: PropCare vs a plain LLM${meta.dryRun ? " (DRY RUN: stubs, estimated cost)" : ""}`, "");
   if (meta.stopped) L.push(`> Stopped early: ${meta.stopped}`, "");
-  L.push(`PropCare: the assistant through \`turn()\` (gpt-4o-mini inside). Plain LLM: ${meta.baselineModel}, short prompt, no SOPs. Tenant: gpt-4o-mini from a hidden card. Judge: ${meta.judgeModel}, blind (A/B order random).`, "");
+  L.push(`PropCare: the assistant through \`turn()\`, ${meta.mode === "chat" ? "model-led conversation with reference cards" : "scripted SOP intake"} (gpt-4o-mini inside). Plain LLM: ${meta.baselineModel}, short prompt, no SOPs. Tenant: gpt-4o-mini from a hidden card. Judge: ${meta.judgeModel}, blind (A/B order random).`, "");
   for (const group of ["all", "covered", "longtail", "emergency"] as const) {
     const g = group === "all" ? rows : rows.filter((r) => r.c.group === group);
     if (!g.length) continue;
@@ -355,6 +365,7 @@ async function main() {
   const tenant = dryRun ? stubCall(budget, judgeModel) : openAICall(budget, "gpt-4o-mini");
   const judgeCall = dryRun ? stubCall(budget, judgeModel) : openAICall(budget, judgeModel);
   const only = arg("--only");
+  const mode = arg("--mode") === "scripted" ? "scripted" : "chat";
   const cases = buildCases(Number(arg("--sample") ?? 26)).filter((c) => !only || c.group === only);
 
   const rows: Row[] = [];
@@ -372,11 +383,11 @@ async function main() {
   const date = new Date().toISOString().slice(0, 10);
   const outDir = arg("--out") ?? join(__dirname, "..", "reports");
   mkdirSync(outDir, { recursive: true });
-  const name = `head-to-head-${date}${only ? `-${only}` : ""}${dryRun ? "-dry-run" : ""}`;
+  const name = `head-to-head-${date}-${mode}${only ? `-${only}` : ""}${dryRun ? "-dry-run" : ""}`;
   // Saved after every case, so stopping early (Ctrl+C, the cap) keeps what's done.
   const save = () => {
     const status = [stopped, failed.length ? `${failed.length} case(s) failed and were skipped: ${failed.join("; ")}` : null].filter(Boolean).join(". ") || null;
-    writeFileSync(join(outDir, `${name}.md`), report(rows, budget, { date, dryRun, baselineModel, judgeModel, stopped: status }));
+    writeFileSync(join(outDir, `${name}.md`), report(rows, budget, { date, dryRun, baselineModel, judgeModel, stopped: status, mode }));
     writeFileSync(join(outDir, `${name}.json`), JSON.stringify({ date, baselineModel, judgeModel, spent: budget.spent, rows }, null, 1));
   };
 
@@ -392,7 +403,7 @@ async function main() {
     try {
       syncAssistantSpend();
       budget.check();
-      const ours = dryRun ? { turns: [{ bot: "(dry run)" }], ticket: null, end: "DONE" } : await runOurs(c, tenant);
+      const ours = dryRun ? { turns: [{ bot: "(dry run)" }], ticket: null, end: "DONE" } : await runOurs(c, tenant, mode);
       if (dryRun) budget.add("propcare", "gpt-4o-mini", 6 * 1500, 6 * 200);
       const base = await runBaseline(c, tenant, budget, baselineModel, dryRun);
       const v = await judgePair(judgeCall, c, ours, base, i % 2 === 1);

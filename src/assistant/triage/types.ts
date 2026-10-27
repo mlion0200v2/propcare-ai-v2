@@ -1,5 +1,6 @@
 import type { IssueFrame } from "@/assistant/understanding/frame";
 import type { IntakeState } from "@/assistant/sops/intake";
+import type { DiagnosisView } from "@/assistant/sops/diagnosis-view";
 
 /**
  * The assistant's conversation types. The whole conversation state
@@ -25,6 +26,8 @@ export interface GatheredInfo {
   location_candidates?: string[] | null;
   /** The SOP driving the questions, its answers and the diagnosis (../sops/intake.ts). */
   sop?: IntakeState | null;
+  /** The diagnosis a model-led conversation submitted (../chat); shown instead of one built from `sop`. */
+  diagnosis?: DiagnosisView | null;
 }
 
 export interface TroubleshootingStep {
