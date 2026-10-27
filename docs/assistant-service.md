@@ -187,6 +187,106 @@ Each step is its own PR, with CI green and staging first. Each one leaves PropCa
 
 Steps 4–6 together are about a week of work; email is a separate piece after that.
 
+## Conversation redesign: the model leads, the rules guard
+
+**Status:** proposal (2026-10-27). Do this before step 4: it changes what happens inside `turn()`, not the API around it, so the service is built once, around the new design.
+
+### Why
+
+A head-to-head eval (`tests/eval/live/head-to-head.ts`; reports in `tests/eval/reports/head-to-head-2026-10-2*`) ran the same simulated tenants through PropCare and through a plain LLM (gpt-4o-mini, a short prompt, no SOPs). A blind gpt-4o judge scored both.
+
+| | Problems with a written SOP (26) | Emergencies (8) | Problems with no SOP (14) |
+|---|---|---|---|
+| Judge prefers PropCare / plain LLM | 20 / 6 | 7 / 0 (1 tie) | 4 / 10 |
+| Ready for the manager (1–5) | 3.62 / 2.23 | 2.38 / 2.25 | PropCare higher |
+| Chats with unsafe advice (judge) | 3 / 9 | 0 / 5 | – |
+| Told to get safe in the first 2 replies | – | 100% / 13% | neither, for a warm outlet |
+| Tenant messages per chat | 8.4 / 2.8 | 0 / 2.6 | 6.4 / 2.6 |
+| Understood the problem (1–5) | 3.23 / 2.92 | 2.88 / 2.88 | 1.86 / 3.07 |
+
+What wins is the **fixed safety rules** and the **structured ticket**. What loses is the **scripted conversation**:
+- It is long: about three times as many tenant messages.
+- It commits to one SOP and can't let go. Cockroaches went through the ants procedure all the way to the manager's ticket; every unknown pest becomes ants.
+- With no matching SOP it has nothing to say. The garbage chute got "Describe the issue" as a troubleshooting step.
+- Answers are read with English keywords. A French "Non" to the electrical check made a broken fan and a broken lamp into false emergencies; a Chinese "looks right" didn't confirm the summary, which then repeated four times.
+- Fixed SOP steps can be unsafe for a tenant (turning a disposal with a hex key).
+- It replies in English to tenants who wrote in Chinese or French.
+
+### Shape
+
+```
+ tenant message
+      │
+      ▼
+ 1. Safety gate (code + a classifier) ── danger ──► fixed emergency reply, alert, then 1–2 questions for the manager
+      │ no danger
+      ▼
+ 2. Conversation model ◄── reference cards (top SOPs from retrieval), the ticket so far, the never-do list
+      │  returns: reply, options, ticket field updates, ready?
+      ▼
+ 3. Advice filter (code) ── unsafe line ──► removed and logged
+      │
+      ▼
+ 4. Ticket (code): required fields, diagnosis, confidence ──► confirm with the tenant ──► submitted
+```
+
+1. **Safety gate, every message, before the model.**
+   - The keyword rules in `triage/emergency.ts` stay; they are fast and can't be talked out of an emergency.
+   - A small classifier call reads the message in any language. It handles what keywords get wrong in both directions: "rotten-egg smell from the hot water" and "dust smell from a heater's first use" get one confirming question instead of an alarm; "the outlet is warm and the plate is brown" escalates even though no keyword matches.
+   - Answers to safety questions are read by the model, not English keywords.
+   - The emergency reply stays fixed text. After it, the chat asks one or two questions for the manager (where exactly, what you can see) instead of ending, so the emergency ticket isn't empty.
+2. **The conversation model leads.** Each turn it gets the chat so far, the ticket so far, up to three **reference cards**, the property facts and the global never-do list. It returns structured output: the reply in the tenant's language, optional tap options, updates to ticket fields, and whether the ticket is ready.
+   - It asks only what the cards say a tradesperson needs and what it doesn't know yet, one question at a time, aiming for 3–5 tenant messages.
+   - It can switch cards mid-chat (the ants card is wrong once the tenant says cockroaches), or use none and rely on general knowledge for problems no card covers.
+   - Safe steps come from the cards; for a problem with no card it may suggest only steps that pass the advice filter.
+   - Photos stay a step the channel shows (Upload / Skip / Done); the model decides when to ask and what to photograph.
+3. **Advice filter.** The never-instruct filter (`triage/step-safety.ts`, today applied to troubleshooting steps) runs on every reply. A line telling the tenant to open panels, handle wiring, shut the gas, move heavy appliances or use tools inside equipment is removed and logged.
+4. **Ticket.** The same `TicketUpdate` and manager summary as today. The ticket has required fields (what, where, since when, how bad, what was tried); `diagnosis` comes from the card's causes when a card fits, and is marked low confidence otherwise. The confirm step uses the model to read "yes / that's right / 没问题 / c'est bon" or a correction.
+
+### Reference cards
+
+The SOP catalog stays the source; a card is a view of an SOP built at load time, so the catalog isn't rewritten:
+
+| Card part | From the SOP | Used for |
+|---|---|---|
+| What the trade needs to know | `intake_questions` (question text and options only), `identify` | What to ask |
+| Safe tenant steps | `tenant_steps`, `prevention` (after the advice filter) | What to suggest |
+| Never tell the tenant | new `never` list, plus the global list | Prompt and filter |
+| Escalate if | `escalate_if` | When to stop and hand over |
+| Likely causes, trade, parts | `causes` | The manager's diagnosis only; never shown to the tenant |
+
+Retrieval returns cards, not a single selected SOP. The general SOPs from #21 are dropped: with no card, the model works from general knowledge.
+
+### What changes in the API
+
+- `TurnRequest` and `TurnResponse` stay. `AssistantState` becomes `v: 2`: the messages so far, the ticket fields, the cards in use, and the safety state. A `v: 1` state finishes on the old code path, so open chats don't break during rollout.
+- `phase` keeps its names for the app (`GATHER_INFO`, `AWAITING_MEDIA`, `CONFIRM_SUMMARY`, `DONE`, `EMERGENCY`). `GUIDED_TROUBLESHOOTING` is no longer a separate phase: the model gives steps inside the conversation.
+- `options` comes from the model, so tap answers fit the actual question.
+
+### How we know it's better
+
+The head-to-head is the gate. The new design must, on the same cases:
+- beat the plain LLM on problems with no SOP;
+- keep the wins on the others: judge preference, readiness for the manager, unsafe advice;
+- reach 100% "told to get safe in the first 2 replies" and 0 false emergencies on the covered cases;
+- average 4 or fewer tenant messages per chat.
+
+The scripted and coverage tiers change from "this exact question comes next" to "the ticket ends with these fields and this category", and the safety cases stay exact. Each full head-to-head run costs about $0.40.
+
+### Build order
+
+Each is a PR to staging; the old path stays the default until the last step.
+
+1. **Safety gate**: the classifier, model-read safety answers, emergency follow-up questions. Useful on the old path too.
+2. **Reference cards and retrieval** that returns several cards.
+3. **Conversation model and the ticket fields**, behind a flag (`ASSISTANT_MODE=chat`), with the advice filter on every reply.
+4. **Eval**: run the head-to-head on the flag; tune until it passes the gate.
+5. **Switch the default**, remove the scripted path (`gather.ts`, `troubleshoot.ts`, the intake engine, the general SOPs) and re-ingest Pinecone once, with the card format.
+
+### Open question
+
+- **Reply language.** Decision 4 says English replies in the first version. The model can reply in the tenant's language at no extra cost, and the eval counts English replies against us. Proposed: reply in the tenant's language; fixed texts (emergency advice, the summary headings) stay in English until they are translated and checked.
+
 ## Decisions
 
 Answered by Simone on 2026-10-26.
