@@ -49,6 +49,10 @@ const NEVER_INSTRUCT: NeverInstructRule[] = [
   { id: "chemicals", pattern: /\bwd-?40\b|\b(lubricant|lubricate|graphite|silicone spray)\b/i },
   { id: "chemicals", pattern: /\b(use|pour|try|apply|add)\b[^.]{0,25}\b(drain cleaner|drano|liquid[- ]plumr|lye|caustic|muriatic|acid)\b/i },
   { id: "chemicals", pattern: /\bmix\w*\b[^.]{0,30}\b(bleach|ammonia|vinegar)\b[^.]{0,30}\b(bleach|ammonia|vinegar)\b/i },
+  // Open flame to thaw or dry anything (frozen pipes, wet walls).
+  { id: "open_flame", pattern: /\b(use|try|with|hold)\b[^.]{0,25}\b(blow ?torch|torch|open flame|lighter|candle)\b/i },
+  // Pesticides: the pest company treats (spraying spreads bedbugs and roaches). Bait traps, where management allows, are fine.
+  { id: "pesticides", pattern: /\b(spray|use|apply|put down|sprinkle|set off)\b[^.]{0,25}\b(pesticides?|insecticides?|bug sprays?|raid|bug bombs?|foggers?|poisons?)\b/i },
 
   // Heights.
   { id: "heights", pattern: /\b(climb|go up|get up|get on)\b[^.]{0,20}\b(roof|ladder|attic)\b/i },

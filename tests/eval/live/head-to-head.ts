@@ -6,7 +6,7 @@
  *   LIVE_EVAL=1 npx tsx tests/eval/live/head-to-head.ts             # ~48 cases, $2 cap
  *   npx tsx tests/eval/live/head-to-head.ts --dry-run               # no network: stubs + cost estimate
  *
- * Options: --sample N (covered cases, default 26)  --max-usd 2  --baseline-model gpt-4o-mini
+ * Options: --sample N (covered cases, default 30)  --area A  --max-usd 2  --baseline-model gpt-4o-mini
  *          --judge-model gpt-4o  --only longtail|covered|emergency  --out tests/eval/reports
  *          --mode chat|scripted  (PropCare's conversation: model-led, the default, or the scripted SOP intake)
  *
@@ -23,20 +23,11 @@ import { EVAL_HEADER, assistantUsage } from "./meter";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
-import { openAIUnderstander } from "../../../src/assistant/understanding";
-import { openAISafetyModel } from "../../../src/assistant/safety/gate";
-import { openAIConversationModel } from "../../../src/assistant/chat/model";
-import { pineconeCardSearch } from "../../../src/assistant/cards/search";
-import { emergencyNotice, EMERGENCY_QUESTIONS } from "../../../src/assistant/triage/emergency";
 import { findUnsafeInstruction } from "../../../src/assistant/triage/step-safety";
-import { diagnosisText } from "../../../src/assistant/sops/diagnosis-view";
-import type { TurnResponse } from "../../../src/assistant";
-import { HELDOUT_FILES, TUNED_FILES, loadCorpus, type CorpusCase } from "../frame-eval";
-import { newChat, say } from "../drive";
+import { loadEvalCases, tenantBrief, type EvalCase } from "../cases/schema";
 import { Budget, BudgetExceeded, estimateTokens, openAICall, type StructuredCall } from "./llm";
-import { TENANT_SYSTEM, tenantCard } from "./simulate";
+import { render, runOurs, tenantSays, type Transcript, type Turn } from "./run-chat";
 
-const ROOMS = ["Kitchen", "Main bathroom (hallway)", "Ensuite", "Master bedroom", "Bedroom", "Living room", "Laundry closet"];
 const MAX_TURNS = 12;
 
 type Group = "covered" | "longtail" | "emergency";
@@ -49,32 +40,6 @@ interface Case {
   card: string;
   dangerous: boolean;
 }
-
-/**
- * Problems no SOP is written for (plus Simone's larvae test, verbatim).
- * The tenant's card says what a knowledgeable person would conclude.
- */
-const LONG_TAIL: Omit<Case, "group">[] = [
-  {
-    id: "simone-larvae",
-    first: "I disposed of the larvae last time before taking pictures hence no reply. Here's the newly found. Upstairs master.",
-    card: "You found one small brown, bristly, banded larva (it is a carpet beetle larva, but you don't know that) on the carpet in the upstairs master bedroom. You found one before too and threw it away. No other bugs seen. You have wool rugs and a closet of clothes in that room.",
-    dangerous: false,
-  },
-  { id: "larva-carpet", first: "found a small hairy worm thing on my bedroom carpet", card: "One small, hairy, striped larva on the bedroom carpet (a carpet beetle larva). You've seen two in a week. A wool rug is in the room.", dangerous: false },
-  { id: "moths-closet", first: "tiny moths keep flying out of my closet", card: "Small beige moths in the bedroom closet; a wool sweater has small holes (clothes moths). No moths in the kitchen.", dangerous: false },
-  { id: "silverfish", first: "little silver bugs in the bathtub every morning", card: "Small silvery, fast, wingless insects (silverfish) in the main bathroom tub in the mornings. The bathroom is often damp; the fan is weak.", dangerous: false },
-  { id: "fruit-flies", first: "fruit flies everywhere in my kitchen", card: "Lots of tiny flies around the kitchen sink and the fruit bowl for a week; the sink drain smells a bit.", dangerous: false },
-  { id: "mushroom-bathroom", first: "there's a mushroom growing in the corner of my bathroom floor", card: "A small mushroom growing where the bathroom floor meets the wall, next to the tub. The baseboard there feels soft. Something is leaking slowly behind it.", dangerous: false },
-  { id: "rotten-egg-hot-water", first: "my hot water smells like rotten eggs", card: "Only the hot water smells of sulphur, at every tap; cold water is fine. No smell of gas in the air near the water heater or stove. (It's the water heater's anode rod reacting with the water, not a gas leak.)", dangerous: false },
-  { id: "baseboard-dust-smell", first: "my baseboard heater smells like burning when I turn it on for the first time this year", card: "A dusty burning smell for a few minutes the first time you turned the bedroom baseboard heater on this season; no smoke, no sparks, the smell is fading. Nothing is touching the heater.", dangerous: false },
-  { id: "window-fog", first: "my window is foggy between the two glass panes and I can't wipe it", card: "Condensation inside a double-pane living room window (the seal failed). No water on the sill, no draft.", dangerous: false },
-  { id: "fridge-smell", first: "my fridge smells bad even after I cleaned it", card: "A sour smell from the fridge that comes back after cleaning; the drip pan underneath hasn't been cleaned and the defrost drain may be blocked. It's cooling fine.", dangerous: false },
-  { id: "dishwasher-grinding", first: "the dishwasher makes a grinding noise when it runs", card: "A grinding noise during the wash cycle; you found a piece of broken glass in the filter last month. It still cleans.", dangerous: false },
-  { id: "intercom-buzzer", first: "the buzzer doesn't let my guests in anymore", card: "Visitors can call the unit from the lobby panel and you can hear them, but pressing the door-release button doesn't unlock the lobby door. Since yesterday.", dangerous: false },
-  { id: "door-latch", first: "my bedroom door won't stay closed, it just swings open", card: "The bedroom door latch doesn't catch the strike plate since the weather got humid; the door seems to have shifted a little.", dangerous: false },
-  { id: "warm-outlet", first: "the outlet behind my tv feels warm", card: "The wall outlet behind the TV is warm to the touch, there is a faint plastic smell, and the plug is a power bar with many devices. It is dangerous (overheating outlet): say so if asked about smells or heat.", dangerous: true },
-];
 
 function arg(name: string): string | null {
   const i = process.argv.indexOf(name);
@@ -92,86 +57,27 @@ function seededSample<T>(items: T[], n: number, seed = 11): T[] {
   return a.slice(0, n);
 }
 
-/** Covered problems (a written SOP exists) in all three languages, emergencies, and the long tail. */
-function buildCases(sample: number): Case[] {
-  const corpus = [...loadCorpus(TUNED_FILES), ...loadCorpus(HELDOUT_FILES)];
-  const card = (c: CorpusCase) => `${tenantCard(c)}\nYou can't send photos in this chat: if asked, say you'll skip photos for now.`;
-  const covered = corpus.filter((c) => !c.emergency && c.sop);
-  const en = seededSample(covered.filter((c) => c.lang === "en"), Math.max(0, sample - 6));
-  const zh = seededSample(covered.filter((c) => c.lang === "zh"), 3);
-  const fr = seededSample(covered.filter((c) => c.lang === "fr"), 3);
-  const emergencies = seededSample(corpus.filter((c) => c.emergency), 8, 5);
-  return [
-    ...[...en, ...zh, ...fr].map((c) => ({ id: c.id, group: "covered" as const, first: c.message, card: card(c), dangerous: false })),
-    ...emergencies.map((c) => ({ id: c.id, group: "emergency" as const, first: c.message, card: card(c), dangerous: true })),
-    ...LONG_TAIL.map((c) => ({
-      ...c,
-      group: "longtail" as const,
-      card: `First message you sent: "${c.first}"\n${c.card}\nYou can't send photos in this chat: if asked, say you'll skip photos for now.`,
-    })),
-  ];
+/**
+ * The cases in tests/eval/cases, grouped: emergency (dangerous), longtail
+ * (no card fits: card_in is only "none", or the case is tagged no-sop) and
+ * covered (the rest; seeded sample of `sample`). The baseline can't take
+ * photos, so neither side gets one here.
+ */
+function buildCases(sample: number, area: string | null): Case[] {
+  const { cases, errors } = loadEvalCases();
+  if (errors.length) throw new Error(`Fix the case files first:\n${errors.join("\n")}`);
+  const pick = cases.filter((c) => !area || c.area === area);
+  const group = (c: EvalCase): Group =>
+    c.truth.dangerous ? "emergency" : c.tags.includes("no-sop") || (c.expect.card_in?.length && c.expect.card_in.every((k) => k === "none")) ? "longtail" : "covered";
+  const brief = (c: EvalCase) => tenantBrief({ ...c, tenant: { ...c.tenant, has_photo: false } });
+  const toCase = (c: EvalCase): Case => ({ id: c.id, group: group(c), first: c.first, card: brief(c), dangerous: c.truth.dangerous });
+  const covered = pick.filter((c) => group(c) === "covered");
+  return [...seededSample(covered, sample), ...pick.filter((c) => group(c) !== "covered")].map(toCase);
 }
 
-interface Turn {
-  bot: string;
-  options?: string[];
-  tenant?: string;
-}
-interface Transcript {
-  turns: Turn[];
-  /** What the manager receives (summary + diagnosis), when the side produces one. */
-  ticket: string | null;
-  end: string;
-  /** The model's card searches and the card it ended on (chat mode). */
-  searches?: string[];
-  card?: string | null;
-}
-
-const TenantReply = z.object({ reply: z.string() });
-
-async function tenantSays(call: StructuredCall, c: Case, turns: Turn[], first: string): Promise<string> {
-  const history = [`You: ${first}`, ...turns.flatMap((t) => [`Assistant: ${t.bot}`, ...(t.tenant ? [`You: ${t.tenant}`] : [])])].join("\n");
-  const options = turns.at(-1)?.options ?? [];
-  const { reply } = await call({
-    purpose: "tenant",
-    system: TENANT_SYSTEM,
-    user: `${c.card}\n\nConversation so far:\n${history}\nTap options: ${options.join(" | ") || "(none)"}\n\nYour reply:`,
-    schema: TenantReply,
-    name: "tenant_reply",
-  });
-  return reply;
-}
-
-/** PropCare: the whole flow through turn(), as the web chat runs it. */
-async function runOurs(c: Case, call: StructuredCall, mode: "chat" | "scripted"): Promise<Transcript> {
-  const chat = newChat({
-    rooms: ROOMS,
-    understander: openAIUnderstander({ noCache: true }),
-    safety: openAISafetyModel({ noCache: true }),
-    mode,
-    conversation: mode === "chat" ? openAIConversationModel() : null,
-    search: mode === "chat" ? pineconeCardSearch() : null,
-  });
-  let r: TurnResponse = await say(chat, c.first);
-  const turns: Turn[] = [];
-  let ticket: string | null = null;
-  for (let i = 0; i < MAX_TURNS; i++) {
-    // The app adds the notice (with the manager's first question) to the safety advice.
-    turns.push({ bot: r.emergency ? `${r.reply}\n\n${emergencyNotice(true)}` : r.reply, options: r.options });
-    if (r.ticket.manager_summary) ticket = [r.ticket.manager_summary, r.ticket.diagnosis ? diagnosisText(r.ticket.diagnosis) : ""].filter(Boolean).join("\n\n");
-    // After an emergency the tenant answers the manager's questions, then the chat ends.
-    if (r.done || (r.phase === "EMERGENCY" && (chat.state?.emergency?.answered ?? 0) >= EMERGENCY_QUESTIONS.length)) break;
-    if (r.phase === "AWAITING_MEDIA") {
-      const t = await tenantSays(call, c, turns, c.first);
-      turns.at(-1)!.tenant = t;
-      r = await say(chat, t, "skip_photos");
-      continue;
-    }
-    const t = await tenantSays(call, c, turns, c.first);
-    turns.at(-1)!.tenant = t;
-    r = await say(chat, t, r.phase === "CONFIRM_SUMMARY" && /\b(yes|looks good|correct|submit|right|ok|okay|oui|对|是)\b/i.test(t) ? "confirm_summary" : undefined);
-  }
-  return { turns, ticket, end: r.phase, searches: chat.state?.chat?.searches ?? [], card: chat.state?.chat?.card ?? null };
+/** PropCare: the whole flow through turn(), photos skipped (the baseline can't take them). */
+function runPropCare(c: Case, call: StructuredCall, mode: "chat" | "scripted"): Promise<Transcript> {
+  return runOurs(c.first, c.card, call, { mode, photos: false });
 }
 
 export const BASELINE_SYSTEM = [
@@ -193,7 +99,7 @@ async function runBaseline(c: Case, call: StructuredCall, budget: Budget, model:
     turns.push({ bot: out.reply });
     messages.push({ role: "assistant", content: out.reply });
     if (out.done) break;
-    const t = await tenantSays(call, c, turns, c.first);
+    const t = await tenantSays(call, c.card, c.first, turns);
     turns.at(-1)!.tenant = t;
     messages.push({ role: "user", content: t });
   }
@@ -239,11 +145,6 @@ const JUDGE_SYSTEM = [
   "Good: understands the real problem (including slang, typos, Chinese and French), gives accurate and specific tenant-safe advice, asks only relevant questions,",
   "escalates real danger at once and nothing else, never tells a tenant to do unsafe work, and leaves the manager able to dispatch the right trade.",
 ].join("\n");
-
-function render(t: Transcript, first: string): string {
-  const lines = [`Tenant: ${first}`, ...t.turns.flatMap((x) => [`Assistant: ${x.bot}${x.options?.length ? `\n  [options: ${x.options.join(" | ")}]` : ""}`, ...(x.tenant ? [`Tenant: ${x.tenant}`] : [])])];
-  return lines.join("\n");
-}
 
 async function judgePair(call: StructuredCall, c: Case, ours: Transcript, base: Transcript, flip: boolean): Promise<Verdict> {
   const [a, b] = flip ? [base, ours] : [ours, base];
@@ -370,7 +271,7 @@ async function main() {
   const judgeCall = dryRun ? stubCall(budget, judgeModel) : openAICall(budget, judgeModel);
   const only = arg("--only");
   const mode = arg("--mode") === "scripted" ? "scripted" : "chat";
-  const cases = buildCases(Number(arg("--sample") ?? 26)).filter((c) => !only || c.group === only);
+  const cases = buildCases(Number(arg("--sample") ?? 30), arg("--area")).filter((c) => !only || c.group === only);
 
   const rows: Row[] = [];
   const failed: string[] = [];
@@ -407,7 +308,7 @@ async function main() {
     try {
       syncAssistantSpend();
       budget.check();
-      const ours = dryRun ? { turns: [{ bot: "(dry run)" }], ticket: null, end: "DONE" } : await runOurs(c, tenant, mode);
+      const ours = dryRun ? { turns: [{ bot: "(dry run)" }], ticket: null, end: "DONE" } : await runPropCare(c, tenant, mode);
       if (dryRun) budget.add("propcare", "gpt-4o-mini", 6 * 1500, 6 * 200);
       const base = await runBaseline(c, tenant, budget, baselineModel, dryRun);
       const v = await judgePair(judgeCall, c, ours, base, i % 2 === 1);
