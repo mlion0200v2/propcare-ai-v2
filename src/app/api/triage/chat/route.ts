@@ -20,6 +20,7 @@ import { logError, logTriageStep } from "@/lib/logger";
 import { sendTicketSummaryEmail, getManagerEmailForTicket } from "@/lib/email/send-ticket-email";
 import { escalateEmergency, setPrivilegedTicketFields } from "@/lib/tickets/escalate-emergency";
 import { callAssistant, propertyContext, stateFromTicket } from "@/lib/assistant-client";
+import { photoStepAction } from "@/lib/assistant-request";
 import { emergencyNotice, type TurnRequest, type TurnResponse } from "@/assistant";
 import { detectEmergency, type EmergencyKind } from "@/assistant/triage/emergency";
 import { triageChatRequestSchema } from "@/lib/utils/validation";
@@ -244,11 +245,10 @@ async function followUp(
   // Buttons: photos skipped/added, summary confirmed. The tenant's own words otherwise.
   let action: TurnRequest["action"];
   let shown = message;
+  const media = await mediaCount(supabase, ticket.id);
   if (ticket.triage_state === "AWAITING_MEDIA") {
-    const text = mediaAction ?? message;
-    const skip = /\b(skip|no|none|no thanks|later)\b/i.test(text);
-    action = skip ? "skip_photos" : "photos_added";
-    shown = skip ? "Skip" : mediaAction === "done" ? "Done" : text;
+    // Typed words while the photo buttons show are an answer, not "photos added".
+    ({ action, shown } = photoStepAction(mediaAction, mediaAction ? "" : message, media));
   } else if (ticket.triage_state === "CONFIRM_SUMMARY" && confirmSummary) {
     action = "confirm_summary";
     shown = "Looks good, submit";
@@ -256,11 +256,11 @@ async function followUp(
 
   const response = await callAssistant({
     conversation: ticket.trace_id ?? ticket.id,
-    message: action === "confirm_summary" ? "" : message,
+    message: action === "confirm_summary" || mediaAction ? "" : message,
     action,
     state,
     property: propertyContext(await unitProfile(supabase, ticket.unit_id)),
-    media: { count: await mediaCount(supabase, ticket.id) },
+    media: { count: media },
     channel: "web",
   });
   return applyTurn(supabase, userId, ticket, shown, message, response, start);

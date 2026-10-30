@@ -49,3 +49,22 @@ export function stateFromTicket(ticket: { description: string; triage_state: str
     ui: c.ui ?? { options: [], notes: [] },
   };
 }
+
+/** A whole message that only declines photos ("skip", "no thanks", "跳过"); "no, it's on the carpet" is an answer. */
+const DECLINE_PHOTOS = /^\s*(skip|no|none|nope|no thanks|not now|later|non|pas maintenant|跳过|没有|不用)\s*[.!。！]?\s*$/i;
+
+/**
+ * What a tenant's input means while the photo buttons are showing. Only the
+ * buttons (and a bare "skip") are photo actions; typed words are a message
+ * for the assistant, with photos already uploaded counted as added.
+ */
+export function photoStepAction(
+  mediaAction: string | undefined,
+  message: string,
+  mediaCount: number
+): { action: "skip_photos" | "photos_added" | undefined; shown: string } {
+  if (mediaAction === "skip") return { action: "skip_photos", shown: "Skip" };
+  if (mediaAction === "done") return { action: mediaCount > 0 ? "photos_added" : "skip_photos", shown: "Done" };
+  if (DECLINE_PHOTOS.test(message)) return { action: "skip_photos", shown: message };
+  return { action: mediaCount > 0 ? "photos_added" : undefined, shown: message };
+}

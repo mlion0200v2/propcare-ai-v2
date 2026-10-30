@@ -719,7 +719,8 @@ export function TriageChat({
       )}
 
       {/* Input */}
-      {triageState !== "CONFIRM_PROFILE" && triageState !== "AWAITING_MEDIA" && (triageState !== "CONFIRM_SUMMARY" || summaryEditMode) && (
+      {/* Shown beside the photo buttons too: the tenant may answer in words instead (the route keeps it a message). */}
+      {triageState !== "CONFIRM_PROFILE" && (triageState !== "CONFIRM_SUMMARY" || summaryEditMode) && (
         <div className="border-t border-gray-200 p-4">
           {showAnswerOptions ? (
             <AnswerOptions
@@ -743,6 +744,8 @@ export function TriageChat({
                     ? "Type your correction (e.g., 'it's in the back yard, not front yard')..."
                     : messages.length === 0
                     ? "Describe your maintenance issue..."
+                    : triageState === "AWAITING_MEDIA"
+                    ? "Or type a reply..."
                     : "Type your reply..."
                 }
                 disabled={isComplete || isLoading}

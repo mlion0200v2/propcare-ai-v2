@@ -152,6 +152,24 @@ export async function testChatFlow(): Promise<TestResult> {
     fail("whole report threw", e);
   }
 
+  printSection("Chat flow — words typed while the photo buttons show");
+  try {
+    const model = stubModel([
+      step({ reply: "", photo_request: "Could you take a close photo of one?" }),
+      step({ reply: "Thanks. Was it on the carpet or on the bed?", options: ["Carpet", "Bed"] }),
+    ]);
+    const run = newRun(model);
+    const first = await say(run, "found larvae again, upstairs master");
+    check(first.phase === "AWAITING_MEDIA", "the model asks for a photo", first.phase);
+    // The route sends typed words with no action (lib/assistant-request photoStepAction).
+    const typed = await say(run, "I threw it away, it was small and hairy");
+    const told = model.inputs[1].messages.at(-1)?.text ?? "";
+    check(told === "I threw it away, it was small and hairy", "the model gets the tenant's words, with no 'photos added' or 'skipped' note", told);
+    check(typed.phase === "GATHER_INFO" && typed.options.length === 2, "its next question comes back as a normal question with tap options", typed.phase);
+  } catch (e) {
+    fail("typed photo-step answer threw", e);
+  }
+
   printSection("Chat flow — confirming by text, corrections, escalation");
   try {
     const model = stubModel([

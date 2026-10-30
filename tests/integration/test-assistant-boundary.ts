@@ -7,7 +7,7 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { createRunner, printSection, runStandalone, type TestResult } from "./helpers";
-import { propertyContext, redactContactDetails, stateFromTicket } from "../../src/lib/assistant-request";
+import { photoStepAction, propertyContext, redactContactDetails, stateFromTicket } from "../../src/lib/assistant-request";
 
 const ROOT = join(__dirname, "..", "..");
 const ASSISTANT = join(ROOT, "src", "assistant");
@@ -87,6 +87,14 @@ export function testAssistantBoundary(): TestResult {
   });
   check(legacy?.v === 1 && legacy.phase === "GATHER_INFO" && !legacy.description.includes("555"), "old tickets: state lifted with phase, description redacted", legacy);
   check(stateFromTicket({ description: "x", triage_state: "GATHER_INFO", classification: null }) === null, "no stored state → null (the route answers 409)");
+
+  // While the photo buttons show: only the buttons (or a bare "skip") are photo actions.
+  const act = (mediaAction: string | undefined, message: string, media: number) => photoStepAction(mediaAction, message, media).action;
+  check(act("skip", "", 0) === "skip_photos" && act("done", "", 2) === "photos_added", "photo step: the Skip and Done buttons");
+  check(act(undefined, "skip", 0) === "skip_photos" && act(undefined, "no thanks", 0) === "skip_photos" && act(undefined, "跳过", 0) === "skip_photos", "photo step: a bare 'skip' typed is a skip");
+  check(act(undefined, "no, it's on the carpet by the closet", 0) === undefined, "photo step: a typed answer starting with 'no' is a message, not a skip");
+  check(act(undefined, "it's small and hairy", 0) === undefined, "photo step: a typed answer is a message, not 'photos added'");
+  check(act(undefined, "that's the one by the closet", 1) === "photos_added", "photo step: words after an upload count the photo as added");
 
   return result;
 }
