@@ -49,13 +49,20 @@ function step(over: Partial<ChatStep> = {}): ChatStep {
   };
 }
 
-/** Returns the queued steps in order (null = a failed call) and records what it was asked. */
-function stubModel(queue: (ChatStep | null)[]): ConversationModel & { inputs: ChatInput[] } {
+/**
+ * Returns the queued steps in order (null = a failed call) and records what
+ * it was asked. `searches[i]`, when set, is searched (search_cards) on call i.
+ */
+function stubModel(queue: (ChatStep | null)[], searches: (string | null)[] = []): ConversationModel & { inputs: ChatInput[]; found: string[][] } {
   const inputs: ChatInput[] = [];
+  const found: string[][] = [];
   return {
     inputs,
-    async next(input) {
+    found,
+    async next(input, tools) {
       inputs.push(structuredClone(input));
+      const query = searches[inputs.length - 1];
+      found.push(query && tools ? await tools.searchCards(query) : []);
       return queue.length ? (queue.shift() ?? null) : step();
     },
   };
@@ -112,15 +119,18 @@ export async function testChatFlow(): Promise<TestResult> {
       step(),
       step({ reply: "Does it smell?", photo_request: "Thanks. Could you add a photo under the sink?", steps_suggested: ["Put a bowl under the drip"] }),
       step({ reply: "Here's your report: kitchen sink drain leak, since today. Is that right?", ready: true, cause: "drain_trap", confidence: "high" }),
-    ]);
+    ], ["kitchen sink leaks under the cabinet"]);
     const run = newRun(model);
     const first = await say(run, "my kitchen sink is leaking under the cabinet");
     check(first.phase === "GATHER_INFO" && first.reply.startsWith("Got it"), "first message: the model's reply", first.reply);
     check(first.options.length === 3 && first.state.ui.options.length === 3, "its tap options go to the web chat", first.options);
-    check(model.inputs[0].cards.some((c) => c.includes("card: under_sink_leak")), "the model was shown the sink-leak card", model.inputs[0].cards.map((c) => c.slice(0, 60)));
+    check(model.inputs[0].cards.length === 0, "no cards before the model searches", model.inputs[0].cards.length);
+    check(model.found[0].some((c) => c.includes("card: under_sink_leak")), "search_cards finds the sink-leak card", model.found[0].map((c) => c.slice(0, 60)));
     check(first.state.chat?.card === "under_sink_leak" && first.state.gathered.category === "plumbing", "the card and ticket fields are kept (and in gathered)");
+    check(first.state.chat?.searches?.[0] === "kitchen sink leaks under the cabinet", "the search is kept for review", first.state.chat?.searches);
 
     const second = await say(run, "only when it drains");
+    check(model.inputs[1].cards[0]?.includes("card: under_sink_leak") === true, "next message: the card in use is shown first", model.inputs[1].cards.map((c) => c.slice(0, 60)));
     check(second.phase === "AWAITING_MEDIA" && second.options.length === 0, "the model asks for photos → AWAITING_MEDIA, no tap options", second.phase);
     check(second.reply === "Thanks. Could you add a photo under the sink?", "only the photo request is shown with the upload buttons, not the model's other question", second.reply);
     check(run.state?.chat?.steps.includes("Put a bowl under the drip") === true, "safe steps are recorded");

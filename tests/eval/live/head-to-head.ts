@@ -122,6 +122,9 @@ interface Transcript {
   /** What the manager receives (summary + diagnosis), when the side produces one. */
   ticket: string | null;
   end: string;
+  /** The model's card searches and the card it ended on (chat mode). */
+  searches?: string[];
+  card?: string | null;
 }
 
 const TenantReply = z.object({ reply: z.string() });
@@ -168,7 +171,7 @@ async function runOurs(c: Case, call: StructuredCall, mode: "chat" | "scripted")
     turns.at(-1)!.tenant = t;
     r = await say(chat, t, r.phase === "CONFIRM_SUMMARY" && /\b(yes|looks good|correct|submit|right|ok|okay|oui|对|是)\b/i.test(t) ? "confirm_summary" : undefined);
   }
-  return { turns, ticket, end: r.phase };
+  return { turns, ticket, end: r.phase, searches: chat.state?.chat?.searches ?? [], card: chat.state?.chat?.card ?? null };
 }
 
 export const BASELINE_SYSTEM = [
@@ -309,6 +312,7 @@ function report(rows: Row[], budget: Budget, meta: { date: string; dryRun: boole
     "",
     "```",
     render(r.ours, r.c.first),
+    ...(r.ours.searches ? ["", `--- searched: ${r.ours.searches.map((q) => `"${q}"`).join(", ") || "nothing"}; card used: ${r.ours.card ?? "none"} ---`] : []),
     ...(r.ours.ticket ? ["", "--- manager receives ---", r.ours.ticket] : []),
     "```",
     "</details>",

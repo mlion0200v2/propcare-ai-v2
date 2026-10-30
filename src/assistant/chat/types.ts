@@ -46,7 +46,7 @@ export interface ChatMessage {
 export interface ChatState {
   messages: ChatMessage[];
   ticket: TicketFields;
-  /** Cards offered to the model (issue keys), best first. */
+  /** Cards the model found with search_cards (issue keys), most recent first. */
   cards: string[];
   /** The card the model is following, or null when none fits. */
   card: string | null;
@@ -64,8 +64,8 @@ export interface ChatState {
   removed: string[];
   /** Model calls that failed in a row. */
   failures?: number;
-  /** Knowledge-base similarity found on the first message, per issue key. */
-  vector?: Record<string, number>;
+  /** What the model searched for (English), for review. */
+  searches?: string[];
 }
 
 export function emptyTicket(): TicketFields {

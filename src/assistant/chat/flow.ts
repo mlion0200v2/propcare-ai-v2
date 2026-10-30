@@ -2,7 +2,7 @@
  * The model-led conversation, one tenant message at a time. The safety
  * gate has already passed the message (../turn.ts). Here:
  *
- *   find cards → the conversation model → the advice filter → what's next
+ *   the conversation model (searching cards as it needs) → the advice filter → what's next
  *   (another question, photos, the summary to confirm, submitted, escalated)
  *
  * The model writes the reply and the ticket fields; code decides the phase,
@@ -14,15 +14,15 @@ import type { PropertyContext } from "@/assistant/property";
 import type { DiagnosisView } from "@/assistant/sops/diagnosis-view";
 import { isUnsafeInstruction, toCelsius } from "@/assistant/triage/step-safety";
 import type { TroubleshootingStep } from "@/assistant/triage/types";
-import { understand, understandReply, type IssueFrame, type ModelUnderstander } from "@/assistant/understanding";
-import type { ChatInput, ChatStep, ConversationModel } from "./model";
+import { rulesFrame, type IssueFrame } from "@/assistant/understanding";
+import type { ChatInput, ChatStep, ChatTools, ConversationModel } from "./model";
 import { chatDiagnosis, chatManagerSummary } from "./report";
 import { emptyTicket, type ChatState } from "./types";
 
 export interface ChatContext {
   property: PropertyContext;
-  understander: ModelUnderstander | null;
   model: ConversationModel;
+  /** Knowledge-base similarity for the model's card searches; null = keywords only. */
   search: CardSearch | null;
 }
 
@@ -47,6 +47,10 @@ const WRAP_UP_AFTER = 7;
 const HARD_CAP = 10;
 /** Model failures in a row before the report is submitted with what we have. */
 const MAX_FAILURES = 2;
+/** Cards one search returns, cards remembered, and cards shown again each message. */
+const SEARCH_LIMIT = 3;
+const MAX_REMEMBERED = 8;
+const MAX_SHOWN = 4;
 
 /** Remove sentences that tell the tenant to do something unsafe; °F → °C. */
 export function filterAdvice(text: string): { text: string; removed: string[] } {
@@ -66,9 +70,13 @@ export function filterAdvice(text: string): { text: string; removed: string[] } 
   return { text: lines.join("\n").replace(/\n{3,}/g, "\n\n").trim(), removed };
 }
 
-/** Start a conversation: understand the first message and find its cards. */
-export async function openChat(message: string, ctx: ChatContext): Promise<{ chat: ChatState; frame: IssueFrame }> {
-  const [{ frame }, vector] = await Promise.all([understand(message, ctx.understander), ctx.search ? ctx.search(message) : Promise.resolve(null)]);
+/**
+ * Start a conversation. No cards yet: the model searches for them once it
+ * knows what the problem is (searchCards). The keyword frame is kept for
+ * the ticket's issue_frame only.
+ */
+export async function openChat(message: string): Promise<{ chat: ChatState; frame: IssueFrame }> {
+  const frame = rulesFrame(message);
   const chat: ChatState = {
     messages: [],
     ticket: emptyTicket(),
@@ -81,13 +89,21 @@ export async function openChat(message: string, ctx: ChatContext): Promise<{ cha
     asked_photos: false,
     options: [],
     removed: [],
-    ...(vector && Object.keys(vector).length ? { vector } : {}),
   };
   return { chat, frame };
 }
 
-function tenantText(chat: ChatState): string {
-  return chat.messages.filter((m) => m.role === "tenant").map((m) => m.text).join(" ");
+/**
+ * The model's search_cards tool: the cards closest to its description
+ * (keywords plus knowledge-base similarity, ../cards findCards). What it
+ * found is remembered and shown again on later messages.
+ */
+async function searchCards(chat: ChatState, query: string, ctx: ChatContext): Promise<string[]> {
+  const vector = ctx.search ? await ctx.search(query) : null;
+  const found = findCards(rulesFrame(query), query, { vectorScores: vector ?? undefined, limit: SEARCH_LIMIT }).map((c) => c.card);
+  chat.searches = [...(chat.searches ?? []), query].slice(-10);
+  chat.cards = [...new Set([...found.map((c) => c.key), ...chat.cards])].slice(0, MAX_REMEMBERED);
+  return found.map(cardText);
 }
 
 function steps(chat: ChatState): TroubleshootingStep[] {
@@ -136,20 +152,15 @@ export async function chatTurn(
   const said = [input.message, note].filter(Boolean).join(" ");
   if (said) chat.messages.push({ role: "tenant", text: said });
 
-  // What it is, from everything the tenant has said; the cards follow.
-  // (The first message was understood when the chat opened.)
-  if (input.message && chat.messages.length > 1) {
-    conv.issue_frame = conv.issue_frame ? await understandReply(conv.issue_frame, input.message, null) : (await understand(input.message, null)).frame;
-  }
-  const found = conv.issue_frame ? findCards(conv.issue_frame, `${conv.description} ${tenantText(chat)}`, { vectorScores: chat.vector }).map((c) => c.card.key) : [];
-  chat.cards = [...new Set([...(chat.card ? [chat.card] : []), ...found])].slice(0, 5);
-
   const tenantMessages = chat.messages.filter((m) => m.role === "tenant").length;
   const confirming = input.phase === "CONFIRM_SUMMARY";
+  const tools: ChatTools = { searchCards: (query) => searchCards(chat, query, ctx) };
+  // The cards it found before, the one in use first.
+  const shown = [...new Set([...(chat.card ? [chat.card] : []), ...chat.cards])].slice(0, MAX_SHOWN);
   const request: ChatInput = {
     messages: chat.messages,
     ticket: chat.ticket,
-    cards: chat.cards.map((k) => findCardText(k)).filter((t): t is string => Boolean(t)),
+    cards: shown.map((k) => findCardText(k)).filter((t): t is string => Boolean(t)),
     property: ctx.property,
     steps: chat.steps,
     mediaCount: input.mediaCount,
@@ -157,12 +168,12 @@ export async function chatTurn(
     phase: confirming ? "confirm" : "chat",
     wrapUp: tenantMessages >= WRAP_UP_AFTER,
   };
-  let step = await ctx.model.next(request);
+  let step = await ctx.model.next(request, tools);
   // An unsafe step can hide in a reply in any language: ask once for a rewrite without it.
   const unsafe = step?.steps_suggested.filter((s) => isUnsafeInstruction(s)) ?? [];
   if (step && unsafe.length) {
     chat.removed.push(...unsafe);
-    step = (await ctx.model.next({ ...request, avoid: unsafe })) ?? step;
+    step = (await ctx.model.next({ ...request, avoid: unsafe }, tools)) ?? step;
   }
 
   if (!step) {

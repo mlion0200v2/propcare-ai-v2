@@ -230,7 +230,7 @@ async function open(
       ...carry,
     };
     if (emergency) return emergencyResponse(req, base, emergency);
-    const { chat, frame } = await openChat(message, deps.chat);
+    const { chat, frame } = await openChat(message);
     const state: AssistantState = { ...base, chat, issue_frame: frame };
     return fromChat(req, state, await chatTurn(state, { message, action: req.action, mediaCount: req.media.count, phase: "GATHER_INFO" }, deps.chat));
   }
@@ -255,7 +255,7 @@ export async function turn(req: TurnRequest, options: TurnOptions = {}): Promise
   const deps: Deps = {
     ctx,
     safety,
-    chat: model ? { property: req.property, understander: ctx.understander, model, search: options.search === undefined ? pineconeCardSearch() : options.search } : null,
+    chat: model ? { property: req.property, model, search: options.search === undefined ? pineconeCardSearch() : options.search } : null,
   };
 
   // The first message.

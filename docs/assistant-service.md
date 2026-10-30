@@ -291,8 +291,10 @@ Each is a PR to staging; the old path stays the default until the last step.
    - `GLOBAL_NEVER` is the never-do list.
    - The never-instruct filter now also rejects tools inside equipment, which removed the disposal hex-key step.
 3. **Conversation model and the ticket fields**, behind a flag (`ASSISTANT_MODE=chat`), with the advice filter on every reply. *Built in `src/assistant/chat/`:*
-   - `model.ts`: the prompt and one structured call per message, which returns the reply, options, the whole ticket, card, cause, steps, and photos/ready/confirmed/escalate.
-   - `flow.ts`: cards are re-found every turn. Code decides the phase. The advice filter runs per sentence; a step the filter rejects makes the model rewrite once, since a reply in another language can't be filtered by English rules. The chat wraps up after 7 tenant messages (hard cap 10). After 2 model failures in a row, the report is submitted with what we have.
+   - `model.ts`: the prompt and one structured answer per message, which returns the reply, options, the whole ticket, card, cause, steps, and photos/ready/confirmed/escalate.
+     - The prompt is a numbered routine (do the first step that applies: confirming, danger, something to show, hand over, what is it, photo, missing facts in a fixed order, summary) plus edge cases, following OpenAI's agent guide (2026-10-30). The earlier list of ~25 unordered rules gave answers that drifted in different directions.
+     - The model has one tool, `search_cards`: it searches with its own short English description once it knows what the problem is (at most 2 searches per message). Cards are no longer found from the tenant's raw first message, which brought the bedbug card for "larvae … upstairs master".
+   - `flow.ts`: the cards the model found are remembered and shown again (the one in use first); its searches are kept for review and shown in the eval report. Code decides the phase. The advice filter runs per sentence; a step the filter rejects makes the model rewrite once, since a reply in another language can't be filtered by English rules. The chat wraps up after 7 tenant messages (hard cap 10). After 2 model failures in a row, the report is submitted with what we have.
    - `report.ts`: the manager's summary and diagnosis, built by code from the ticket fields and the card's cause.
    - The confirm button submits without a model call.
    - `turn()` options `mode`, `conversation` and `search` let tests and the eval choose.
