@@ -9,6 +9,21 @@ Every tier drives the assistant the way a channel does: one `turn()` call per te
 | `conversation-eval.ts` + `conversation-scenarios.ts` | Scripted multi-turn chats with hand-written expectations (52 scenarios, including Simone's transcripts). |
 | `frame-eval.ts` + `corpus/*.jsonl` | Labelled first messages. For each one: frame accuracy per field (equipment, symptom, substance, room), category accuracy, emergency recall and precision, and a scripted chat with neutral answers scored for **re-asks** (room or category already said) and **irrelevant questions** (water questions when the leak isn't water). |
 
+## Live evals (cost money; need LIVE_EVAL=1 and an OpenAI key)
+
+| File | What it measures |
+|---|---|
+| `live/case-eval.ts` | Every case in `cases/*.jsonl` (152, one file per maintenance area), run several times. Code checks from each case's `expect`, a judge on its `judge` lines, consistency across runs, by split, area and language, and the gate. About $2.30 for all cases × 3 runs. |
+| `live/head-to-head.ts` | The same cases: PropCare vs a plain LLM, blind judge. |
+
+How to write a case: `cases/README.md`. Check the files with `npx tsx tests/eval/cases/schema.ts`.
+
+```bash
+LIVE_EVAL=1 npx tsx tests/eval/live/case-eval.ts --split holdout --runs 3
+LIVE_EVAL=1 npx tsx tests/eval/live/case-eval.ts --area pest --runs 1
+npx tsx tests/eval/live/case-eval.ts --dry-run
+```
+
 ## Corpus
 
 - `corpus/first-messages.jsonl`: 365 messages. Every taxonomy item crossed with its usual symptoms and substances, plus typos, slang, terse and rambling messages, 58 in Chinese and 32 in French. The first three are Simone's real transcripts. The rules were tuned against this file.
